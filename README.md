@@ -120,6 +120,10 @@ The radar reads untrusted text from the web and email, so it limits what that te
 3. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
 4. **Human in the loop where it counts.** The agent prepares; you apply and you press send. No auto-submitting or auto-DMs, ever.
 
+## Roadmap
+
+Open decisions and next steps are in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
+
 ## License
 
 [MIT](LICENSE)
