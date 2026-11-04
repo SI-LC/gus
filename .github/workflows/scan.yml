@@ -19,6 +19,12 @@ jobs:
           persist-credentials: false
       - name: Code scan
         run: bash deploy/scan.sh
+      - name: Requirement checks in a real browser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/browser"
+          "$RUNNER_TEMP/browser/bin/pip" -q install -r evals/requirements.txt
+          "$RUNNER_TEMP/browser/bin/playwright" install --with-deps chromium
+          "$RUNNER_TEMP/browser/bin/python" -m evals.browser
       - name: Secret scan of the full history
         run: |
           tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"

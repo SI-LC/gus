@@ -31,6 +31,10 @@ push to `main` directly. Work on a branch, push it (the pre-push hook runs `depl
 your personal details are checked), open a PR, then once `scan` passes merge with
 `gh pr merge --squash --delete-branch`.
 
+The scan also runs `tests/test_smoke.py`, a fresh install going through a full run, and on GitHub the requirement
+checks in `evals/cases/`, in a real browser. When a change adds or alters something the candidate relies on, add or
+update a case (`evals/README.md`).
+
 Then deploy from `main` with `bash deploy/deploy.sh` (add `minor` or `major` for a bigger version bump): it runs the
 code scan, updates the Pi, checks it's serving that commit and publishes a numbered GitHub release, so the latest
 release is what's on the Pi. To roll back, revert through a PR and deploy again. Never edit code on the Pi, and
