@@ -2,6 +2,7 @@
 import unittest
 from datetime import datetime
 
+from radar import ai
 from radar.network import distance, paths_for
 from radar.service import due
 
@@ -33,6 +34,17 @@ class Schedule(unittest.TestCase):
         s = {"watchlist": "2026-11-09", "moves": "2026-11-02", "scan": "2026-11-09 08:00", "agent": "2026-11-09 08:00"}
         self.assertEqual(due(at(9, 8), CFG, s), [])
         self.assertEqual(due(at(9, 8, 30), CFG, s), ["moves"])
+
+
+class Budget(unittest.TestCase):
+    def test_zero_blocks_every_run(self):
+        with self.assertRaises(ai.BudgetReached):
+            ai._check_budget({"ai_daily_budget_usd": 0})
+        with self.assertRaises(ai.BudgetReached):
+            ai._check_budget({})
+
+    def test_room_left_allows_a_run(self):
+        ai._check_budget({"ai_daily_budget_usd": 1000000})
 
 
 class Distance(unittest.TestCase):

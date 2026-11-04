@@ -272,7 +272,7 @@ function costs() {
   return `<h1>Costs</h1>
     <p class="lede">Your Claude runs are included in your subscription, so the Claude figures are <b>equivalent API prices</b>: a guide to how much allowance they use, not money you pay. Only X would be a real charge.</p>
     <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
-      ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "None", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
+      ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     <div class="section">Last 14 days</div>
     <div class="spark">${u.days.map(d => `<div title="${d.date}: ${usd(d.ai)} Claude, ${usd(d.x)} X"><i style="height:${Math.round((d.ai + d.x) / max * 100)}%"></i></div>`).join("")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}

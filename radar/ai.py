@@ -22,15 +22,15 @@ class BudgetReached(RuntimeError):
 
 
 def _check_budget(cfg):
-    limit = float(cfg.get("ai_daily_budget_usd") or 0)
-    if limit and usage.today_cost() >= limit:
+    limit = float(cfg.get("ai_daily_budget_usd") or 0)  # 0 means no AI runs at all, never "no limit"
+    if usage.today_cost() >= limit:
         flag = DATA / "budget_notified"
         today = str(date.today())
         if not flag.exists() or flag.read_text() != today:
             flag.write_text(today)
             from radar.notify import notify
-            notify("PM Radar: daily AI limit reached", "", f"AI runs are paused until tomorrow (limit ${limit:g}).")
-        raise BudgetReached(f"Daily AI limit of ${limit:g} reached")
+            notify("PM Radar: AI paused", "", "AI runs are off (limit $0)." if not limit else f"AI runs are paused until tomorrow (limit ${limit:g}).")
+        raise BudgetReached("AI runs are off: the daily limit is $0" if not limit else f"Daily AI limit of ${limit:g} reached")
 
 
 class NeedsTools(Exception):
