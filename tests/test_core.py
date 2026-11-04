@@ -186,6 +186,8 @@ class Targeting(unittest.TestCase):
         self.assertEqual(role_type("Forward Deployed Engineer"), "Forward deployed")
         self.assertEqual(role_type("Product Engineer"), "Product engineer")
         self.assertEqual(role_type("Senior Product Manager"), "PM")
+        self.assertEqual(role_type("Founding Product Manager"), "PM")
+        self.assertEqual(role_type("Forward Deployed Product Manager"), "Forward deployed")
 
     def test_remote_locations(self):
         import json

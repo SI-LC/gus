@@ -93,6 +93,8 @@ def where(location: str) -> str:
 
 def role_type(title: str) -> str:
     t = (title or "").lower()
+    if "product manager" in t and "forward" not in t:
+        return "PM"
     if re.search(r"forward.deployed|deployed (staff|engineer|pm)", t):
         return "Forward deployed"
     if re.search(r"product (engineer|builder)|founding product|applied ai", t):
