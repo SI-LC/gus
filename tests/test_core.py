@@ -41,10 +41,12 @@ class Schedule(unittest.TestCase):
 
 class Budget(unittest.TestCase):
     def test_zero_blocks_every_run(self):
-        with self.assertRaises(ai.BudgetReached):
-            ai._check_budget({"ai_daily_budget_usd": 0})
-        with self.assertRaises(ai.BudgetReached):
-            ai._check_budget({})
+        from unittest import mock
+        with mock.patch("radar.notify.notify"):  # a test must never send a real notification
+            with self.assertRaises(ai.BudgetReached):
+                ai._check_budget({"ai_daily_budget_usd": 0})
+            with self.assertRaises(ai.BudgetReached):
+                ai._check_budget({})
 
     def test_room_left_allows_a_run(self):
         ai._check_budget({"ai_daily_budget_usd": 1000000})
