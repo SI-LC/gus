@@ -173,10 +173,12 @@ def update_job(body):
             j["stage"] = body["stage"]
         if "note" in body:
             j["note"] = str(body["note"])[:2000]
-        if "folder" in body:  # a path on your own computer: lives in data/ only, never in the repo
+        if "folder" in body:  # a web link or a path on your computer: lives in data/ only, never in the repo
             folder = str(body["folder"] or "").strip()
-            if "\n" in folder or len(folder) > 500:
-                return {"error": "That doesn't look like a folder path"}
+            if "\n" in folder or len(folder) > 2000:
+                return {"error": "That doesn't look like a folder path or link"}
+            if "://" in folder and not folder.lower().startswith(("https://", "http://")):
+                return {"error": "Use a web link starting with https://, or a folder path"}
             j["folder"] = folder
         if "person" in body:
             p = (j.get("people") or [])[int(body["person"])]
