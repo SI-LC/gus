@@ -46,6 +46,7 @@ PY
 grep -rnE 'shell=True|\beval\(|\bexec\(|verify=False|_create_unverified_context' radar --include=*.py && bad "unsafe Python" || good "no unsafe Python patterns"
 grep -nE 'href="\$\{esc\(' radar/cockpit.html && bad "link not passed through link()" || good "cockpit links are checked"
 grep -qE '"(Read|Edit|Write)"' radar/agent.py && bad "agent has unrestricted file tools" || good "agent tools are limited"
+grep -q '"Read(./data/emails.json)"' radar/agent.py && good "web agents can't read email" || bad "web agents can read email"
 
 # 5. Bandit, high severity only (installed outside the repo, only if missing)
 venv="${XDG_CACHE_HOME:-$HOME/.cache}/pm-radar-scan"

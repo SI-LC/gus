@@ -81,6 +81,8 @@ def state():
         "funnel": A.funnel(),
         "network": net_summary(),
         "running": list(service.status()["running"]),
+        "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
+                            if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
         "labels": {"events": A.EVENT_LABEL, "outcomes": A.OUTCOMES, "person_stages": A.PERSON_STAGES},
         "health": {

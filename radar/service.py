@@ -50,6 +50,7 @@ def _do(job):
     from radar import agent
     if job == "cycle":  # the full run: scan and score, discover, then score what discovery found
         ok, _ = _scan()
+        agent.run("inbox")
         report = agent.run("discover")
         ok2, _ = _scan()
         return ok and ok2, report.strip()[-300:]

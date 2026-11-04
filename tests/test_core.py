@@ -5,7 +5,7 @@ from datetime import datetime
 import email
 import re
 
-from radar import ai, inbox
+from radar import agent, ai, calendar_invites as cal, inbox
 from radar.network import distance, paths_for
 from radar.service import due
 
@@ -69,6 +69,57 @@ class Inbox(unittest.TestCase):
     def test_html_body_is_stripped(self):
         msg = email.message_from_string("Content-Type: text/html; charset=utf-8\n\n<p>Role <b>open</b></p>")
         self.assertEqual(inbox.body_text(msg), "Role open")
+
+
+ICS = """BEGIN:VCALENDAR
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:abc@google.com
+DTSTART:20261110T100000Z
+DTEND:20261110T103000Z
+SUMMARY:Intro chat\\, Acme and
+  Pat
+ORGANIZER;CN=Sam Lee:mailto:sam@acme.io
+ATTENDEE;CN=Pat Doe:mailto:pat@example.com
+LOCATION:https://meet.google.com/abc
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+class Calendar(unittest.TestCase):
+    def test_parses_a_google_invite(self):
+        ev = cal.parse_ics(ICS)[0]
+        self.assertEqual(ev["title"], "Intro chat, Acme and Pat")
+        self.assertEqual(ev["start"], "2026-11-10T10:00:00+00:00")
+        self.assertEqual(ev["organizer"], {"name": "Sam Lee", "email": "sam@acme.io"})
+
+    def test_cancelled(self):
+        self.assertTrue(cal.parse_ics(ICS.replace("METHOD:REQUEST", "METHOD:CANCEL"))[0]["cancelled"])
+
+    def test_personal_meetings_are_dropped(self):
+        ev = {"title": "Dentist", "organizer": {"name": "Smile Clinic", "email": "hi@smile.co.uk"}, "attendees": []}
+        self.assertIsNone(cal.relevance(ev, {"Acme": {"status": "watched"}}, {}))
+
+    def test_tracked_account_is_kept(self):
+        ev = {"title": "Catch up", "organizer": {"name": "Sam", "email": "sam@acme.io"}, "attendees": []}
+        self.assertEqual(cal.relevance(ev, {"Acme": {"status": "watched"}}, {})["account"], "Acme")
+
+    def test_mapped_person_is_kept(self):
+        ev = {"title": "Catch up", "organizer": {"name": "Sam Lee", "email": "sam@gmail.com"}, "attendees": []}
+        self.assertEqual(cal.relevance(ev, {}, {"p": {"name": "Sam Lee", "company": "Acme"}})["person_id"], "p")
+
+    def test_interview_is_kept(self):
+        ev = {"title": "Interview with the team", "attendees": []}
+        self.assertIsNotNone(cal.relevance(ev, {}, {}))
+
+
+class AgentLimits(unittest.TestCase):
+    def test_email_agent_has_no_internet(self):
+        self.assertFalse({"WebSearch", "WebFetch"} & set(agent.OFFLINE))
+
+    def test_web_agents_cant_read_email(self):
+        self.assertIn("Read(./data/emails.json)", agent.NO_EMAIL)
 
 
 class Distance(unittest.TestCase):
