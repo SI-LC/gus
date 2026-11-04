@@ -162,7 +162,8 @@ def follow_ups(jobs: dict, people: dict, moves: dict, today=None) -> list:
         contacts = [{"id": p["id"], "name": p.get("name"), "role": p.get("role"), "url": p.get("url"), "platform": p.get("platform"),
                      "reason": KIND_REASON.get(p.get("kind"), "Works at this company"), "evidence": p.get("evidence"),
                      "confidence": p.get("confidence")} for p in who[:MAX_PER_ROLE]]
-        if contacts or not done:
+        anyone = any(p.get("company") == j.get("company") for p in people.values())
+        if contacts or not (done or anyone):  # nothing left to do once someone's been contacted
             out.append({"id": j["id"], "company": j.get("company"), "title": j.get("title"), "days": age, "contacts": contacts})
     return sorted(out, key=lambda r: (r["days"] is None, r["days"] or 0))
 

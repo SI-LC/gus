@@ -219,6 +219,10 @@ class FollowUps(unittest.TestCase):
     def test_person_with_a_planned_move_isnt_listed_twice(self):
         self.assertEqual(self.rows(moves={"m": {"person_id": "p", "status": "todo"}})[0]["contacts"], [])
 
+    def test_contacted_through_a_move_drops_off(self):
+        people = {"p": {"name": "Pat", "company": "Acme", "stage": "contacted"}}
+        self.assertEqual(self.rows(people=people, moves={"m": {"person_id": "p", "status": "done"}}), [])
+
     def test_old_applications_drop_off(self):
         old = {**self.JOB, "history": [{"stage": "applied", "at": "2026-09-01T10:00:00+00:00"}]}
         self.assertEqual(self.rows(job=old), [])
