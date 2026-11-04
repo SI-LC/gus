@@ -10,7 +10,7 @@ python3 -m radar.inbox >>data/inbox.log 2>&1
 new=$(python3 -m radar.scan --json 2>>data/errors.log | python3 -c "import json,sys; d=json.load(sys.stdin); [print(j['company']+' — '+j['title'][:70]) for j in d['new']]")
 if [[ -n "$new" ]]; then
   count=$(echo "$new" | wc -l | tr -d ' ')
-  python3 -m radar.notify "PM Radar: $count new role(s)" "Scoring with Claude…" "$(echo "$new" | head -3 | tr '\n' ';')"
+  python3 -m radar.notify "Gus: $count new role(s)" "Scoring with Claude…" "$(echo "$new" | head -3 | tr '\n' ';')"
 fi
 python3 -m radar.triage >>data/triage.log 2>&1  # always: scores anything waiting, costs nothing if there's none
 python3 -m radar.people >>data/people.log 2>&1

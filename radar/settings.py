@@ -38,7 +38,7 @@ SCHEMA = [
     ("openai_model", "OpenAI-compatible model", "text", "AI", "Only used when that provider is selected."),
 
     ("ai_daily_budget_usd", "Daily AI limit (USD)", "money", "AI",
-     "Runs pause for the day at this much, in the equivalent API prices shown on Costs. 0 turns AI runs off: scans still find roles, but nothing is scored."),
+     "Runs pause for the day at this much, in the equivalent API prices shown on Usage. 0 turns AI runs off: scans still find roles, but nothing is scored."),
 
     ("title_include", "Titles to include", "regex", "Matching", "Regular expression, case-insensitive."),
     ("title_exclude", "Titles to exclude", "regex", "Matching", "Regular expression, case-insensitive."),

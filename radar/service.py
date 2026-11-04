@@ -1,10 +1,10 @@
-"""The always-on service: the cockpit, plus one full radar run a day.
+"""The always-on service: the cockpit, plus one full run a day.
 
     python3 -m radar.service --host 0.0.0.0
 
 There are two jobs. A full run does everything in a fixed order, so the parts can't drift
 out of sync; it starts at your daily time (if the scheduler is on in Settings) or from the
-Run radar button. A quick check only scans and scores.
+Full run button. Check roles only scans and scores.
 """
 from __future__ import annotations
 

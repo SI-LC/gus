@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run once on the Pi, from the repo folder: sudo bash deploy/install-pi.sh
-# Starts PM Radar on boot, listening on this machine only, and publishes the cockpit
+# Starts Gus on boot, listening on this machine only, and publishes the cockpit
 # to your own Tailscale devices with HTTPS. Nothing is opened on your home network.
 set -euo pipefail
 OWNER="${SUDO_USER:?Run this with sudo}"
@@ -10,7 +10,7 @@ PORT="${PORT:-8484}"
 
 cat > /etc/systemd/system/pm-radar.service <<UNIT
 [Unit]
-Description=PM Radar cockpit and scheduler
+Description=Gus cockpit and scheduler
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
@@ -36,4 +36,4 @@ systemctl daemon-reload
 systemctl enable --now pm-radar.service
 tailscale serve --bg "$PORT"
 tailscale serve status
-echo "PM Radar is running. Logs: journalctl -u pm-radar -f"
+echo "Gus is running. Logs: journalctl -u pm-radar -f"
