@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f2ef" media="(prefers-color-scheme: light)">
+<title>PM Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<script>try { const q = new URLSearchParams(location.search).get("theme"); if (q) localStorage.setItem("radar-theme", q); const t = localStorage.getItem("radar-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<style>
+  :root {
+    --bg: #f3f2ef; --surface: #ffffff; --sunk: #e9e7e2; --line: #d9d6cf; --line-strong: #1a1917;
+    --text: #0d0d0c; --muted: #6b6862; --accent: #ff4f12; --on-accent: #0d0d0c; --accent-soft: #ffe3d6;
+    --hi: #0a8f45; --hi-soft: #d9f5e4; --mid: #b26b00; --mid-soft: #fbeccb; --lo: #8a867f; --lo-soft: #e6e3dd;
+    --grid: rgba(13, 13, 12, .045);
+    --sans: "Space Grotesk", "Helvetica Neue", Helvetica, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --radius: 2px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #0b0b0a; --surface: #131312; --sunk: #0f0f0e; --line: #262523; --line-strong: #f2f0ea;
+    --text: #f2f0ea; --muted: #8b8780; --accent: #ff5a1f; --on-accent: #0b0b0a; --accent-soft: #2b1408;
+    --hi: #3dff8f; --hi-soft: #0b2a18; --mid: #ffc23d; --mid-soft: #2a2008; --lo: #8b8780; --lo-soft: #1c1b19;
+    --grid: rgba(242, 240, 234, .035); color-scheme: dark;
+  } }
+  :root[data-theme="dark"] {
+    --bg: #0b0b0a; --surface: #131312; --sunk: #0f0f0e; --line: #262523; --line-strong: #f2f0ea;
+    --text: #f2f0ea; --muted: #8b8780; --accent: #ff5a1f; --on-accent: #0b0b0a; --accent-soft: #2b1408;
+    --hi: #3dff8f; --hi-soft: #0b2a18; --mid: #ffc23d; --mid-soft: #2a2008; --lo: #8b8780; --lo-soft: #1c1b19;
+    --grid: rgba(242, 240, 234, .035); color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); -webkit-text-size-adjust: 100%;
+         background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+         background-size: 32px 32px; }
+  ::selection { background: var(--accent); color: var(--on-accent); }
+  a { color: inherit; }
+  code { font: 13px var(--mono); }
+  button { font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--text);
+           background: transparent; border: 1px solid var(--line-strong); border-radius: var(--radius);
+           padding: 8px 12px; cursor: pointer; min-height: 36px; transition: background .12s, color .12s; }
+  button:hover { background: var(--text); color: var(--bg); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+  button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  select, input, textarea { font: 14px var(--sans); color: var(--text); background: var(--surface);
+                            border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; min-height: 36px; }
+  textarea { font: 13px/1.5 var(--mono); }
+  input:hover, select:hover, textarea:hover { border-color: var(--muted); }
+  kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; padding: 1px 5px; border-radius: var(--radius); }
+
+  .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+  nav { border-right: 1px solid var(--line); padding: 20px 0; position: sticky; top: 0; height: 100vh; background: var(--bg);
+        display: flex; flex-direction: column; }
+  .brand { font: 700 22px/1 var(--sans); letter-spacing: -.04em; padding: 0 20px 24px; text-transform: uppercase; }
+  .brand b { color: var(--accent); }
+  .brand small { display: block; font: 10px var(--mono); letter-spacing: .14em; color: var(--muted); margin-top: 6px; font-weight: 400; }
+  nav a { display: grid; grid-template-columns: 28px 1fr auto; align-items: baseline; padding: 10px 20px; text-decoration: none;
+          color: var(--muted); font: 500 13px var(--mono); text-transform: uppercase; letter-spacing: .08em; border-left: 3px solid transparent; }
+  nav a::before { content: attr(data-i); font-size: 10px; color: var(--muted); }
+  nav a:hover { color: var(--text); }
+  nav a.on { color: var(--text); border-left-color: var(--accent); background: var(--surface); }
+  nav a .n { font-size: 11px; color: var(--accent); }
+  .theme { display: flex; margin: auto 20px 0; border: 1px solid var(--line); }
+  .theme button { flex: 1; border: 0; min-height: 30px; padding: 4px; font-size: 10px; color: var(--muted); }
+  .theme button.on { background: var(--text); color: var(--bg); }
+
+  .content { min-width: 0; }
+  .ticker { position: sticky; top: 0; z-index: 4; display: flex; gap: 20px; align-items: center; overflow-x: auto; white-space: nowrap;
+            padding: 10px 28px; border-bottom: 1px solid var(--line); background: var(--bg); font: 11px var(--mono);
+            text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .ticker b { color: var(--text); font-weight: 500; }
+  .live { color: var(--hi); } .live::before { content: "● "; animation: pulse 2s infinite; }
+  .stale { color: var(--accent); } .stale::before { content: "● "; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .live::before { animation: none; } * { transition: none !important; } }
+
+  main { padding: 32px 28px 96px; max-width: 1040px; width: 100%; }
+  h1 { font: 700 44px/1 var(--sans); letter-spacing: -.045em; margin: 0 0 10px; text-transform: uppercase; }
+  h1 .count { color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+  .hint { font: 11px var(--mono); color: var(--muted); margin: -12px 0 20px; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 8px; position: relative; }
+  .role { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 18px; border-left: 4px solid var(--lo); transition: border-color .12s, transform .12s; }
+  .role.band-hi { border-left-color: var(--hi); } .role.band-mid { border-left-color: var(--mid); }
+  .role.sel { border-color: var(--line-strong); border-left-color: var(--accent); }
+  .score { font: 700 40px/1 var(--sans); letter-spacing: -.05em; display: flex; align-items: baseline; }
+  .score small { font: 11px var(--mono); color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+  .s-hi { color: var(--hi); } .s-mid { color: var(--mid); } .s-lo, .s-none { color: var(--lo); }
+  .bar { height: 3px; background: var(--sunk); margin-top: 10px; }
+  .bar i { display: block; height: 100%; background: currentColor; }
+  .co { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+  .title { overflow-wrap: anywhere; font: 600 19px/1.25 var(--sans); letter-spacing: -.015em; margin: 4px 0; }
+  .title a { text-decoration: none; background: linear-gradient(var(--accent), var(--accent)) 0 100% / 0 2px no-repeat; transition: background-size .2s; }
+  .title a:hover { background-size: 100% 2px; }
+  .why { margin: 8px 0 0; max-width: 70ch; }
+  .flag { display: inline-block; max-width: 100%; overflow-wrap: anywhere; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--accent);
+          color: var(--accent); border-radius: var(--radius); padding: 1px 6px; margin: 8px 6px 0 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+  .col { background: var(--sunk); border: 1px solid var(--line); padding: 8px; min-height: 160px; }
+  .col h3 { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 4px 4px 10px; display: flex; justify-content: space-between; }
+  .col h3 span { color: var(--text); }
+  .col .card { padding: 12px; } .col .title { font-size: 14px; } .col select { width: 100%; margin-top: 10px; }
+  .msg { background: var(--sunk); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 10px; white-space: pre-wrap; font-size: 14px; }
+  .pill { display: inline-block; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; border: 1px solid var(--line); padding: 2px 8px; color: var(--muted); }
+  .pill.due { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+  .pill.done { color: var(--hi); border-color: var(--hi); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; margin-bottom: 24px; border: 1px solid var(--line); }
+  .stat { background: var(--surface); padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+  .stat .v { font: 700 30px/1.1 var(--sans); letter-spacing: -.04em; } .stat .l { font: 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); border: 1px solid var(--line); }
+  td, th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+  td button { min-height: 28px; padding: 4px 8px; font-size: 10px; }
+  .empty { text-align: center; color: var(--muted); padding: 64px 16px; border: 1px dashed var(--line); font: 13px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 8px); background: var(--accent); color: var(--on-accent);
+           padding: 10px 16px; font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; opacity: 0; transition: .15s; pointer-events: none; z-index: 10; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .section { margin: 32px 0 10px; font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--muted);
+             display: flex; gap: 10px; align-items: center; }
+  .section::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .field { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 6px 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .field label { font-weight: 600; }
+  .field .help { grid-column: 2; color: var(--muted); font-size: 13px; }
+  .field input[type=text], .field input[type=password], .field input[type=number], .field select, .field textarea { width: 100%; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .switch { width: 20px; height: 20px; accent-color: var(--accent); }
+  .ok { color: var(--hi); } .bad { color: var(--accent); }
+  .tier { display: inline-grid; place-items: center; width: 22px; height: 22px; font: 700 12px var(--mono); border: 1px solid var(--line-strong); vertical-align: 1px; }
+  .tier.tA { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .tier.tB { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .tier.tC { color: var(--muted); border-color: var(--line); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sig, .person-chip { display: inline-flex; gap: 6px; align-items: baseline; max-width: 100%; font-size: 13px; text-decoration: none;
+                       border: 1px solid var(--line); padding: 4px 8px; background: var(--sunk); overflow-wrap: anywhere; }
+  .sig b { font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
+  .sig i { font: 11px var(--mono); font-style: normal; color: var(--muted); white-space: nowrap; }
+  .sig.fresh { border-color: var(--accent); } .sig.fresh b, .sig.fresh i { color: var(--accent); }
+  .sig:hover, .person-chip:hover { border-color: var(--text); }
+  .person-chip b { font-weight: 600; }
+  .dist { display: inline-block; font: 700 11px var(--mono); padding: 1px 5px; border: 1px dashed var(--muted); color: var(--muted); vertical-align: 1px; white-space: nowrap; }
+  .dist.d1 { border-color: var(--hi); color: var(--hi); } .dist.d2 { border-color: var(--mid); color: var(--mid); }
+  .dist.sure { border-style: solid; }
+  .routes { margin-top: 10px; border: 1px solid var(--line); background: var(--sunk); padding: 10px 12px; font-size: 14px; }
+  .routes-head b { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
+  .route { margin-top: 4px; } .route a { text-underline-offset: 2px; }
+  .confirm { margin-top: 8px; } .confirm select, .confirm input { min-height: 30px; padding: 4px 8px; font-size: 13px; }
+  .spark { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; height: 72px; align-items: end; padding: 8px; background: var(--surface); border: 1px solid var(--line); }
+  .spark div { height: 100%; display: flex; align-items: flex-end; background: var(--sunk); }
+  .spark i { display: block; width: 100%; min-height: 1px; background: var(--accent); }
+  .pill.warm { color: var(--mid); border-color: var(--mid); }
+  .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .acct-name { font: 600 18px var(--sans); letter-spacing: -.01em; }
+  .acct-head select { min-height: 30px; padding: 4px 8px; }
+  .move { border-left: 4px solid var(--accent); }
+  .move.done, .move.skipped { border-left-color: var(--line); opacity: .8; }
+  .move .why b { font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
+  .funnel .stat:first-child .v { color: var(--accent); }
+  .group { margin-top: 36px; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; margin-bottom: 4px; }
+  .tabs a { padding: 10px 14px; font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+            text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .tabs a:hover { color: var(--text); }
+  .tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+  .group h2 { font: 700 13px var(--mono); text-transform: uppercase; letter-spacing: .12em; margin: 0 0 4px; color: var(--accent); }
+
+  @media (max-width: 760px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    html, body { overflow-x: hidden; }
+    nav { position: fixed; bottom: 0; top: auto; left: 0; right: 0; height: auto; z-index: 5; flex-direction: row; justify-content: space-around;
+          padding: 0 0 env(safe-area-inset-bottom); border-right: 0; border-top: 1px solid var(--line); overflow-x: auto; }
+    .brand, .theme { display: none; }
+    nav a { display: flex; flex: 1 0 auto; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; letter-spacing: .04em; padding: 10px 4px; border-left: 0; border-top: 3px solid transparent; }
+    nav a::before { display: none; }
+    nav a.on { border-top-color: var(--accent); }
+    .ticker { padding: 10px 16px; }
+    main { padding: 24px 16px 110px; }
+    h1 { font-size: 34px; }
+    .role { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; } .score { font-size: 30px; }
+    .board { grid-template-columns: repeat(5, 80vw); scroll-snap-type: x mandatory; } .col { scroll-snap-align: start; }
+    .field { grid-template-columns: 1fr; } .field .help { grid-column: 1; }
+    .hide-sm, .hint { display: none; }
+    .ticker .theme-sm { display: inline-flex; }
+  }
+  .ticker .theme-sm { display: none; margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav id="nav">
+    <div class="brand">PM<b>/</b>Radar<small>Job search, agentic</small></div>
+    <a href="#week" data-v="week" data-i="01">This week <span class="n" id="n-week"></span></a>
+    <a href="#accounts" data-v="accounts" data-i="02">Accounts <span class="n" id="n-accounts"></span></a>
+    <a href="#pipeline" data-v="pipeline" data-i="03">Pipeline <span class="n" id="n-pipeline"></span></a>
+    <a href="#roles" data-v="roles" data-i="04">Roles <span class="n" id="n-roles"></span></a>
+    <a href="#health" data-v="health" data-i="05">Costs</a>
+    <a href="#settings" data-v="settings" data-i="06">Settings</a>
+    <div class="theme" role="group" aria-label="Theme" id="theme"></div>
+  </nav>
+  <div class="content">
+    <div class="ticker" id="ticker" aria-live="polite"></div>
+    <main id="main"><div class="empty">Loading…</div></main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let S = { jobs: [], companies: {}, health: {} };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const link = u => /^https?:\/\//i.test(String(u ?? "").trim()) ? esc(String(u).trim()) : "#";  // never javascript: and friends
+const band = s => s == null ? "none" : s >= 8 ? "hi" : s >= 5 ? "mid" : "lo";
+const ago = iso => {
+  if (!iso) return "never";
+  const m = Math.round((Date.now() - new Date(iso)) / 6e4);
+  return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + "h ago" : Math.round(m / 1440) + "d ago";
+};
+const DAY = 864e5;
+const PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];
+const LABEL = { shortlisted: "Shortlisted", preparing: "Preparing", applied: "Applied", interviewing: "Interviewing", closed: "Closed" };
+
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 1600); }
+
+async function load() {
+  const r = await fetch("/api/state", { cache: "no-store" });
+  if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
+  S = await r.json(); render();
+}
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json();
+  if (d.error) { toast(d.error); return null; }
+  return d;
+}
+async function setStage(id, stage, msg) {
+  const d = await post("/api/job", { id, stage });
+  if (!d) return;
+  Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
+}
+
+const newRoles = () => S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5))
+  .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
+const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
+const daysAgo = n => n == null ? "undated" : n === 0 ? "today" : n + "d ago";
+const sigChip = e => `<a class="sig ${e.fresh ? "fresh" : ""}" href="${link(e.url)}" target="_blank" rel="noopener" title="${esc(e.summary)}">
+  <b>${esc(S.labels.events[e.type] || e.type)}</b> ${esc((e.summary || "").slice(0, 60))} <i>${daysAgo(e.age_days)}</i></a>`;
+const dist = p => p.distance || { label: "3rd+", certain: false, paths: [] };
+const distBadge = p => { const d = dist(p);
+  return `<span class="dist d${d.hops || 3} ${d.certain ? "sure" : ""}" title="${d.certain ? "Confirmed" : "Estimated from your connections, not confirmed"}">${esc(d.label)}</span>`; };
+const personChip = p => `<a class="person-chip" href="${link(p.url)}" target="_blank" rel="noopener" title="${esc(dist(p).paths.map(x => x.detail).join(" · ") || p.evidence || "")}">
+  ${distBadge(p)} <b>${esc(p.name)}</b> ${esc((p.role || p.kind || "").slice(0, 40))}${p.stage && p.stage !== "mapped" ? ` · ${esc(p.stage)}` : ""}</a>`;
+function routes(p) {
+  const d = dist(p), best = d.paths.slice(0, 3);
+  return `<div class="routes"><div class="routes-head"><b>Distance</b> ${distBadge(p)}
+      <span class="sub">${d.certain ? "confirmed" : d.paths.length ? "estimated" : "no route found"}</span></div>
+    ${best.map(r => `<div class="route">${r.via && r.url ? `<a href="${link(r.url)}" target="_blank" rel="noopener">${esc(r.detail)}</a>` : esc(r.detail)}</div>`).join("")}
+    <div class="row confirm"><span class="sub">On LinkedIn it says</span>
+      <select aria-label="Degree shown on LinkedIn for ${esc(p.name)}" onchange="setDegree(${jsq(p.id)}, this.value)">
+        <option value="">Not checked</option>${[[1, "1st"], [2, "2nd"], [3, "3rd+"]].map(([v, l]) => `<option value="${v}" ${p.degree === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <input type="text" id="via-${esc(p.id)}" placeholder="Mutual connection" value="${esc(p.via || "")}" aria-label="Mutual connection" onchange="setDegree(${jsq(p.id)})" style="flex:1;min-width:140px;max-width:240px"></div></div>`;
+}
+const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
+const TASKS = { scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs" };
+function costs() {
+  const u = S.usage, max = Math.max(0.01, ...u.days.map(d => d.ai + d.x));
+  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  return `<h1>Costs</h1>
+    <p class="lede">Your Claude runs are included in your subscription, so the Claude figures are <b>equivalent API prices</b>: a guide to how much allowance they use, not money you pay. Only X would be a real charge.</p>
+    <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
+      ${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
+    <div class="section">Last 14 days</div>
+    <div class="spark">${u.days.map(d => `<div title="${d.date}: ${usd(d.ai)} Claude, ${usd(d.x)} X"><i style="height:${Math.round((d.ai + d.x) / max * 100)}%"></i></div>`).join("")}</div>
+    ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
+    ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
+    <p class="sub" style="margin-top:12px">${u.first ? `Tracking since ${esc(u.first.slice(0, 10))}. ` : "Nothing recorded yet. "}Scheduled tasks in the desktop app aren't included, and the Claude app doesn't report how much of your Pro allowance is left.</p>`;
+}
+function moveCard(m) {
+  const p = S.people[m.person_id] || { name: m.person_id }, a = S.accounts.find(x => x.name === m.account) || {};
+  const sig = m.signal || {}, age = sig.date ? Math.round((Date.now() - new Date(sig.date)) / DAY) : null;
+  const k = "mv" + m.id.replace(/[^a-z0-9]/gi, "");
+  const outcome = m.status === "done" ? `<div class="row" style="margin-top:12px"><span class="sub">Outcome</span>
+    <select onchange="setMove(${jsq(m.id)}, {outcome: this.value || null})" aria-label="Outcome">
+      <option value="">No reply yet</option>${S.labels.outcomes.filter(o => o !== "no_reply").map(o => `<option value="${o}" ${m.outcome === o ? "selected" : ""}>${o.replace("_", " ")}</option>`).join("")}
+    </select></div>` : "";
+  return `<article class="card move ${m.status}">
+    <div class="move-head"><div><span class="tier t${a.tier || "B"}">${a.tier || "?"}</span> <span class="co">${esc(m.account)}</span></div>
+      <span class="pill ${m.status === "done" ? "done" : ""}">${m.status === "todo" ? esc(m.channel || "linkedin") : m.status}</span></div>
+    <div class="title"><a href="${link(p.url || "#")}" target="_blank" rel="noopener">${esc(p.name)}</a> ${p.id ? distBadge(p) : ""} <span class="sub">${esc(p.role || "")}</span></div>
+    <div class="chips">${sigChip({ ...sig, fresh: age != null && age <= 30, age_days: age })}</div>
+    <p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>
+    <p class="why"><b>Angle.</b> ${esc(m.angle)}</p>
+    ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}
+    ${p.id ? routes(p) : ""}
+    <div class="msg" id="${k}">${esc(m.draft)}</div>
+    <div class="actions">
+      <button onclick="copyText('${k}')">Copy draft</button>
+      <a href="${link(p.url || "#")}" target="_blank" rel="noopener"><button>Open profile</button></a>
+      ${m.status === "todo" ? `<button class="primary" onclick="setMove(${jsq(m.id)}, {status:'done'})">Sent</button>
+        <button onclick="setMove(${jsq(m.id)}, {status:'skipped'})">Skip</button>` : `<button onclick="setMove(${jsq(m.id)}, {status:'todo', outcome:null})">Undo</button>`}
+    </div>${outcome}</article>`;
+}
+
+function roleCard(j, actions) {
+  return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
+    <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
+    <div>
+      <div class="co">${esc(j.company)}</div>
+      <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
+      <div class="sub">${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <p class="why">${j.why ? esc(j.why) : '<span class="sub">Waiting to be scored.</span>'}</p>
+      ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
+      <div class="actions">${actions}</div>
+    </div></article>`;
+}
+
+const V = {
+  week() {
+    const f = S.funnel, wk = S.week;
+    const mine = S.moves.filter(m => m.week === wk);
+    const todo = mine.filter(m => m.status === "todo"), done = mine.filter(m => m.status !== "todo");
+    const planned = new Set(mine.map(m => m.account));
+    const firing = S.accounts.filter(a => ["A", "B"].includes(a.tier) && a.fresh && !planned.has(a.name))
+      .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
+    const steps = [["Signals", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
+    return `<h1>This week <span class="count">${todo.length}</span></h1>
+      <p class="lede">${wk.replace("-W", " · week ")}. Each move is one person at a target account, triggered by a dated signal. Do these, log what happened, and next week's moves get better.</p>
+      <div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>
+      ${todo.length ? todo.map(moveCard).join("") : `<div class="empty">No moves planned yet this week.<div class="actions" style="justify-content:center"><button class="primary" onclick="runNow('moves')">Plan my week</button></div></div>`}
+      ${done.length ? `<div class="section">Done this week · ${done.length}</div>${done.map(moveCard).join("")}` : ""}
+      ${firing.length ? `<div class="section">Also firing · not planned</div><table>${firing.map(a => `<tr>
+        <td><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b></td>
+        <td>${a.events.filter(e => e.fresh).slice(0, 2).map(sigChip).join(" ")}</td>
+        <td class="hide-sm sub">${peopleAt(a.name).length} people</td></tr>`).join("")}</table>` : ""}`;
+  },
+  accounts() {
+    const tiers = ["A", "B", "C"];
+    const q = (window._acctq || "").toLowerCase();
+    const list = S.accounts.filter(a => !q || (a.name + " " + (a.product || "")).toLowerCase().includes(q));
+    const card = a => {
+      const ppl = peopleAt(a.name), near = ppl.map(p => dist(p).hops).filter(Boolean);
+      const warm = ppl.filter(p => dist(p).hops === 1).length, closest = near.length ? Math.min(...near) : null;
+      return `<article class="card acct">
+        <div class="acct-head">
+          <div><span class="tier t${a.tier}">${a.tier}</span> <b class="acct-name">${esc(a.name)}</b>
+            ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
+            ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}</div>
+          <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
+            ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
+            <button onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
+        </div>
+        ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · London: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
+        ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
+        ${a.events.length ? `<div class="chips">${a.events.slice(0, 4).map(sigChip).join("")}</div>` : `<div class="sub" style="margin-top:8px">No signals yet.</div>`}
+        ${ppl.length ? `<div class="chips">${ppl.map(personChip).join("")}</div>` : `<div class="sub" style="margin-top:6px">No one mapped yet.</div>`}
+      </article>`;
+    };
+    return `<h1>Accounts <span class="count">${S.accounts.length}</span></h1>
+      <p class="lede">Your target companies. A is where you'd move tomorrow. Signals decide when to act; the people here decide who. Set a tier and it sticks.</p>
+      <div class="row" style="margin-bottom:8px"><input type="text" placeholder="Filter accounts" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" style="flex:1;max-width:360px"></div>` +
+      tiers.map(t => { const rows = list.filter(a => a.tier === t).sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
+        return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
+  },
+  pipeline() {
+    const PS = S.labels.person_stages.filter(s => s !== "mapped");
+    const ppl = Object.values(S.people).filter(p => p.stage && p.stage !== "mapped");
+    const peopleBoard = PS.map(st => { const rows = ppl.filter(p => p.stage === st);
+      return `<div class="col"><h3>${st} <span>${rows.length}</span></h3>${rows.map(p => `<div class="card">
+        <div class="co">${esc(p.company)}</div><div class="title"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></div>
+        <div class="sub">${distBadge(p)} ${esc(p.role || "")}</div>
+        <select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Stage">${S.labels.person_stages.map(s => `<option ${s === st ? "selected" : ""}>${s}</option>`).join("")}</select></div>`).join("")}</div>`; }).join("");
+    const appBoard = PIPE.map(st => {
+      const rows = S.jobs.filter(j => j.stage === st).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>` + rows.map(j => {
+        const since = (j.history || []).filter(h => h.stage === st).pop();
+        return `<div class="card"><div class="co">${esc(j.company)} · ${j.score ?? "–"}</div>
+          <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
+          ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
+          <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
+          ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select></div>`;
+      }).join("") + `</div>`; }).join("");
+    return `<h1>Pipeline</h1><p class="lede">Conversations with people, and applications for roles. Moves update people automatically when you log an outcome.</p>
+      <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
+      <div class="section">Applications</div><div class="board">${appBoard}</div>`;
+  },
+  roles() {
+    const rows = newRoles();
+    return `<h1>Roles <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its account and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
+      <p class="hint"><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
+      (rows.length ? rows.map(j => roleCard(j, `
+        <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>
+        <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Account</button>
+        <button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>`)).join("")
+      : `<div class="empty">You're up to date. New roles appear here as the radar finds them.</div>`);
+  },
+  settings() {
+    if (!SET) { loadSettings(); return `<div class="empty">Loading settings…</div>`; }
+    const tab = (location.hash.split("/")[1] || "ai");
+    const tabs = SETTINGS_TABS.map(([k, l]) => `<a href="#settings/${k}" class="${k === tab ? "on" : ""}">${l}</a>`).join("");
+    const body = (SETTINGS_TABS.find(t => t[0] === tab) || SETTINGS_TABS[0])[2]();
+    return `<h1>Settings</h1><p class="lede">Changes save as you make them and apply from the next run.</p>
+      <div class="tabs" role="tablist">${tabs}</div>${body}`;
+  },
+  health() {
+    const h = S.health, errs = Object.entries(h.board_errors || {});
+    const C = Object.values(S.companies);
+    return costs() + `<div class="section">Radar health</div>
+      <div class="stats">
+        <div class="stat"><div class="v">${ago(h.last_scan)}</div><div class="l">Last scan</div></div>
+        <div class="stat"><div class="v">${h.last_agent_run ? esc(h.last_agent_run.replace(/\.md$/, "").replace(/-(\d\d)-(\d\d)Z$/, ":$1")).slice(-16) : "never"}</div><div class="l">Last agent run</div></div>
+        <div class="stat"><div class="v">${C.filter(c => c.status === "watched").length}</div><div class="l">Companies watched</div></div>
+        <div class="stat"><div class="v">${S.jobs.length}</div><div class="l">Roles tracked</div></div>
+        <div class="stat"><div class="v">${h.signals_waiting}</div><div class="l">Signals waiting</div></div>
+        <div class="stat"><div class="v">${h.x && h.x.day ? (h.x.used || 0) : "off"}</div><div class="l">X posts today</div></div>
+      </div>
+      <div class="section">Board errors</div>
+      ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">All boards answered on the last scan.</div>`}`;
+  },
+};
+
+let SET = null;
+const fieldRow = f => `<div class="field"><label for="f_${f.key}">${esc(f.label)}</label>
+  <div>${input(f, SET.values[f.key])}</div>${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
+const fieldsOf = (group, skip = []) => SET.schema.filter(f => f.group === group && !skip.includes(f.key)).map(fieldRow).join("");
+const SETTINGS_TABS = [
+  ["ai", "AI", () => {
+    const skip = SET.values.ai_provider === "openai_compatible" ? [] : ["openai_base_url", "openai_model"];
+    const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude Code login on this machine. If it has expired, run <code>claude</code> then <code>/login</code> in a terminal."
+      : SET.values.ai_provider === "anthropic_api" ? "Uses your Anthropic API key (set it under Keys). Billed per use by Anthropic."
+      : "Scoring only. Finding people and agent runs need a Claude provider.";
+    return `<section class="group"><h2>Provider and models</h2>${fieldsOf("AI", skip)}
+      <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button><span id="ai-test" class="sub"></span></div>
+      <div class="help">${help}</div></div></section>`;
+  }],
+  ["matching", "Matching", () => `<section class="group"><h2>What counts as a match</h2>${fieldsOf("Matching")}</section>`],
+  ["schedule", "Schedule", () => {
+    const r = SET.run, jobs = { scan: "Scan", agent: "Agent run", watchlist: "Watchlist loop", moves: "Plan the week" };
+    const runRow = j => { const l = r.last[j]; return `<div class="field"><label>${jobs[j]}</label>
+      <div class="row"><button onclick="runNow('${j}')">${r.running[j] ? "Running…" : "Run now"}</button>
+      <span class="sub">${l ? `${l.ok ? "Last run" : "Failed"} ${ago(l.at)}${l.ok ? "" : ": " + esc(l.summary)}` : "Not run from here yet"}</span></div></div>`; };
+    return `<section class="group"><h2>Run now</h2><p class="sub">${r.enabled ? "The built-in scheduler is on." : "The built-in scheduler is off. Scheduled runs come from this Mac's desktop app and launchd."}</p>
+      ${["scan", "agent", "watchlist", "moves"].map(runRow).join("")}</section><section class="group"><h2>When things run</h2>${fieldsOf("Schedule")}</section>`;
+  }],
+  ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Posts that mention a product role and one of your locations become signals for the agent. LinkedIn and Threads don't allow keyword search by other apps.</p>${fieldsOf("Social")}</section>`],
+  ["feeds", "Newsletters", () => {
+    const yours = SET.feeds.filter(f => !f.builtin), built = SET.feeds.filter(f => f.builtin);
+    const have = new Set(SET.feeds.map(f => f.url.replace(/\/$/, "")));
+    const sugg = SET.suggested.filter(s => !have.has(s.url.replace(/\/$/, "")));
+    const row = f => `<tr><td><b>${esc(f.name)}</b><div class="sub" style="word-break:break-all">${esc(f.url)}</div></td><td class="hide-sm"><span class="pill">${esc(f.kind)}</span></td>
+      <td style="white-space:nowrap"><input type="checkbox" class="switch" aria-label="${esc(f.name)} on" ${f.enabled ? "checked" : ""} onchange="toggleFeed(${jsq(f.name)}, this.checked)">
+      ${f.builtin ? "" : `<button onclick="removeFeed(${jsq(f.name)})">Remove</button>`}</td></tr>`;
+    return `<section class="group"><h2>Add a newsletter or feed</h2>
+      <p class="sub">Paste a Substack name (like <code>lenny</code>), a newsletter link (Substack, Beehiiv, Ghost, Medium, Buttondown) or any RSS feed. The feed is found automatically.</p>
+      <div class="row" style="margin-top:12px"><input type="text" id="feed-add" placeholder="lenny, oneusefulthing.org, medium.com/@name" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')addFeed()">
+      <select id="feed-kind" aria-label="Kind"><option value="newsletter">Newsletter</option><option value="signals">News (keyword-filtered)</option><option value="jobs">Job posts</option><option value="community">Community</option></select>
+      <button class="primary" onclick="addFeed()">Add</button></div><div id="feed-msg" class="sub" style="margin-top:6px"></div></section>
+      ${sugg.length ? `<section class="group"><h2>Suggested for PMs</h2><div class="row">${sugg.map(s => `<button onclick="addFeed(${jsq(s.url)})">+ ${esc(s.name)}</button>`).join("")}</div></section>` : ""}
+      <section class="group"><h2>Your feeds · ${yours.length}</h2>${yours.length ? `<table>${yours.map(row).join("")}</table>` : `<div class="sub">None yet.</div>`}</section>
+      <section class="group"><h2>Built in · ${built.length}</h2><table>${built.map(row).join("")}</table></section>
+      <section class="group"><h2>Other sources</h2>${fieldsOf("Feeds", ["feeds_disabled", "feeds_extra"])}</section>`;
+  }],
+  ["network", "Network", () => {
+    const n = S.network || {};
+    return `<section class="group"><h2>Warm paths from LinkedIn</h2>
+      <p class="sub">Your own connections, matched against your accounts. A warm person beats a cold one, and the weekly plan uses them first.</p>
+      <ol class="sub" style="line-height:1.9;margin:12px 0"><li>On LinkedIn: <b>Settings → Data privacy → Get a copy of your data</b>, tick <b>Connections</b>, request the archive.</li>
+      <li>When LinkedIn emails you (usually within 10 minutes), download it and find <code>Connections.csv</code>.</li><li>Choose it below. Only names, profile links, companies, positions and dates are kept; emails are dropped. It stays on this machine.</li></ol>
+      <div class="row"><input type="file" id="net-file" accept=".csv,text/csv"><button class="primary" onclick="importNetwork()">Import</button></div>
+      <div id="net-msg" class="sub" style="margin-top:8px"></div>
+      <div class="stats" style="margin-top:20px"><div class="stat"><div class="v">${n.connections || 0}</div><div class="l">Connections</div></div>
+      <div class="stat"><div class="v">${n.warm_people || 0}</div><div class="l">Warm people</div></div>
+      <div class="stat"><div class="v">${n.warm_accounts || 0}</div><div class="l">Accounts with a warm path</div></div>
+      <div class="stat"><div class="v">${n.imported ? ago(n.imported) : "never"}</div><div class="l">Imported</div></div></div>
+      <p class="sub">Re-import every month or two; new accounts are matched automatically on the next import.</p></section>
+      <section class="group"><h2>How distance works</h2>
+      <p class="sub">LinkedIn doesn't let other apps see your 2nd-degree network, so a <b>~</b> means the route is estimated from your connections' current employers, people's past employers and investors. Open someone's profile, read the degree LinkedIn shows, and log it on the move: confirmed distances replace estimates.</p></section>
+      <section class="group"><h2>Your background</h2>${fieldsOf("Network")}</section>`;
+  }],
+  ["notifications", "Notifications", () => `<section class="group"><h2>Notifications</h2><p class="sub">Install the ntfy app on your phone, subscribe to a long random topic, and set that topic under Keys.</p>${fieldsOf("Notifications")}</section>`],
+  ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git.</p>` +
+    Object.entries(SET.secret_keys).map(([k, s]) => `<div class="field"><label for="s_${k}">${esc(s.label)}</label>
+      <div class="row"><input type="password" id="s_${k}" placeholder="${SET.secrets[k] ? esc(SET.secrets[k]) : "Not set"}" autocomplete="off" style="flex:1;min-width:160px">
+      <button onclick="saveSecret('${k}')">Save</button>${SET.secrets[k] ? `<button onclick="$('s_${k}').value='';saveSecret('${k}')">Clear</button>` : ""}</div>
+      ${s.help ? `<div class="help">${esc(s.help)}</div>` : ""}</div>`).join("") + `</section>`],
+  ["profile", "Profile", () => {
+    setTimeout(async () => { const p = $("profile"); if (p && !p.value) p.value = (await (await fetch("/api/profile")).json()).text; }, 0);
+    return `<section class="group"><h2>Your profile</h2><p class="sub">What you want and your CV, as plain text. Scoring, the people search and the agent all read this.</p>
+      <textarea id="profile" rows="22" style="width:100%;margin-top:8px"></textarea><div class="actions"><button class="primary" onclick="saveProfile()">Save profile</button></div></section>`;
+  }],
+];
+const jsq = s => esc(JSON.stringify(String(s)));
+async function addFeed(text) {
+  const box = $("feed-add"), msg = $("feed-msg");
+  text = text || (box && box.value.trim());
+  if (!text) { if (msg) msg.innerHTML = '<span class="bad">Paste a newsletter name or link first.</span>'; return; }
+  if (msg) msg.textContent = "Looking for the feed…";
+  const d = await post("/api/feeds/add", { text, kind: $("feed-kind") ? $("feed-kind").value : "newsletter" });
+  if (!d) { if (msg) msg.textContent = ""; return; }
+  SET = d; toast("Added " + d.title); render(true);
+}
+async function importNetwork() {
+  const f = $("net-file").files[0], msg = $("net-msg");
+  if (!f) { msg.innerHTML = '<span class="bad">Choose Connections.csv first.</span>'; return; }
+  msg.textContent = "Importing…";
+  const d = await post("/api/network/import", { text: await f.text() });
+  if (!d) { msg.textContent = ""; return; }
+  msg.innerHTML = `<span class="ok">${d.connections} connections imported · ${d.matches.length} warm paths found</span>` +
+    (d.matches.length ? "<br>" + d.matches.slice(0, 12).map(m => `★ ${esc(m.account)}: ${esc(m.name)} (${esc(m.position)})`).join("<br>") : "");
+  S.network = d.summary;
+}
+async function removeFeed(name) {
+  if (!confirm(`Remove ${name}?`)) return;
+  const d = await post("/api/feeds/remove", { name });
+  if (d) { SET = d; toast("Removed"); render(true); }
+}
+const GROUPS = { AI: "AI provider", Matching: "Matching", Schedule: "Schedule", Social: "Social media", Sources: "Other sources", Feeds: "Feeds", Notifications: "Notifications" };
+async function loadSettings() {
+  SET = await (await fetch("/api/settings", { cache: "no-store" })).json();
+  if ((location.hash || "").startsWith("#settings")) render(true);
+}
+function input(f, v) {
+  const id = "f_" + f.key, on = `onchange="saveField('${f.key}', this)"`;
+  if (f.type === "bool") return `<input type="checkbox" class="switch" id="${id}" ${v ? "checked" : ""} ${on}>`;
+  if (f.type === "select:provider") return `<select id="${id}" ${on}>${Object.entries(SET.providers).map(([k, l]) => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  if (f.type === "select:claude_model") return `<select id="${id}" ${on}>${SET.models.map(m => `<option ${m === v ? "selected" : ""}>${m}</option>`).join("")}</select>`;
+  if (f.type.startsWith("int")) { const [lo, hi] = f.type.split(":")[1].split("-"); return `<input type="number" id="${id}" min="${lo}" max="${hi}" step="1" value="${esc(v)}" ${on} style="max-width:120px">`; }
+  if (f.type === "lines") return `<textarea id="${id}" rows="${Math.min(8, Math.max(3, String(v || "").split("\n").length + 1))}" ${on}>${esc(v)}</textarea>`;
+  return `<input type="text" id="${id}" value="${esc(v)}" ${on} ${f.type === "regex" ? 'style="font-family:var(--mono);font-size:13px"' : ""}>`;
+}
+async function saveField(key, el) {
+  const value = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
+  const d = await post("/api/settings", { changes: { [key]: value } });
+  if (d) { SET = d; toast("Saved"); if (key === "ai_provider") render(true); }
+}
+async function saveSecret(key) {
+  const el = $("s_" + key);
+  const d = await post("/api/secret", { key, value: el.value });
+  if (d) { SET.secrets = d.secrets; el.value = ""; toast(d.secrets[key] ? "Key saved" : "Key removed"); render(true); }
+}
+async function testAI() {
+  $("ai-test").textContent = "Testing…";
+  const d = await post("/api/test-ai", {});
+  $("ai-test").innerHTML = d && d.ok ? '<span class="ok">Connected</span>' : `<span class="bad">${esc(d ? d.reply : "Failed")}</span>`;
+}
+async function runNow(job) {
+  const d = await post("/api/run", { job });
+  if (d) toast(d.started ? "Started" : "Already running");
+  setTimeout(loadSettings, 800);
+}
+async function toggleFeed(name, on) {
+  const off = new Set((SET.values.feeds_disabled || "").split("\n").map(s => s.trim()).filter(Boolean));
+  on ? off.delete(name) : off.add(name);
+  const d = await post("/api/settings", { changes: { feeds_disabled: [...off].join("\n") } });
+  if (d) { SET = d; toast(on ? "Feed on" : "Feed off"); }
+}
+async function saveProfile() {
+  if (await post("/api/profile", { text: $("profile").value })) toast("Profile saved");
+}
+
+const THEMES = [["system", "Sys"], ["light", "Light"], ["dark", "Dark"]];
+function theme() { try { return localStorage.getItem("radar-theme") || "system"; } catch (e) { return "system"; } }
+function setTheme(t) {
+  try { localStorage.setItem("radar-theme", t); } catch (e) {}
+  if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  drawTheme();
+}
+function drawTheme() {
+  const html = THEMES.map(([k, l]) => `<button class="${theme() === k ? "on" : ""}" onclick="setTheme('${k}')" aria-pressed="${theme() === k}">${l}</button>`).join("");
+  $("theme").innerHTML = html;
+  const sm = document.querySelector(".theme-sm"); if (sm) sm.innerHTML = `<button style="min-height:24px;padding:2px 8px;font-size:10px" onclick="cycleTheme()">${theme()}</button>`;
+}
+function cycleTheme() { const i = THEMES.findIndex(t => t[0] === theme()); setTheme(THEMES[(i + 1) % 3][0]); }
+function drawTicker() {
+  const h = S.health, fresh = h.last_scan && Date.now() - new Date(h.last_scan) < 30 * 6e4;
+  const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
+  $("ticker").innerHTML = `<span class="${fresh ? "live" : "stale"}">${fresh ? "Live" : "Scan " + ago(h.last_scan)}</span>
+    <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
+    <span><b>${Object.values(S.companies).filter(c => c.status === "watched").length}</b> watched</span>
+    <span><b>${h.signals_waiting}</b> signals queued</span>
+    <a href="#health" style="text-decoration:none"><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> this month</a>
+    <span>Agent <b>${h.last_agent_run ? ago(h.last_agent_run.replace(/^.*?(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)Z.*$/, "$1:$2:$3Z")) : "never"}</b></span>
+    <span class="theme-sm"></span>`;
+  drawTheme();
+}
+let lastView = null, sel = 0;
+function render(force) {
+  const v = (location.hash || "#week").slice(1).split("/")[0];
+  drawTicker();
+  if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
+  $("n-week").textContent = S.moves.filter(m => m.week === S.week && m.status === "todo").length || "";
+  $("n-accounts").textContent = S.accounts.filter(a => a.tier === "A" && a.fresh).length || "";
+  $("n-pipeline").textContent = Object.values(S.people).filter(p => ["contacted", "replied", "conversation"].includes(p.stage)).length + S.jobs.filter(j => PIPE.slice(0, 4).includes(j.stage)).length || "";
+  $("n-roles").textContent = newRoles().length || "";
+  const y = window.scrollY;
+  $("main").innerHTML = (V[v] || V.week)();
+  const full = location.hash;
+  if (full !== lastView) { window.scrollTo(0, 0); sel = 0; } else window.scrollTo(0, y);
+  lastView = full;
+  if (v === "roles") highlight();
+}
+function highlight(scroll) {
+  const cards = [...document.querySelectorAll("article.role")];
+  cards.forEach((c, i) => c.classList.toggle("sel", i === sel));
+  if (scroll && cards[sel]) cards[sel].scrollIntoView({ block: "center", behavior: "smooth" });
+}
+document.addEventListener("keydown", e => {
+  if (location.hash !== "#roles" || e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(e.target.tagName)) return;
+  const cards = [...document.querySelectorAll("article.role")], card = cards[sel];
+  const k = e.key.toLowerCase();
+  if (k === "j") { sel = Math.min(sel + 1, cards.length - 1); highlight(true); }
+  else if (k === "k") { sel = Math.max(sel - 1, 0); highlight(true); }
+  else if (card && k === "s") setStage(card.dataset.id, "shortlisted");
+  else if (card && k === "x") setStage(card.dataset.id, "skipped", "Skipped");
+  else if (card && k === "o") window.open(card.querySelector(".title a").href, "_blank", "noopener");
+  else return;
+  e.preventDefault();
+});
+
+function copyText(k) {
+  const t = $(k).textContent;
+  const done = () => toast("Copied");
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done);
+  else { const a = Object.assign(document.createElement("textarea"), { value: t }); document.body.append(a); a.select(); document.execCommand("copy"); a.remove(); done(); }
+}
+async function setMove(id, change) {
+  if (await post("/api/move", { id, ...change })) { toast(change.status === "done" ? "Logged. Set the outcome when you hear back" : "Saved"); load(); }
+}
+async function setPerson(id, stage) { if (await post("/api/person", { id, stage })) { toast("Moved to " + stage); load(); } }
+async function setDegree(id, value) {
+  const p = S.people[id], sel = value === undefined ? (p.degree || "") : value, via = (document.getElementById("via-" + id) || {}).value || "";
+  if (await post("/api/person", { id, degree: sel ? Number(sel) : null, via })) { toast(sel ? "Distance confirmed" : "Cleared"); load(); }
+}
+async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
+async function vetoCo(name) {
+  if (!confirm(`Stop watching ${name}? It won't be re-added.`)) return;
+  if (await post("/api/company/veto", { name })) { toast(`Removed ${name}`); load(); }
+}
+
+window.addEventListener("hashchange", () => render(true));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+setInterval(() => { if (!document.hidden) load(); }, 60000);
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+name,url,kind,every_min
+Lenny's Newsletter,https://www.lennysnewsletter.com/feed,newsletter,60
+Exponential View,https://www.exponentialview.co/feed,newsletter,60
+Sifted,https://sifted.eu/feed,signals,30
+TechCrunch,https://techcrunch.com/feed/,signals,30
+EU-Startups,https://www.eu-startups.com/feed/,signals,30
+UKTN,https://www.uktech.news/feed,signals,30
+HN Jobs,https://hnrss.org/jobs,jobs,10

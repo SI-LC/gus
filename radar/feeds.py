@@ -1,0 +1,193 @@
+"""Pull RSS/Atom feeds listed in feeds.csv into data/signals.json.
+
+Newsletters, funding news, job posts and community threads all become signals; the
+discovery agent turns them into account events, roles and people.
+"Signals" feeds are pre-filtered by keyword so the agent only reads relevant items.
+"""
+from __future__ import annotations
+
+import csv
+import html
+import json
+import re
+import urllib.parse
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+
+from radar.scan import DATA, ROOT, fetch_bytes, strip_html
+
+SIGNALS = DATA / "signals.json"
+SIGNAL = re.compile(r"rais|fund|series [a-e]|seed|london|\buk\b|britain|expan|launch|hiring|acqui|ai\b|agent", re.I)
+ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def parse_xml(data: bytes):
+    """Feeds never need entity declarations, and they're how XML bombs work."""
+    if b"<!ENTITY" in data or b"<!DOCTYPE" in data[:2000]:
+        raise ValueError("Feed declares XML entities; refused")
+    return ET.fromstring(data)
+
+
+def fetch(url: str):
+    root = parse_xml(fetch_bytes(url))
+    items = root.findall(".//item") or root.findall(f".//{ATOM}entry")
+    for it in items:
+        get = lambda tag: (it.findtext(tag) or it.findtext(ATOM + tag) or "").strip()
+        link = get("link")
+        if not link:
+            el = it.find(ATOM + "link")
+            link = el.get("href", "") if el is not None else ""
+        yield {
+            "title": get("title"),
+            "url": link,
+            "date": get("pubDate") or get("published") or get("updated"),
+            "text": strip_html(get("description") or get("summary") or get("content"))[:1500],
+        }
+
+
+SUGGESTED = [  # checked to have working feeds
+    ("The Pragmatic Engineer", "https://newsletter.pragmaticengineer.com/feed", "newsletter"),
+    ("Product Growth (Aakash Gupta)", "https://www.news.aakashg.com/feed", "newsletter"),
+    ("Product Compass", "https://www.productcompass.pm/feed", "newsletter"),
+    ("Elena's Growth Scoop", "https://www.elenaverna.com/feed", "newsletter"),
+    ("The Beautiful Mess (John Cutler)", "https://cutlefish.substack.com/feed", "newsletter"),
+    ("Latent Space", "https://www.latent.space/feed", "newsletter"),
+    ("Import AI", "https://importai.substack.com/feed", "newsletter"),
+    ("One Useful Thing", "https://www.oneusefulthing.org/feed", "newsletter"),
+    ("Not Boring", "https://www.notboring.co/feed", "newsletter"),
+    ("The Generalist", "https://www.generalist.com/feed", "newsletter"),
+    ("Stratechery", "https://stratechery.com/feed/", "newsletter"),
+]
+
+
+def _parses(url):
+    try:
+        root = parse_xml(fetch_bytes(url, timeout=20))
+        title = root.findtext("./channel/title") or root.findtext(f"{ATOM}title") or ""
+        if root.findall(".//item") or root.findall(f".//{ATOM}entry"):
+            return title.strip() or url
+    except Exception:
+        return None
+    return None
+
+
+def discover(text: str):
+    """Turn a Substack name, newsletter URL or feed URL into (title, feed_url).
+
+    Handles Substack ("lenny", "lenny.substack.com", custom domains), Beehiiv, Ghost,
+    Medium ("medium.com/@name"), Buttondown, and any page that advertises its feed."""
+    t = text.strip().rstrip("/")
+    if not t:
+        raise ValueError("Paste a newsletter name or link")
+    if re.fullmatch(r"[a-z0-9-]+", t, re.I):  # bare Substack name
+        t = f"https://{t}.substack.com"
+    if not t.startswith("http"):
+        t = "https://" + t
+    m = re.match(r"https://(www\.)?medium\.com/(@[^/]+)", t)
+    if m:
+        t = f"https://medium.com/feed/{m.group(2)}"
+    m = re.match(r"https://substack\.com/@([^/]+)", t)
+    if m:
+        raise ValueError("That's a Substack profile. Paste the newsletter's own link (e.g. name.substack.com) instead")
+    title = _parses(t)
+    if title:
+        return title, t
+    try:  # the page may advertise its feed
+        page = fetch_bytes(t, timeout=20)[:400_000].decode("utf-8", "ignore")
+        for tag in re.findall(r"<link[^>]+>", page, re.I):
+            if re.search(r"application/(rss|atom)\+xml", tag, re.I):
+                href = re.search(r'href=["\']([^"\']+)', tag)
+                if href:
+                    u = urllib.parse.urljoin(t + "/", html.unescape(href.group(1)))
+                    title = _parses(u)
+                    if title:
+                        return title, u
+    except Exception:
+        pass
+    for suffix in ("/feed", "/rss", "/rss/", "/feed.xml", "/rss.xml", "/atom.xml"):
+        title = _parses(t + suffix)
+        if title:
+            return title, t + suffix
+    host = urllib.parse.urlparse(t).netloc
+    if not host.startswith("www.") and host.count(".") == 1:  # some sites only serve the feed on www
+        try:
+            return discover(t.replace("://", "://www.", 1))
+        except ValueError:
+            pass
+    raise ValueError("Couldn't find a feed there. Check the link, or paste the feed URL itself")
+
+
+def add_feed(text: str, kind: str = "newsletter"):
+    from radar.settings import load, save
+    if kind not in ("newsletter", "signals", "jobs", "community"):
+        raise ValueError("Unknown kind")
+    title, url = discover(text)
+    title = re.sub(r"\s*[|]\s*", " - ", title)[:60]
+    if any(f["url"].rstrip("/") == url.rstrip("/") for f in all_feeds()):
+        raise ValueError(f"{title} is already in your feeds")
+    extra = (load().get("feeds_extra") or "").strip()
+    every = {"jobs": 10, "signals": 30}.get(kind, 60)
+    save({"feeds_extra": (extra + "\n" if extra else "") + f"{title} | {url} | {kind} | {every}"})
+    return title, url
+
+
+def remove_feed(name: str):
+    from radar.settings import load, save
+    lines = [l for l in (load().get("feeds_extra") or "").splitlines() if l.split("|")[0].strip() != name]
+    save({"feeds_extra": "\n".join(lines)})
+
+
+def all_feeds():
+    """Built-in feeds (feeds.csv) plus yours from Settings, minus the ones you turned off."""
+    from radar.settings import load
+    cfg = load()
+    off = {x.strip().lower() for x in (cfg.get("feeds_disabled") or "").splitlines() if x.strip()}
+    rows = [dict(r, builtin=True) for r in csv.DictReader((ROOT / "feeds.csv").open())]
+    for line in (cfg.get("feeds_extra") or "").splitlines():
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 2 and parts[1].startswith("http"):
+            rows.append({"name": parts[0], "url": parts[1], "kind": parts[2] if len(parts) > 2 else "signals",
+                         "every_min": parts[3] if len(parts) > 3 else "30", "builtin": False})
+    for r in rows:
+        r["enabled"] = r["name"].lower() not in off
+    return rows
+
+
+def main():
+    state_path = DATA / "feeds_state.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    t = datetime.now(timezone.utc).timestamp()
+    feeds = [f for f in all_feeds() if f["enabled"]
+             and t - state.get(f["name"], 0) >= int(f.get("every_min") or 10) * 60 - 30]
+    signals = json.loads(SIGNALS.read_text()) if SIGNALS.exists() else {}
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    def run(f):
+        try:
+            return f, list(fetch(f["url"])), None
+        except Exception as e:
+            return f, [], e
+
+    added = 0
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for f, items, err in pool.map(run, feeds):
+            if err:
+                print(f"  ! {f['name']}: {err}")
+                continue
+            state[f["name"]] = t
+            for it in items:
+                key = f"feed:{it['url']}"
+                if key in signals or not it["url"]:
+                    continue
+                if f["kind"] == "signals" and not SIGNAL.search(it["title"] + " " + it["text"]):
+                    continue
+                signals[key] = {"source": f["name"], "kind": f["kind"], **it, "first_seen": now, "status": "new"}
+                added += 1
+    SIGNALS.write_text(json.dumps(signals, indent=2, ensure_ascii=False))
+    state_path.write_text(json.dumps(state))
+    print(f"feeds: {added} new signals ({sum(l['status'] == 'new' for l in signals.values())} waiting for the agent)")
+
+
+if __name__ == "__main__":
+    main()

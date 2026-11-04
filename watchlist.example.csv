@@ -1,0 +1,11 @@
+company,ats,slug,sector
+Anthropic,greenhouse,anthropic,ai-lab
+OpenAI,ashby,openai,ai-lab
+Mistral,ashby,mistral.ai,ai-lab
+Cohere,ashby,cohere,ai-lab
+ElevenLabs,ashby,elevenlabs,ai-app
+Synthesia,ashby,synthesia,ai-app
+Perplexity,ashby,perplexity,ai-app
+Cursor,ashby,cursor,devtools
+Replit,ashby,replit,devtools
+Vercel,greenhouse,vercel,devtools

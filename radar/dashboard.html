@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PM Radar</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --surface: #ffffff; --line: #e9e5df; --text: #1c1917; --muted: #78716c;
+    --accent: #c2410c; --accent-soft: #fff1e8;
+    --hi: #15803d; --hi-soft: #e9f7ee; --mid: #a16207; --mid-soft: #fdf6e3; --lo: #78716c; --lo-soft: #f2f0ed;
+    --mono: ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #141210; --surface: #1c1a17; --line: #2e2a26; --text: #f5f2ee; --muted: #a8a29e;
+    --accent: #fb923c; --accent-soft: #2a1a10;
+    --hi: #4ade80; --hi-soft: #10261a; --mid: #facc15; --mid-soft: #2a2410; --lo: #a8a29e; --lo-soft: #24211e;
+  } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 "Helvetica Neue", Helvetica, system-ui, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  h1 { font-weight: 300; letter-spacing: -0.02em; font-size: 32px; margin: 0; }
+  h1 b { font-weight: 600; color: var(--accent); }
+  .meta { font: 12px var(--mono); color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .n { font-size: 26px; font-weight: 300; }
+  .stat .l { font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  input, select { font: inherit; background: var(--surface); color: var(--text); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 8px 12px; }
+  input { flex: 1; min-width: 200px; }
+  .job { display: grid; grid-template-columns: 52px 1fr auto; gap: 16px; align-items: start;
+         background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 8px; }
+  .job:hover { border-color: var(--accent); }
+  .score { width: 52px; height: 52px; border-radius: 10px; display: grid; place-items: center;
+           font-size: 20px; font-weight: 600; }
+  .s-hi { background: var(--hi-soft); color: var(--hi); }
+  .s-mid { background: var(--mid-soft); color: var(--mid); }
+  .s-lo, .s-none { background: var(--lo-soft); color: var(--lo); }
+  .co { font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  .title { font-size: 17px; font-weight: 500; margin: 2px 0 4px; }
+  .title a { color: inherit; text-decoration: none; }
+  .title a:hover { text-decoration: underline; }
+  .why { color: var(--text); margin: 6px 0 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .flag { display: inline-block; font: 11px var(--mono); background: var(--accent-soft); color: var(--accent);
+          border-radius: 4px; padding: 1px 6px; margin: 6px 4px 0 0; }
+  .stage { font: 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+           border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .fresh { color: var(--accent); border-color: var(--accent); }
+  .people { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .person { margin: 8px 0; }
+  .person b a { color: inherit; }
+  .person .msg { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+                 margin-top: 4px; font-size: 14px; white-space: pre-wrap; }
+  .copy { font: 11px var(--mono); background: none; border: 1px solid var(--line); color: var(--muted);
+          border-radius: 6px; padding: 2px 8px; cursor: pointer; margin-left: 6px; }
+  .copy:hover { color: var(--accent); border-color: var(--accent); }
+  .empty { text-align: center; color: var(--muted); padding: 48px; }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .job { grid-template-columns: 44px 1fr; }
+    .score { width: 44px; height: 44px; font-size: 17px; }
+    .job .stage { grid-column: 2; justify-self: start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PM <b>Radar</b></h1>
+    <span class="meta" id="updated"></span>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div class="controls">
+    <input id="q" placeholder="Search company, title, location…" autocomplete="off">
+    <select id="stage">
+      <option value="active">Active</option>
+      <option value="all">All stages</option>
+      <option value="new">New</option><option value="shortlisted">Shortlisted</option>
+      <option value="preparing">Preparing</option><option value="applied">Applied</option>
+      <option value="interviewing">Interviewing</option><option value="skipped">Skipped</option>
+      <option value="closed">Closed</option>
+    </select>
+    <select id="sort">
+      <option value="score">Best match</option>
+      <option value="fresh">Newest first</option>
+      <option value="company">Company</option>
+    </select>
+  </div>
+  <div id="list"></div>
+</div>
+<script>
+const JOBS = /*JOBS*/[];
+const $ = id => document.getElementById(id);
+const DAY = 864e5;
+const isFresh = j => Date.now() - new Date(j.first_seen) < DAY;
+const ago = iso => {
+  if (!iso) return "";
+  const h = Math.round((Date.now() - new Date(iso)) / 36e5);
+  return h < 1 ? "just now" : h < 48 ? h + "h ago" : Math.round(h / 24) + "d ago";
+};
+const band = s => s == null ? "none" : s >= 8 ? "hi" : s >= 5 ? "mid" : "lo";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function stats() {
+  const n = f => JOBS.filter(f).length;
+  const tiles = [
+    [n(j => j.stage !== "skipped" && j.stage !== "closed"), "Active roles"],
+    [n(j => (j.score ?? 0) >= 8), "Strong matches"],
+    [n(isFresh), "Found in 24h"],
+    [new Set(JOBS.map(j => j.company)).size, "Companies"],
+  ];
+  $("stats").innerHTML = tiles.map(([v, l]) => `<div class="stat"><div class="n">${v}</div><div class="l">${l}</div></div>`).join("");
+  const last = JOBS.map(j => j.last_seen).sort().pop();
+  $("updated").textContent = last ? "last scan " + ago(last) : "no scans yet";
+}
+
+const MSGS = [];
+function people(j) {
+  if (!j.people) return "";
+  if (!j.people.length) return `<div class="people sub">No one found announcing this role yet.</div>`;
+  return `<div class="people"><div class="co">Reach out · ${j.people.length}</div>` + j.people.map(p => {
+    const i = MSGS.push(p.message) - 1;
+    return `<div class="person"><b><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></b>
+      <span class="sub">${esc(p.role || "")} · ${esc(p.platform)} · ${esc(p.kind?.replace("_", " "))} · ${esc(p.confidence)} confidence</span>
+      <div class="sub">${esc(p.evidence)}</div>
+      ${p.message ? `<div class="msg">${esc(p.message)}<button class="copy" data-i="${i}">copy</button></div>` : ""}</div>`;
+  }).join("") + `</div>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".copy"); if (!b) return;
+  const t = MSGS[b.dataset.i];
+  const done = () => { b.textContent = "copied"; setTimeout(() => b.textContent = "copy", 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => fallback(t, done)); else fallback(t, done);
+});
+function fallback(t, done) {
+  const a = Object.assign(document.createElement("textarea"), { value: t });
+  document.body.append(a); a.select(); document.execCommand("copy"); a.remove(); done();
+}
+
+function render() {
+  const q = $("q").value.toLowerCase(), st = $("stage").value, so = $("sort").value;
+  let rows = JOBS.filter(j =>
+    (st === "all" || (st === "active" ? !["skipped", "closed"].includes(j.stage) : j.stage === st)) &&
+    (!q || [j.company, j.title, j.location].join(" ").toLowerCase().includes(q)));
+  rows.sort(so === "fresh" ? (a, b) => b.first_seen.localeCompare(a.first_seen)
+          : so === "company" ? (a, b) => a.company.localeCompare(b.company)
+          : (a, b) => (b.score ?? -1) - (a.score ?? -1) || b.first_seen.localeCompare(a.first_seen));
+  MSGS.length = 0;
+  $("list").innerHTML = rows.length ? rows.map(j => `
+    <article class="job">
+      <div class="score s-${band(j.score)}" title="${j.score == null ? "Not scored yet" : "Fit score"}">${j.score ?? "–"}</div>
+      <div>
+        <div class="co">${esc(j.company)}${j.source === "hn" ? " · HN" : ""}</div>
+        <div class="title"><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
+        <div class="sub">${esc(j.location.slice(0, 90))} · found ${ago(j.first_seen)}</div>
+        ${j.why ? `<p class="why">${esc(j.why)}</p>` : `<p class="why sub">Waiting for Claude to score.</p>`}
+        ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
+        ${people(j)}
+        <div class="sub" style="margin-top:8px"><a href="https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(j.company + ' hiring product manager')}&sortBy=%22date_posted%22" target="_blank" rel="noopener">Search LinkedIn posts ↗</a></div>
+      </div>
+      <span class="stage ${isFresh(j) && j.stage === "new" ? "fresh" : ""}">${isFresh(j) && j.stage === "new" ? "● new" : esc(j.stage)}</span>
+    </article>`).join("") : `<div class="empty">Nothing here yet.</div>`;
+}
+
+["q", "stage", "sort"].forEach(id => $(id).addEventListener("input", render));
+stats(); render();
+</script>
+</body>
+</html>

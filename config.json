@@ -1,0 +1,45 @@
+{
+  "title_include": "\\b(product manager|product lead|head of product|group product|principal product|director of product|vp,? product|product owner)\\b",
+  "title_exclude": "\\b(marketing|designer|design|engineer|engineering manager|operations|analyst|intern|sales)\\b",
+  "location_include": "london|united kingdom|\\buk\\b|england|emea|europe",
+  "notify_min_score": 8,
+  "people_min_score": 7,
+
+  "ai_provider": "claude_subscription",
+  "model_scoring": "sonnet",
+  "model_people": "sonnet",
+  "model_agent": "opus",
+  "openai_base_url": "https://api.openai.com/v1",
+  "openai_model": "gpt-4.1-mini",
+
+  "scheduler_enabled": false,
+  "scan_every_min": 10,
+  "agent_times_weekdays": "08:00, 13:00, 18:00",
+  "agent_times_weekends": "10:00",
+  "watchlist_every_days": 3,
+  "watchlist_time": "07:30",
+  "moves_day": "Mon",
+  "moves_time": "07:45",
+  "agent_max_searches": 60,
+
+  "source_hn": true,
+  "source_bluesky": true,
+  "source_x": true,
+  "source_mastodon": true,
+  "source_reddit": false,
+  "social_include_bots": false,
+  "social_queries": "\"hiring\" \"product manager\" London\n\"my team is hiring\" product\n\"we're hiring\" \"head of product\"\n\"product lead\" hiring UK",
+  "social_mastodon_tags": "hiring, productmanager, jobs, londonjobs",
+  "mastodon_instance": "mastodon.social",
+  "social_reddit_subs": "ProductManagement, londonjobs, ukjobs",
+  "x_daily_post_cap": 150,
+  "x_cost_per_post": 0.005,
+
+  "my_employers": "",
+  "feeds_disabled": "",
+  "feeds_extra": "",
+
+  "notify_ntfy_server": "https://ntfy.sh",
+  "quiet_hours": "22:00-07:00",
+  "cockpit_url": ""
+}
