@@ -63,6 +63,22 @@ class Summary(unittest.TestCase):
         self.assertTrue(r["passed"])
 
 
+class JobPart(unittest.TestCase):
+    def test_skips_the_company_story_with_or_without_line_breaks(self):
+        for ad in ("We build rockets.\n\nABOUT THE ROLE\n\nOwn the roadmap.", "We build rockets. About the role Own the roadmap.",
+                   "We build rockets.\n\nWhat you’ll do\n\nOwn the roadmap."):
+            with self.subTest(ad):
+                self.assertNotIn("rockets", evals.job_part(ad + " Then more." * 5))
+                self.assertIn("Own the roadmap", evals.job_part(ad + " Then more." * 5))
+
+    def test_shows_the_whole_ad_when_it_cant_find_the_job(self):
+        self.assertEqual(evals.job_part("We build rockets. Own the roadmap."), "We build rockets. Own the roadmap.")
+
+    def test_a_late_match_is_ignored(self):
+        ad = "Own the roadmap. " * 20 + "Responsibilities may change."
+        self.assertEqual(evals.job_part(ad), ad)
+
+
 class Sampling(unittest.TestCase):
     def jobs(self):
         roles = [role(n, score=1 + n % 10) for n in range(100)] + [role(200, score=2, stage="interviewing")]
@@ -102,6 +118,7 @@ class Tool(unittest.TestCase):
         self.jobs.write_text('{"r1": {"stage": "new"}}')
         self.notify = mock.Mock()
         patches = [mock.patch.object(evals, "ROLES", self.d / "roles.json"), mock.patch.object(evals, "LABELS", self.d / "labels.json"),
+                   mock.patch.object(evals, "OLD_LABELS", self.d / "labels.old.json"),
                    mock.patch.object(evals, "RUNS", self.d / "runs"), mock.patch.object(evals, "ROOT", self.d),
                    mock.patch.object(triage, "JOBS", self.jobs), mock.patch.object(triage, "notify", self.notify)]
         for p in patches:
@@ -134,6 +151,35 @@ class Tool(unittest.TestCase):
         with mock.patch("builtins.input", side_effect=["n"]) as asked:
             evals.label()
         self.assertEqual(asked.call_count, 1)
+
+    def test_label_shows_the_job_and_d_shows_the_full_ad(self):
+        ad = "We build rockets. ABOUT THE ROLE Own the roadmap. " + "More detail. " * 300 + "The last line."
+        (self.d / "roles.json").write_text(json.dumps([{**role(1), "description": ad}]))
+        with mock.patch("builtins.input", side_effect=["q"]):
+            evals.label()
+        first = self.out.getvalue()
+        self.assertIn("Own the roadmap", first)
+        self.assertNotIn("rockets", first)
+        self.assertNotIn("The last line.", first)
+        with mock.patch("builtins.input", side_effect=["d", "n"]) as asked:
+            evals.label()
+        self.assertIn("The last line.", self.out.getvalue())
+        self.assertEqual(asked.call_count, 2)
+        self.assertEqual(json.loads((self.d / "labels.json").read_text()), {"r1": "no"})
+
+    def test_label_asks_about_the_role_not_the_company(self):
+        (self.d / "roles.json").write_text(json.dumps([role(1)]))
+        with mock.patch("builtins.input", side_effect=["q"]):
+            evals.label()
+        self.assertIn("Would you apply for this role today?", self.out.getvalue())
+
+    def test_restart_keeps_your_old_answers_and_asks_everything_again(self):
+        self.seed(["apply"])
+        with mock.patch("builtins.input", side_effect=["n"]) as asked:
+            evals.label(fresh=True)
+        self.assertEqual(asked.call_count, 1)
+        self.assertEqual(json.loads((self.d / "labels.old.json").read_text()), {"r0": "apply"})
+        self.assertEqual(json.loads((self.d / "labels.json").read_text()), {"r0": "no"})
 
     def test_run_scores_every_role_each_repeat_with_injected_copies(self):
         self.seed(["no"] * 20)
