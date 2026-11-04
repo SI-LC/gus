@@ -70,7 +70,7 @@ class FullRun(unittest.TestCase):
     def test_6_your_changes_survive_a_restart(self):
         role = self.roles()["Senior Product Manager"]
         self.world.post("/api/job", {"id": role["id"], "stage": "shortlisted", "note": "Worth a look"})
-        self.world.post("/api/settings", {"changes": {"scan_times": "09:00"}})
+        self.world.post("/api/settings", {"changes": {"run_time": "09:00"}})
         self.world.stop()
         self.world.start()
         saved = self.roles()["Senior Product Manager"]

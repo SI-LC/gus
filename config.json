@@ -14,13 +14,8 @@
   "openai_model": "gpt-4.1-mini",
 
   "scheduler_enabled": false,
-  "scan_times": "08:00, 13:00, 18:00",
-  "agent_times_weekdays": "08:00, 13:00, 18:00",
-  "agent_times_weekends": "10:00",
+  "run_time": "08:00",
   "watchlist_every_days": 3,
-  "watchlist_time": "07:30",
-  "moves_day": "Mon",
-  "moves_time": "08:30",
   "agent_max_searches": 60,
 
   "source_hn": true,

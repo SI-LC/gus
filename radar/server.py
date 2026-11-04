@@ -27,8 +27,15 @@ CLI_HOSTS: set = set()
 PAGE = ROOT / "radar" / "cockpit.html"
 PROFILE = ROOT / "profile" / "profile.md"
 MAX_BODY = 5_000_000
+STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-180.png": ("icon-180.png", "image/png"),
+          "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
+          "/favicon.ico": ("icon-180.png", "image/png")}
+MANIFEST = json.dumps({"name": "PM Radar", "short_name": "Radar", "start_url": "/", "display": "standalone",
+                       "background_color": "#0b0b0a", "theme_color": "#0b0b0a",
+                       "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
+                                 {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}).encode()
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
-       "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+       "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 STAGES = {"new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"}
 
 
@@ -82,6 +89,8 @@ def state():
         "funnel": A.funnel(),
         "network": net_summary(),
         "running": list(service.status()["running"]),
+        "progress": service.status()["progress"],
+        "last_runs": service.status()["last"],
         "ai": ai_state(),
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
@@ -220,9 +229,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.host_ok():
             return self.send(403, b"Unknown host. Add it under Settings, Notifications, Cockpit address.", "text/plain")
+        path = urlparse(self.path).path
+        if path in STATIC:  # a fixed list, and nothing private: browsers fetch these before you've signed in
+            name, ctype = STATIC[path]
+            return self.send(200, (ROOT / "radar" / "static" / name).read_bytes(), ctype)
+        if path == "/manifest.webmanifest":
+            return self.send(200, MANIFEST, "application/manifest+json")
         if not self.authed():
             return self.send(401, b"Add ?t=<your cockpit token> to the URL.", "text/plain")
-        path = urlparse(self.path).path
         if path == "/":
             return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/state":
@@ -350,7 +364,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, ai.test())
             if path == "/api/run":
                 job = body.get("job")
-                if job not in ("scan", "agent", "watchlist", "moves"):
+                if job not in ("run", "scan"):
                     return self.send(400, {"error": "Unknown job"})
                 return self.send(200, {"ok": True, "started": service.start(job)})
         except ValueError as e:

@@ -22,14 +22,16 @@ So this treats a job search like account-based marketing, and doubles as a test 
 
 ## How it works
 
-| When | What runs | Uses AI? |
-|---|---|---|
-| **Three times a day**, or **Scan now** | Reads every watched job board, RSS feeds, social media and email, then scores anything new against your CV | Only to score new roles |
-| **Once a day on weekdays** | The discovery agent turns signals into companies, roles and dated events, and searches the web for London PM roles | Yes |
-| **Every 3 days** | The watchlist loop finds companies through VCs, funding news and London openings, then researches them, scores their fit and tiers them | Yes |
-| **Mondays** | The planner picks this week's moves | Yes |
+The radar does one full run a day, or whenever you press **Run radar**. It's one job, in a fixed order, so the parts can't drift out of sync:
 
-Jobs run one at a time, in order, so agents never overlap. Everything is configurable in the cockpit, including which provider and models it uses, and a daily AI limit (0 turns AI off).
+1. **Scan and score:** read every watched job board, feed and social source, and email, then score anything new against your CV
+2. **Read emails:** an offline agent picks out replies and roles
+3. **Discover:** turn signals into companies, roles and dated events, and search the web for London PM roles
+4. **Refresh accounts:** find companies through VCs, funding news and London openings, then research, score and tier them. The heaviest step, so it runs every few days
+5. **Score what's new**, and map the people at strong accounts
+6. **Plan moves:** pick this week's moves, once a week
+
+Only the scanning is AI-free, so **Quick check** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
 **No signal, no move.** A move is rejected in code unless it cites a dated, linked signal from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently.
 
@@ -58,7 +60,7 @@ python3 -m radar.scan                               # first scan; creates watchl
 python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
 
-Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the built-in scheduler.
+Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the daily run.
 
 ## Run it on a Raspberry Pi
 
@@ -69,7 +71,7 @@ git clone https://github.com/<you>/pm-radar && cd pm-radar
 sudo bash deploy/install-pi.sh
 ```
 
-Turn on HTTPS certificates in the Tailscale admin console and open `https://<your-pi>.<your-tailnet>.ts.net`. In the cockpit, set that as **Cockpit address** under Settings → Notifications, then turn on the scheduler under Settings → Schedule.
+Turn on HTTPS certificates in the Tailscale admin console and open `https://<your-pi>.<your-tailnet>.ts.net`. In the cockpit, set that as **Cockpit address** under Settings → Notifications, then turn on the daily run under Settings → Schedule.
 
 To update it, merge your change through a pull request, then run `bash deploy/deploy.sh` from your own machine. It scans the code, updates the Pi, checks it came back and publishes a numbered release.
 

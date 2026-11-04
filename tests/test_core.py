@@ -9,34 +9,79 @@ from radar import agent, ai, calendar_invites as cal, inbox
 from radar.network import distance, paths_for
 from radar.service import due
 
-CFG = {"scan_times": "08:00, 13:00, 18:00", "agent_times_weekdays": "08:00", "agent_times_weekends": "",
-       "watchlist_every_days": 3, "watchlist_time": "07:30", "moves_day": "Mon", "moves_time": "08:30"}
-DONE = {"watchlist": "2026-11-04", "moves": "2026-11-02"}
-
-
 def at(day, h, m=0):
     return datetime(2026, 11, day, h, m)
 
 
+class AppIcon(unittest.TestCase):
+    def test_every_icon_file_exists(self):
+        import json
+        from radar import server
+        for name, _ in server.STATIC.values():
+            self.assertTrue((server.ROOT / "radar" / "static" / name).exists(), name)
+        for icon in json.loads(server.MANIFEST)["icons"]:
+            self.assertIn(icon["src"], server.STATIC)
+
+
 class Schedule(unittest.TestCase):
-    def test_nothing_before_first_slot(self):
-        self.assertEqual(due(at(4, 7), CFG, DONE), [])
+    CFG = {"run_time": "08:00"}
 
-    def test_morning_slot_has_scan_and_discovery(self):
-        self.assertEqual(due(at(4, 8), CFG, DONE), ["scan", "agent"])
+    def test_nothing_before_the_daily_time(self):
+        self.assertFalse(due(at(4, 7, 59), self.CFG, {}))
 
-    def test_each_slot_runs_once(self):
-        s = {**DONE, "scan": "2026-11-04 08:00", "agent": "2026-11-04 08:00"}
-        self.assertEqual(due(at(4, 8, 30), CFG, s), [])
-        self.assertEqual(due(at(4, 13), CFG, s), ["scan"])
+    def test_runs_once_a_day(self):
+        self.assertTrue(due(at(4, 8), self.CFG, {}))
+        self.assertFalse(due(at(4, 13), self.CFG, {"run": "2026-11-04"}))
+        self.assertTrue(due(at(5, 8), self.CFG, {"run": "2026-11-04"}))
 
-    def test_no_discovery_at_weekends(self):
-        self.assertEqual(due(at(7, 8), CFG, {"watchlist": "2026-11-07", "moves": "2026-11-02"}), ["scan"])
+    def test_empty_time_means_button_only(self):
+        self.assertFalse(due(at(4, 12), {"run_time": ""}, {}))
 
-    def test_moves_on_monday_after_morning_run(self):
-        s = {"watchlist": "2026-11-09", "moves": "2026-11-02", "scan": "2026-11-09 08:00", "agent": "2026-11-09 08:00"}
-        self.assertEqual(due(at(9, 8), CFG, s), [])
-        self.assertEqual(due(at(9, 8, 30), CFG, s), ["moves"])
+
+class FullRun(unittest.TestCase):
+    def run_with(self, *, emails=0, moves=0, watchlist_due=True, fail=None, budget_at=None):
+        from unittest import mock
+        from radar import ai, service
+        calls = []
+
+        def step(name):
+            def go():
+                if name == budget_at:
+                    raise ai.BudgetReached("limit reached")
+                if name == fail:
+                    raise RuntimeError("boom")
+                calls.append(name)
+                return True, ""
+            return go
+        with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _command=lambda *a: step("score")(),
+                                  _emails_waiting=lambda: emails, _moves_this_week=lambda: moves,
+                                  _watchlist_due=lambda c, s: watchlist_due, _counts=lambda: {"roles": 0, "strong": 0},
+                                  _state=lambda: {}, _save=lambda s: None, load_config=lambda: {}):
+            service.progress.clear()
+            ok, summary = service.full_run()
+        return ok, summary, calls, {s["name"]: s["status"] for s in service.progress["steps"]}
+
+    def test_runs_in_order(self):
+        _, _, calls, _ = self.run_with(emails=1)
+        self.assertEqual(calls, ["scan", "inbox", "discover", "watchlist", "score", "moves"])
+
+    def test_skips_what_it_doesnt_need(self):
+        _, _, calls, steps = self.run_with(moves=5, watchlist_due=False)
+        self.assertEqual(calls, ["scan", "discover", "score"])
+        self.assertEqual(steps["Plan moves"], "skipped")
+
+    def test_one_failure_doesnt_lose_the_rest(self):
+        ok, _, calls, steps = self.run_with(fail="discover")
+        self.assertFalse(ok)
+        self.assertEqual(steps["Discover"], "failed")
+        self.assertIn("moves", calls)
+
+    def test_ai_limit_stops_ai_steps(self):
+        ok, summary, calls, steps = self.run_with(budget_at="discover")
+        self.assertFalse(ok)
+        self.assertIn("limit reached", summary)
+        self.assertEqual(calls, ["scan"])
+        self.assertEqual(steps["Plan moves"], "skipped")
 
 
 class Budget(unittest.TestCase):
