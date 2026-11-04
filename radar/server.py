@@ -394,8 +394,8 @@ class Handler(BaseHTTPRequestHandler):
                 remove_feed(str(body.get("name", "")))
                 return self.send(200, settings_payload())
             if path == "/api/test-gmail":
-                from radar import inbox
-                return self.send(200, inbox.test())
+                from radar import agent
+                return self.send(200, agent.test_gmail())
             if path == "/api/test-ai":
                 from radar import ai
                 return self.send(200, ai.test())

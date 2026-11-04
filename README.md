@@ -60,7 +60,7 @@ python3 -m radar.scan                               # first scan; creates watchl
 python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
 
-Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the daily run.
+Then, under **Settings**, you can add keys, set up [ntfy](https://ntfy.sh) phone notifications and turn on the daily run.
 
 ## Run it on a Raspberry Pi
 
@@ -108,8 +108,8 @@ Your data stays on your machine. What goes out: requests to public job boards an
 
 The radar reads untrusted text from the web and email, so it limits what that text can do.
 
-- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but the radar's own commands.
-- **Email** is read-only and filtered before opening. A separate agent with no internet access processes it, so a crafted email can't send your data out.
+- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or Gmail, reach files outside the repo, change code, or run anything but the radar's own commands.
+- **Email** uses the Gmail connection on your Claude account, limited to search and read. Only matching emails are opened, and no email text is kept. A separate agent with no web access handles it, so a crafted email can't send your data out.
 - **The cockpit** listens on this machine only by default, and won't listen on a network without an access token. Keep it behind a private network such as Tailscale, never on the public internet.
 - **Known limit:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way.
 

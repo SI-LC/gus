@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import email
 import re
 
-from radar import agent, ai, calendar_invites as cal, inbox
+from radar import agent, ai
 from radar.network import distance, paths_for
 from radar.service import due
 
@@ -54,9 +54,9 @@ class FullRun(unittest.TestCase):
                 return True, ""
             return go
         with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _command=lambda *a: step("score")(),
-                                  _emails_waiting=lambda: emails, _moves_this_week=lambda: moves,
+                                  _moves_this_week=lambda: moves,
                                   _watchlist_due=lambda c, s: watchlist_due, _counts=lambda: {"roles": 0, "strong": 0},
-                                  _state=lambda: {}, _save=lambda s: None, load_config=lambda: {}):
+                                  _state=lambda: {}, _save=lambda s: None, load_config=lambda: {"source_gmail": bool(emails)}):
             service.progress.clear()
             ok, summary = service.full_run()
         return ok, summary, calls, {s["name"]: s["status"] for s in service.progress["steps"]}
@@ -97,68 +97,13 @@ class Budget(unittest.TestCase):
         ai._check_budget({"ai_daily_budget_usd": 1000000})
 
 
-class Inbox(unittest.TestCase):
-    SENDERS = ["linkedin.com", "ashbyhq.com"]
-    SUBJECTS = re.compile("interview|next steps", re.I)
+class Gmail(unittest.TestCase):
+    def test_query_only_covers_chosen_senders_and_subjects(self):
+        q = agent.gmail_query({"inbox_senders": "linkedin.com\nashbyhq.com", "inbox_subjects": "interview", "inbox_days": 2})
+        self.assertEqual(q, '(from:linkedin.com OR from:ashbyhq.com OR subject:"interview") newer_than:2d')
 
-    def test_only_matching_emails_are_opened(self):
-        self.assertTrue(inbox.matches("LinkedIn <messages-noreply@linkedin.com>", "New message", self.SENDERS, self.SUBJECTS))
-        self.assertTrue(inbox.matches("Sam <sam@acme.com>", "Interview on Friday", self.SENDERS, self.SUBJECTS))
-        self.assertFalse(inbox.matches("Mum <mum@example.com>", "Sunday lunch", self.SENDERS, self.SUBJECTS))
-
-    def test_sender_name_alone_does_not_match(self):
-        self.assertFalse(inbox.matches('"linkedin.com" <spam@example.com>', "Hello", self.SENDERS, None))
-
-    def test_body_prefers_plain_text(self):
-        msg = email.message_from_string("Content-Type: text/plain; charset=utf-8\n\nHello   there\nworld")
-        self.assertEqual(inbox.body_text(msg), "Hello there world")
-
-    def test_html_body_is_stripped(self):
-        msg = email.message_from_string("Content-Type: text/html; charset=utf-8\n\n<p>Role <b>open</b></p>")
-        self.assertEqual(inbox.body_text(msg), "Role open")
-
-
-ICS = """BEGIN:VCALENDAR
-METHOD:REQUEST
-BEGIN:VEVENT
-UID:abc@google.com
-DTSTART:20261110T100000Z
-DTEND:20261110T103000Z
-SUMMARY:Intro chat\\, Acme and
-  Pat
-ORGANIZER;CN=Sam Lee:mailto:sam@acme.io
-ATTENDEE;CN=Pat Doe:mailto:pat@example.com
-LOCATION:https://meet.google.com/abc
-END:VEVENT
-END:VCALENDAR
-"""
-
-
-class Calendar(unittest.TestCase):
-    def test_parses_a_google_invite(self):
-        ev = cal.parse_ics(ICS)[0]
-        self.assertEqual(ev["title"], "Intro chat, Acme and Pat")
-        self.assertEqual(ev["start"], "2026-11-10T10:00:00+00:00")
-        self.assertEqual(ev["organizer"], {"name": "Sam Lee", "email": "sam@acme.io"})
-
-    def test_cancelled(self):
-        self.assertTrue(cal.parse_ics(ICS.replace("METHOD:REQUEST", "METHOD:CANCEL"))[0]["cancelled"])
-
-    def test_personal_meetings_are_dropped(self):
-        ev = {"title": "Dentist", "organizer": {"name": "Smile Clinic", "email": "hi@smile.co.uk"}, "attendees": []}
-        self.assertIsNone(cal.relevance(ev, {"Acme": {"status": "watched"}}, {}))
-
-    def test_tracked_account_is_kept(self):
-        ev = {"title": "Catch up", "organizer": {"name": "Sam", "email": "sam@acme.io"}, "attendees": []}
-        self.assertEqual(cal.relevance(ev, {"Acme": {"status": "watched"}}, {})["account"], "Acme")
-
-    def test_mapped_person_is_kept(self):
-        ev = {"title": "Catch up", "organizer": {"name": "Sam Lee", "email": "sam@gmail.com"}, "attendees": []}
-        self.assertEqual(cal.relevance(ev, {}, {"p": {"name": "Sam Lee", "company": "Acme"}})["person_id"], "p")
-
-    def test_interview_is_kept(self):
-        ev = {"title": "Interview with the team", "attendees": []}
-        self.assertIsNotNone(cal.relevance(ev, {}, {}))
+    def test_only_read_tools_are_allowed(self):
+        self.assertEqual(agent.GMAIL_READ, ["mcp__claude_ai_Gmail__search_threads", "mcp__claude_ai_Gmail__get_thread"])
 
 
 class AgentLimits(unittest.TestCase):
@@ -166,7 +111,7 @@ class AgentLimits(unittest.TestCase):
         self.assertFalse({"WebSearch", "WebFetch"} & set(agent.OFFLINE))
 
     def test_web_agents_cant_read_email(self):
-        self.assertIn("Read(./data/emails.json)", agent.NO_EMAIL)
+        self.assertIn("mcp__claude_ai_Gmail", agent.NO_EMAIL)
 
 
 class RoleFolder(unittest.TestCase):

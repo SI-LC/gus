@@ -62,10 +62,6 @@ def _counts():
     return {"roles": len(jobs), "strong": sum((j.get("score") or 0) >= 8 and j.get("stage") == "new" for j in jobs.values())}
 
 
-def _emails_waiting():
-    return sum(e.get("status") == "new" for e in read_json(DATA / "emails.json").values())
-
-
 def _moves_this_week():
     from radar.accounts import week_id
     return sum(m.get("week") == week_id() for m in read_json(DATA / "moves.json").values())
@@ -89,7 +85,7 @@ def steps():
     every = cfg.get("watchlist_every_days", 3)
     return [
         ("Scan and score", _scan, lambda: None),
-        ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
+        ("Read emails", _agent_step("inbox"), lambda: None if cfg.get("source_gmail") else "Gmail is off in Settings"),
         ("Discover", _agent_step("discover"), lambda: None),
         ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
         ("Score what's new", lambda: _command("triage", "people", "dashboard"), lambda: None),

@@ -70,11 +70,10 @@ SCHEMA = [
     ("feeds_extra", "Your feeds", "lines", "Feeds",
      "One per line: Name | https://feed.url | kind | minutes. kind is signals (keyword-filtered), newsletter, jobs or community."),
 
-    ("source_gmail", "Read this Gmail account", "bool", "Email", "Checked on every scan. Read-only: nothing is sent, deleted or marked as read."),
-    ("gmail_address", "Gmail address", "text", "Email", "The account that receives your recruiter and LinkedIn emails."),
-    ("inbox_days", "Look back (days)", "int:1-30", "Email", "How far back each check goes."),
-    ("inbox_senders", "Senders to read", "lines", "Email", "Any part of an email address, one per line. Other emails stay unopened."),
-    ("inbox_subjects", "Subjects to read", "regex", "Email", "Emails with a subject matching this are read too. Regular expression, case-insensitive."),
+    ("source_gmail", "Read Gmail", "bool", "Email", "Each full run reads matching emails. Read-only: nothing is sent, deleted or marked as read."),
+    ("inbox_days", "Look back (days)", "int:1-30", "Email", "How far back each run reads."),
+    ("inbox_senders", "Senders to read", "lines", "Email", "Any address or domain, one per line."),
+    ("inbox_subjects", "Subject words to read", "lines", "Email", "One per line. Emails matching none of these are never opened."),
 
     ("my_employers", "Your employers", "lines", "Network",
      "One per line. Used to spot people who worked where you did."),
@@ -87,7 +86,6 @@ SCHEMA = [
 SECRET_KEYS = {
     "anthropic_api_key": ("Anthropic API key", "Only for the Anthropic API provider."),
     "openai_api_key": ("OpenAI-compatible API key", "Only for the OpenAI-compatible provider. Leave empty for local Ollama."),
-    "gmail_app_password": ("Gmail app password", "A 16-letter password from your Google account, not your normal one."),
     "x_bearer_token": ("X API bearer token", "From developer.x.com."),
     "ntfy_topic": ("ntfy topic", "A long random name. Anyone who knows it can read your notifications."),
     "cockpit_token": ("Cockpit access token", "Required before opening the cockpit to other devices. Add ?t=<token> to the URL once."),
@@ -137,7 +135,7 @@ def validate(key: str, value):
             raise ValueError(f"{row[1]}: not a valid pattern ({e})")
         return str(value)
     if kind == "lines":
-        return "\n".join(x.strip() for x in re.split(r"[\n,]", str(value)) if x.strip()) if "tags" in key or "subs" in key or "senders" in key \
+        return "\n".join(x.strip() for x in re.split(r"[\n,]", str(value)) if x.strip()) if "tags" in key or "subs" in key or "senders" in key or "subjects" in key \
             else "\n".join(x.strip() for x in str(value).splitlines() if x.strip())
     if kind == "times":
         times = [t.strip() for t in str(value).split(",") if t.strip()]
