@@ -12,7 +12,8 @@ Add each new one to `data/companies.json` as `{"status": "candidate", "source": 
 Skip anything already present, whatever its status. Never re-add a company with `vetoed: true`.
 
 - **VCs** (`vcs.csv`): for each VC, look for companies added to its portfolio or announced in the
-  last ~3 weeks (portfolio page, the VC's news and blog, and "<VC> leads Series" searches).
+  last ~3 weeks (portfolio page, the VC's news and blog, and "<VC> leads Series" searches). Where the
+  `jobs` column has a portfolio job board, look there for companies hiring PMs in London.
 - **New in London**: "opening London office", "launches in the UK", "London hub", new UK
   general managers, and UK branches of overseas companies (Companies House when a key exists in
   `.companies_house_key`, otherwise news).

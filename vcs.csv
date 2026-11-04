@@ -1,21 +1,29 @@
-vc,portfolio,focus
-Air Street Capital,https://www.airstreet.com/portfolio,AI-first; London
-Accel,https://www.accel.com/relationships,multi-stage; London office
-Index Ventures,https://www.indexventures.com/companies,multi-stage; London office
-Balderton,https://www.balderton.com/portfolio,European Series A+; London
-Atomico,https://atomico.com/portfolio,European growth; London
-LocalGlobe,https://localglobe.vc/portfolio,London seed
-Seedcamp,https://seedcamp.com/companies,European seed; London
-MMC Ventures,https://mmc.vc/portfolio,UK AI and fintech
-Notion Capital,https://www.notion.vc/portfolio,European B2B SaaS; London
-Creandum,https://www.creandum.com/portfolio,Nordic/European; backs Lovable
-Northzone,https://northzone.com/companies,European multi-stage
-Point Nine,https://www.pointnine.com/portfolio,B2B SaaS and marketplaces
-Kindred Capital,https://kindredcapital.vc/portfolio,London seed
-Plural,https://www.plural.vc/companies,European operator-led
-Episode 1,https://www.episode1.com/portfolio,UK seed
-Entrepreneur First,https://www.joinef.com/companies,London talent investor
-Sequoia,https://www.sequoiacap.com/our-companies,US/Europe; London office
-Andreessen Horowitz,https://a16z.com/portfolio,US; London office
-Lightspeed,https://lsvp.com/portfolio,multi-stage; London office
-General Catalyst,https://www.generalcatalyst.com/portfolio,multi-stage; London office
+vc,portfolio,focus,jobs
+Air Street Capital,https://www.airstreet.com/portfolio,AI-first; London,
+Accel,https://www.accel.com/relationships,multi-stage; London office,https://jobs.accel.com/jobs
+Index Ventures,https://www.indexventures.com/companies,multi-stage; London office,https://www.indexventures.com/startup-jobs
+Balderton,https://www.balderton.com/portfolio,European Series A+; London,
+Atomico,https://atomico.com/portfolio,European growth; London,
+LocalGlobe,https://localglobe.vc/portfolio,London seed,
+Seedcamp,https://seedcamp.com/companies,European seed; London,
+MMC Ventures,https://mmc.vc/portfolio,UK AI and fintech,
+Notion Capital,https://www.notion.vc/portfolio,European B2B SaaS; London,
+Creandum,https://www.creandum.com/portfolio,Nordic/European; backs Lovable,
+Northzone,https://northzone.com/companies,European multi-stage,
+Point Nine,https://www.pointnine.com/portfolio,B2B SaaS and marketplaces,
+Kindred Capital,https://kindredcapital.vc/portfolio,London seed,
+Plural,https://www.plural.vc/companies,European operator-led,
+Episode 1,https://www.episode1.com/portfolio,UK seed,
+Entrepreneur First,https://www.joinef.com/companies,London talent investor,
+Sequoia,https://www.sequoiacap.com/our-companies,US/Europe; London office,https://jobs.sequoiacap.com/jobs
+Andreessen Horowitz,https://a16z.com/portfolio,US; London office,https://portfoliojobs.a16z.com/jobs
+Lightspeed,https://lsvp.com/portfolio,multi-stage; London office,https://jobs.lsvp.com/jobs
+General Catalyst,https://www.generalcatalyst.com/portfolio,multi-stage; London office,https://jobs.generalcatalyst.com/jobs
+Khosla Ventures,https://www.khoslaventures.com/portfolio,US; AI and frontier,https://jobs.khoslaventures.com/jobs
+Greylock,https://greylock.com/portfolio,US; B2B and AI,https://greylock.com/jobs/portfolio-jobs
+Kleiner Perkins,https://www.kleinerperkins.com/companies,US; multi-stage,https://jobs.kleinerperkins.com/jobs
+Thrive Capital,https://thrivecap.com/companies,US; growth,https://jobs.thrivecap.com/jobs
+Bessemer Venture Partners,https://www.bvp.com/companies,Global; cloud and AI,https://jobs.bvp.com/jobs
+Felicis,https://www.felicis.com/portfolio,US; AI,https://jobs.felicis.com/jobs
+Lux Capital,https://www.luxcapital.com/companies,US; deep tech,https://jobs.luxcapital.com/jobs
+Pear VC,https://pear.vc/companies,US; seed,https://jobs.ashbyhq.com/Pear-VC

@@ -20,7 +20,8 @@ c. **Emails** are handled by a separate offline run. You can't read them, on pur
 d. **Market signals** (web search, last 7 days): UK and European AI/devtools/fintech funding
    rounds (Series A+), "opening London office", new product launches with hiring,
    Sifted and TechCrunch Europe, and VC portfolio job boards (Accel, Index, Balderton,
-   Atomico, LocalGlobe, Seedcamp, MMC, a16z, Sequoia) for PM roles in London.
+   Atomico, LocalGlobe, Seedcamp, MMC, a16z, Sequoia, and the `jobs` column in `vcs.csv`) and topstartups.io for
+   PM roles in London.
 e. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 similar companies
    with a London presence that aren't watched yet.
 
