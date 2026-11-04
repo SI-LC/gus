@@ -1,0 +1,9 @@
+id: opens-on-pipeline
+requirement: The app opens on my pipeline, and on a new install it tells me how to fill it.
+given: empty
+check:
+  - see "Nothing in your pipeline yet"
+  - see "Conversations"
+  - see "Applications"
+  - not see "No moves planned yet this week"
+judge: Is it obvious this is the pipeline, and what to do first?

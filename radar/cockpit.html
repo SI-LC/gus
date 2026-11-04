@@ -69,8 +69,8 @@
   nav a:hover { color: var(--text); }
   nav a.on { color: var(--text); border-left-color: var(--accent); background: var(--surface); }
   nav a .n { font-size: 11px; color: var(--accent); }
-  .theme { display: flex; margin: auto 20px 0; border: 1px solid var(--line); }
-  .theme button { flex: 1; border: 0; min-height: 30px; padding: 4px; font-size: 10px; color: var(--muted); }
+  .theme { display: flex; max-width: 280px; border: 1px solid var(--line); }
+  .theme button { flex: 1; border: 0; min-height: 36px; padding: 4px; color: var(--muted); }
   .theme button.on { background: var(--text); color: var(--bg); }
 
   .content { min-width: 0; }
@@ -194,7 +194,7 @@
     html, body { overflow-x: hidden; }
     nav { position: fixed; bottom: 0; top: auto; left: 0; right: 0; height: auto; z-index: 5; flex-direction: row; justify-content: space-around;
           padding: 0 0 env(safe-area-inset-bottom); border-right: 0; border-top: 1px solid var(--line); overflow-x: auto; }
-    .brand, .theme { display: none; }
+    .brand { display: none; }
     nav a { display: flex; flex: 1 0 auto; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; letter-spacing: .04em; padding: 10px 4px; border-left: 0; border-top: 3px solid transparent; }
     nav a::before { display: none; }
     nav a.on { border-top-color: var(--accent); }
@@ -205,22 +205,19 @@
     .board { grid-template-columns: repeat(5, 80vw); scroll-snap-type: x mandatory; } .col { scroll-snap-align: start; }
     .field { grid-template-columns: 1fr; } .field .help { grid-column: 1; }
     .hide-sm, .hint { display: none; }
-    .ticker .theme-sm { display: inline-flex; }
   }
-  .ticker .theme-sm { display: none; margin-left: auto; }
 </style>
 </head>
 <body>
 <div class="app">
   <nav id="nav">
     <div class="brand">PM<b>/</b>Radar<small>Job search, agentic</small></div>
-    <a href="#week" data-v="week" data-i="01">This week <span class="n" id="n-week"></span></a>
-    <a href="#accounts" data-v="accounts" data-i="02">Accounts <span class="n" id="n-accounts"></span></a>
-    <a href="#pipeline" data-v="pipeline" data-i="03">Pipeline <span class="n" id="n-pipeline"></span></a>
-    <a href="#roles" data-v="roles" data-i="04">Roles <span class="n" id="n-roles"></span></a>
-    <a href="#health" data-v="health" data-i="05">Costs</a>
+    <a href="#pipeline" data-v="pipeline" data-i="01">Pipeline <span class="n" id="n-pipeline"></span></a>
+    <a href="#roles" data-v="roles" data-i="02">Role Inbox <span class="n" id="n-roles"></span></a>
+    <a href="#week" data-v="week" data-i="03">To do <span class="n" id="n-week"></span></a>
+    <a href="#accounts" data-v="accounts" data-i="04">Companies <span class="n" id="n-accounts"></span></a>
+    <a href="#health" data-v="health" data-i="05">Usage</a>
     <a href="#settings" data-v="settings" data-i="06">Settings</a>
-    <div class="theme" role="group" aria-label="Theme" id="theme"></div>
   </nav>
   <div class="content">
     <div class="ticker" id="ticker" aria-live="polite"></div>
@@ -243,7 +240,7 @@ const ago = iso => {
 };
 const DAY = 864e5;
 const PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];
-const LABEL = { shortlisted: "Shortlisted", preparing: "Preparing", applied: "Applied", interviewing: "Interviewing", closed: "Closed" };
+const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied", interviewing: "Interviewing", closed: "Finished" };
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
@@ -267,8 +264,8 @@ async function setStage(id, stage, msg) {
 let roleWhere = "London", roleKind = "all", roleView = "new";
 const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
   : j.stage === "new" && !j.ad_closed && (j.score == null || j.score >= 5 || (j.history || []).some(h => h.stage === "new"));
-const newRoles = () => S.jobs.filter(j => inView(j, roleView)
-    && (roleWhere === "all" || j.where === roleWhere) && (roleKind === "all" || j.role_type === roleKind))
+const roleMatch = (j, view, w, kind) => inView(j, view) && (w === "all" || j.where === w) && (kind === "all" || j.role_type === kind);
+const newRoles = () => S.jobs.filter(j => roleMatch(j, roleView, roleWhere, roleKind))
   .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
 const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
 const daysAgo = n => n == null ? "undated" : n === 0 ? "today" : n + "d ago";
@@ -341,7 +338,7 @@ function meetingsBlock() {
 function costs() {
   const u = S.usage, max = Math.max(0.01, ...u.days.map(d => d.ai + d.x));
   const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  return `<h1>Costs</h1>
+  return `<h1>Usage</h1>
     <p class="lede">Your Claude runs are included in your subscription, so the Claude figures are <b>equivalent API prices</b>: a guide to how much allowance they use, not money you pay. Only X would be a real charge.</p>
     <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
       ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
@@ -377,10 +374,10 @@ function moveCard(m) {
     </div>${outcome}</article>`;
 }
 
-function chipRow(label, options, value, name, key) {
-  const pool = S.jobs.filter(j => name === "roleView" || inView(j, roleView));
+// A chip's number is what the list would show if you picked it, with the other filters left as they are.
+function chipRow(label, options, value, name) {
   return `<div class="tabs chips-row" role="group" aria-label="${label}">${options.map(([v, l]) => {
-    const n = name === "roleView" ? pool.filter(j => inView(j, v)).length : v === "all" ? pool.length : pool.filter(j => key(j) === v).length;
+    const n = S.jobs.filter(j => roleMatch(j, name === "roleView" ? v : roleView, name === "roleWhere" ? v : roleWhere, name === "roleKind" ? v : roleKind)).length;
     return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};render(true)">${l} <span class="sub">${n}</span></a>`;
   }).join("")}</div>`;
 }
@@ -406,7 +403,7 @@ const V = {
     const firing = S.accounts.filter(a => ["A", "B"].includes(a.tier) && a.fresh && !planned.has(a.name))
       .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
     const steps = [["Signals", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
-    return `<h1>This week <span class="count">${todo.length}</span></h1>
+    return `<h1>To do <span class="count">${todo.length}</span></h1>
       <p class="lede">${wk.replace("-W", " · week ")}. Each move is one person at a target account, triggered by a dated signal. Do these, log what happened, and next week's moves get better.</p>
       <div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>
       ${meetingsBlock()}
@@ -440,7 +437,7 @@ const V = {
         ${ppl.length ? `<div class="chips">${ppl.map(personChip).join("")}</div>` : `<div class="sub" style="margin-top:6px">No one mapped yet.</div>`}
       </article>`;
     };
-    return `<h1>Accounts <span class="count">${S.accounts.length}</span></h1>
+    return `<h1>Companies <span class="count">${S.accounts.length}</span></h1>
       <p class="lede">Your target companies. A is where you'd move tomorrow. Signals decide when to act; the people here decide who. Set a tier and it sticks.</p>
       <div class="row" style="margin-bottom:8px"><input type="text" placeholder="Filter accounts" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" style="flex:1;max-width:360px"></div>` +
       tiers.map(t => { const rows = list.filter(a => a.tier === t).sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
@@ -468,19 +465,20 @@ const V = {
       }).join("") + `</div>`; }).join("");
     return `<h1>Pipeline</h1><p class="lede">Conversations with people, and applications for roles. Moves update people automatically when you log an outcome.</p>
       ${meetingsBlock()}
+      ${ppl.length || S.jobs.some(j => PIPE.includes(j.stage)) ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions" style="justify-content:center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Run radar</button>`}</div></div>`}
       <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
       <div class="section">Applications</div><div class="board">${appBoard}</div>`;
   },
   roles() {
     const rows = newRoles();
-    return `<h1>Roles <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its account and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
-      ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView", j => j.stage)}
-      ${chipRow("Where", [["London", "London"], ["UK", "Rest of UK"], ["Remote", "Remote"], ["Europe", "Europe"], ["all", "All"]], roleWhere, "roleWhere", j => j.where)}
-      ${chipRow("Type", [["all", "All"], ["PM", "PM"], ["Forward deployed", "Forward deployed"], ["Product engineer", "Product engineer"]], roleKind, "roleKind", j => j.role_type)}
+    return `<h1>Role Inbox <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its company and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
+      ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView")}
+      ${chipRow("Where", [["London", "London"], ["UK", "Rest of UK"], ["Remote", "Remote"], ["Europe", "Europe"], ["all", "All"]], roleWhere, "roleWhere")}
+      ${chipRow("Type", [["all", "All"], ["PM", "PM"], ["Forward deployed", "Forward deployed"], ["Product engineer", "Product engineer"]], roleKind, "roleKind")}
       <p class="hint" ${roleView === "new" ? "" : "hidden"}><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
       (rows.length ? rows.map(j => roleCard(j, roleView === "new" ? `
         <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>
-        <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Account</button>
+        <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Company</button>
         <button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>` : roleView === "skipped" ? `
         <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" : "The radar skipped this: it scored under 5"}</span>
         <button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>` : `
@@ -564,7 +562,7 @@ const SETTINGS_TABS = [
       <div id="net-msg" class="sub" style="margin-top:8px"></div>
       <div class="stats" style="margin-top:20px"><div class="stat"><div class="v">${n.connections || 0}</div><div class="l">Connections</div></div>
       <div class="stat"><div class="v">${n.warm_people || 0}</div><div class="l">Warm people</div></div>
-      <div class="stat"><div class="v">${n.warm_accounts || 0}</div><div class="l">Accounts with a warm path</div></div>
+      <div class="stat"><div class="v">${n.warm_accounts || 0}</div><div class="l">Companies with a warm path</div></div>
       <div class="stat"><div class="v">${n.imported ? ago(n.imported) : "never"}</div><div class="l">Imported</div></div></div>
       <p class="sub">Re-import every month or two; new accounts are matched automatically on the next import.</p></section>
       <section class="group"><h2>How distance works</h2>
@@ -597,6 +595,7 @@ const SETTINGS_TABS = [
     return `<section class="group"><h2>Your profile</h2><p class="sub">What you want and your CV, as plain text. Scoring, the people search and the agent all read this.</p>
       <textarea id="profile" rows="22" style="width:100%;margin-top:8px"></textarea><div class="actions"><button class="primary" onclick="saveProfile()">Save profile</button></div></section>`;
   }],
+  ["appearance", "Appearance", () => `<section class="group"><h2>Appearance</h2>${themeField()}</section>`],
 ];
 const jsq = s => esc(JSON.stringify(String(s)));
 async function addFeed(text) {
@@ -667,19 +666,16 @@ async function saveProfile() {
   if (await post("/api/profile", { text: $("profile").value })) toast("Profile saved");
 }
 
-const THEMES = [["system", "Sys"], ["light", "Light"], ["dark", "Dark"]];
+const THEMES = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 function theme() { try { return localStorage.getItem("radar-theme") || "system"; } catch (e) { return "system"; } }
 function setTheme(t) {
   try { localStorage.setItem("radar-theme", t); } catch (e) {}
   if (t === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-  drawTheme();
+  render(true);
 }
-function drawTheme() {
-  const html = THEMES.map(([k, l]) => `<button class="${theme() === k ? "on" : ""}" onclick="setTheme('${k}')" aria-pressed="${theme() === k}">${l}</button>`).join("");
-  $("theme").innerHTML = html;
-  const sm = document.querySelector(".theme-sm"); if (sm) sm.innerHTML = `<button style="min-height:24px;padding:2px 8px;font-size:10px" onclick="cycleTheme()">${theme()}</button>`;
-}
-function cycleTheme() { const i = THEMES.findIndex(t => t[0] === theme()); setTheme(THEMES[(i + 1) % 3][0]); }
+const themeField = () => `<div class="field"><label>Theme</label>
+  <div class="theme" role="group" aria-label="Theme">${THEMES.map(([k, l]) => `<button class="${theme() === k ? "on" : ""}" onclick="setTheme('${k}')" aria-pressed="${theme() === k}">${l}</button>`).join("")}</div>
+  <div class="help">System follows your device. This is saved in this browser, so each device keeps its own.</div></div>`;
 const unscored = () => S.jobs.filter(j => j.score == null).length;
 function aiMessage() {
   if (!S.ai || !S.ai.paused) return "";
@@ -704,12 +700,11 @@ function drawTicker() {
     <span><b>${h.signals_waiting}</b> signals queued</span>
     <a href="#health" style="text-decoration:none"><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> this month</a>
     <span>Agent <b>${h.last_agent_run ? ago(h.last_agent_run.replace(/^.*?(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)Z.*$/, "$1:$2:$3Z")) : "never"}</b></span>
-    <span class="theme-sm"></span>`;
-  drawTheme();
+`;
 }
 let lastView = null, sel = 0;
 function render(force) {
-  const v = (location.hash || "#week").slice(1).split("/")[0];
+  const v = (location.hash || "#pipeline").slice(1).split("/")[0];
   drawTicker();
   if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
@@ -718,7 +713,7 @@ function render(force) {
   $("n-pipeline").textContent = Object.values(S.people).filter(p => ["contacted", "replied", "conversation"].includes(p.stage)).length + S.jobs.filter(j => PIPE.slice(0, 4).includes(j.stage)).length || "";
   $("n-roles").textContent = newRoles().length || "";
   const y = window.scrollY;
-  $("main").innerHTML = (V[v] || V.week)();
+  $("main").innerHTML = (V[v] || V.pipeline)();
   const full = location.hash;
   if (full !== lastView) { window.scrollTo(0, 0); sel = 0; } else window.scrollTo(0, y);
   lastView = full;
