@@ -1,4 +1,4 @@
-# PM Radar
+# Gus
 
 **An agentic, account-based job search for product managers.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 

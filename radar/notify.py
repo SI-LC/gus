@@ -87,7 +87,7 @@ def release_held():
     held = json.loads(HELD.read_text())
     HELD.unlink()
     if held:
-        notify(f"PM Radar: {len(held)} while you were away", "", "; ".join(f"{h[0]} {h[1]}".strip() for h in held)[:900])
+        notify(f"Gus: {len(held)} while you were away", "", "; ".join(f"{h[0]} {h[1]}".strip() for h in held)[:900])
 
 
 if __name__ == "__main__":

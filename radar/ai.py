@@ -30,7 +30,7 @@ def _check_budget(cfg):
             flag.parent.mkdir(parents=True, exist_ok=True)
             flag.write_text(today)
             from radar.notify import notify
-            notify("PM Radar: AI paused", "", "AI runs are off (limit $0)." if not limit else f"AI runs are paused until tomorrow (limit ${limit:g}).")
+            notify("Gus: AI paused", "", "AI runs are off (limit $0)." if not limit else f"AI runs are paused until tomorrow (limit ${limit:g}).")
         raise BudgetReached("AI runs are off: the daily limit is $0" if not limit else f"Daily AI limit of ${limit:g} reached")
 
 
