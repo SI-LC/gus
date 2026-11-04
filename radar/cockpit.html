@@ -283,12 +283,12 @@ function roleExtras(j) {
       : `<button class="mini" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, true)">Messaged ${esc(p.name)}</button>`;
   }).join("");
   return `<div class="extras">${j.folder
-    ? `<button class="mini" onclick="copyPath(${jsq(j.folder)})">Copy folder path</button><button class="mini" onclick="setFolder(${jsq(j.id)}, ${jsq(j.folder)})">Change</button>`
+    ? `${/^https?:\/\//i.test(j.folder) ? `<a href="${link(j.folder)}" target="_blank" rel="noopener"><button class="mini">Open folder</button></a>` : `<button class="mini" onclick="copyPath(${jsq(j.folder)})">Copy folder path</button>`}<button class="mini" onclick="setFolder(${jsq(j.id)}, ${jsq(j.folder)})">Change</button>`
     : `<button class="mini" onclick="setFolder(${jsq(j.id)}, '')">Add folder</button>`}${who}</div>`;
 }
 async function roleContact(id, person_id, sent) { if (await post("/api/role-contact", { id, person_id, sent })) { toast(sent ? "Logged" : "Undone"); load(); } }
 async function setFolder(id, current) {
-  const folder = prompt("Path to this application's folder on your Mac:", current);
+  const folder = prompt("Link to this application's folder (any https:// address), or a path on your Mac:", current);
   if (folder === null) return;
   if (await post("/api/job", { id, folder })) { toast("Folder saved"); load(); }
 }

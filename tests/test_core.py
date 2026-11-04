@@ -124,6 +124,28 @@ class AgentLimits(unittest.TestCase):
         self.assertIn("Read(./data/emails.json)", agent.NO_EMAIL)
 
 
+class RoleFolder(unittest.TestCase):
+    def save(self, folder):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from radar import server
+        f = Path(tempfile.mkdtemp()) / "jobs.json"
+        f.write_text(json.dumps({"j": {"id": "j"}}))
+        with mock.patch.object(server, "JOBS", f):
+            return server.update_job({"id": "j", "folder": folder})
+
+    def test_web_links_and_paths_are_kept(self):
+        for good in ("https://drive.google.com/drive/folders/abc", "http://example.com/x", "~/Documents/Acme/"):
+            self.assertEqual(self.save(good)["job"]["folder"], good)
+
+    def test_other_schemes_are_refused(self):
+        for bad in ("javascript://alert(1)", "file:///etc/passwd"):
+            self.assertIn("error", self.save(bad))
+
+
 class RoleContact(unittest.TestCase):
     def test_logging_a_message_updates_role_move_and_person(self):
         import json
