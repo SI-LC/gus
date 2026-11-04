@@ -82,6 +82,7 @@ def state():
         "funnel": A.funnel(),
         "network": net_summary(),
         "running": list(service.status()["running"]),
+        "ai": ai_state(),
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
@@ -119,6 +120,13 @@ def allowed_hosts() -> set:
     if url:
         names.add((urlparse(url if "//" in url else "//" + url).hostname or "").lower())
     return names | set(CLI_HOSTS)
+
+
+def ai_state():
+    """Whether AI runs can happen right now, so the cockpit can say so instead of looking broken."""
+    limit, spent = float(settings.load().get("ai_daily_budget_usd") or 0), usage.today_cost()
+    reason = "off" if not limit else "limit" if spent >= limit else None
+    return {"limit": limit, "spent": round(spent, 2), "paused": reason}
 
 
 def role_contact(body):

@@ -73,6 +73,8 @@
             padding: 10px 28px; border-bottom: 1px solid var(--line); background: var(--bg); font: 11px var(--mono);
             text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
   .ticker b { color: var(--text); font-weight: 500; }
+  .banner { padding: 10px 28px; background: var(--accent-soft); border-bottom: 1px solid var(--accent); color: var(--text); font-size: 14px; }
+  .banner[hidden] { display: none; } .banner a { color: var(--accent); font-weight: 600; }
   .scan-now { min-height: 26px; padding: 3px 10px; font-size: 10px; flex: none; }
   .live { color: var(--hi); } .live::before { content: "● "; animation: pulse 2s infinite; }
   .stale { color: var(--accent); } .stale::before { content: "● "; }
@@ -183,7 +185,7 @@
     nav a { display: flex; flex: 1 0 auto; flex-direction: column; align-items: center; gap: 2px; font-size: 9px; letter-spacing: .04em; padding: 10px 4px; border-left: 0; border-top: 3px solid transparent; }
     nav a::before { display: none; }
     nav a.on { border-top-color: var(--accent); }
-    .ticker { padding: 10px 16px; }
+    .ticker { padding: 10px 16px; } .banner { padding: 10px 16px; }
     main { padding: 24px 16px 110px; }
     h1 { font-size: 34px; }
     .role { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; } .score { font-size: 30px; }
@@ -209,6 +211,7 @@
   </nav>
   <div class="content">
     <div class="ticker" id="ticker" aria-live="polite"></div>
+    <div class="banner" id="banner" role="status" hidden></div>
     <main id="main"><div class="empty">Loading…</div></main>
   </div>
 </div>
@@ -228,7 +231,7 @@ const DAY = 864e5;
 const PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];
 const LABEL = { shortlisted: "Shortlisted", preparing: "Preparing", applied: "Applied", interviewing: "Interviewing", closed: "Closed" };
 
-function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 1600); }
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
 async function load() {
   const r = await fetch("/api/state", { cache: "no-store" });
@@ -356,7 +359,7 @@ function roleCard(j, actions) {
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
-      <p class="why">${j.why ? esc(j.why) : '<span class="sub">Waiting to be scored.</span>'}</p>
+      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}</div>
     </div></article>`;
@@ -643,7 +646,18 @@ function drawTheme() {
   const sm = document.querySelector(".theme-sm"); if (sm) sm.innerHTML = `<button style="min-height:24px;padding:2px 8px;font-size:10px" onclick="cycleTheme()">${theme()}</button>`;
 }
 function cycleTheme() { const i = THEMES.findIndex(t => t[0] === theme()); setTheme(THEMES[(i + 1) % 3][0]); }
+const unscored = () => S.jobs.filter(j => j.score == null).length;
+function aiMessage() {
+  if (!S.ai || !S.ai.paused) return "";
+  return S.ai.paused === "off" ? "AI is off, so new roles aren't being scored." : `Today's AI limit of ${usd(S.ai.limit)} is used up, so scoring resumes tomorrow.`;
+}
+function drawBanner() {
+  const m = aiMessage(), el = $("banner"), n = unscored();
+  el.hidden = !m;
+  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} roles are waiting. ` : ""}<a href="#settings/ai">Change the limit</a>`;
+}
 function drawTicker() {
+  drawBanner();
   const h = S.health, fresh = h.last_scan && Date.now() - new Date(h.last_scan) < 16 * 36e5;
   const scanning = (S.running || []).includes("scan");
   const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
@@ -709,9 +723,16 @@ async function setDegree(id, value) {
 async function scanNow() {
   const d = await post("/api/run", { job: "scan" });
   if (!d) return;
-  toast(d.started ? "Scan started" : "Already scanning");
+  const roles = S.jobs.length, waiting = unscored();
+  toast(d.started ? (aiMessage() ? "Scan started. It'll find roles, but won't score them: AI is paused" : "Scan started. It takes about 2 minutes") : "Already scanning");
   S.running = [...(S.running || []), "scan"]; drawTicker();
-  const poll = setInterval(async () => { await load(); if (!(S.running || []).includes("scan")) { clearInterval(poll); toast("Scan finished"); } }, 5000);
+  const poll = setInterval(async () => {
+    await load();
+    if ((S.running || []).includes("scan")) return;
+    clearInterval(poll);
+    const found = S.jobs.length - roles, scored = waiting + found - unscored();
+    toast(`Scan finished: ${found} new role${found === 1 ? "" : "s"}, ` + (aiMessage() ? `none scored because AI is paused` : `${Math.max(0, scored)} scored`));
+  }, 5000);
 }
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
 async function vetoCo(name) {
