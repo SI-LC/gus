@@ -61,7 +61,7 @@ git clone https://github.com/<you>/pm-radar && cd pm-radar
 sudo bash deploy/install-pi.sh
 ```
 
-To update it later, run `bash deploy/deploy.sh` from your own machine: it scans the code, pushes to GitHub, updates the Pi and checks it came back.
+To update it later, merge your change to `main` through a pull request, then run `bash deploy/deploy.sh` from your own machine: it scans the code, updates the Pi, checks it came back and publishes a numbered GitHub release. Add `minor` or `major` for a bigger version bump.
 
 Then turn on HTTPS certificates in the Tailscale admin console, open `https://<your-pi>.<your-tailnet>.ts.net`, set that as **Cockpit address** under Settings → Notifications, and turn on the built-in scheduler under Settings → Schedule.
 
@@ -85,6 +85,7 @@ Find the slug in the company's careers URL: `boards.greenhouse.io/<slug>`, `jobs
 Your CV (`profile/profile.md`), your watchlist (`watchlist.csv`), drafts (`content/`), tokens and
 everything the radar finds (`data/`) are git-ignored. A pre-commit guard (`.githooks/pre-commit`)
 refuses any commit that includes those files, or that contains an email address or phone number from your profile.
+Every pull request must pass the code scan and a full-history secret scan on GitHub before it can merge into `main`.
 Nothing leaves your machine except calls to public job APIs, your ntfy topic, and Claude.
 
 ## Security

@@ -27,6 +27,7 @@ def _check_budget(cfg):
         flag = DATA / "budget_notified"
         today = str(date.today())
         if not flag.exists() or flag.read_text() != today:
+            flag.parent.mkdir(parents=True, exist_ok=True)
             flag.write_text(today)
             from radar.notify import notify
             notify("PM Radar: AI paused", "", "AI runs are off (limit $0)." if not limit else f"AI runs are paused until tomorrow (limit ${limit:g}).")
