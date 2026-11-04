@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The code scan. Runs before every push (.githooks/pre-push) and every deploy. Any failure stops it.
+# The code scan. Runs before every push (.githooks/pre-push), on every pull request (.github/workflows/scan.yml)
+# and every deploy. Any failure stops it.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 fail=0
@@ -17,7 +18,7 @@ content=$(mktemp); trap 'rm -f "$content"' EXIT
 git grep -I -h -e '' -- . > "$content" 2>/dev/null
 git log -p --format='%an %ae %s%n%b' "$range" >> "$content"
 
-if grep -qE 'sk-ant-[A-Za-z0-9_-]{20}|sk-[A-Za-z0-9]{32}|gh[pousr]_[A-Za-z0-9]{30}|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9A-Za-z-]{20}|BEGIN [A-Z ]*PRIVATE KEY' "$content"; then bad "something that looks like a key"; else good "no keys"; fi
+if grep -qEf deploy/secret-patterns.txt "$content"; then bad "something that looks like a key"; else good "no keys"; fi
 
 # 3. Your details: contact info, employers and the people you're tracking, read from your private files
 hits=$(CONTENT="$content" python3 - <<'PY'
@@ -40,7 +41,9 @@ text = open(os.environ["CONTENT"], errors="ignore").read()
 print("\n".join(sorted(t for t in terms if t in text)))
 PY
 )
-[ -z "$hits" ] && good "none of your details" || bad "personal details found: $hits"
+if [ ! -f profile/profile.md ] && [ ! -f settings.json ]; then
+  echo "  - your details: not checked here, your private files aren't on this machine (the checks before a push cover this)"
+elif [ -z "$hits" ]; then good "none of your details"; else bad "personal details found: $hits"; fi
 
 # 4. Risky patterns this project has rules about
 grep -rnE 'shell=True|\beval\(|\bexec\(|verify=False|_create_unverified_context' radar --include=*.py && bad "unsafe Python" || good "no unsafe Python patterns"

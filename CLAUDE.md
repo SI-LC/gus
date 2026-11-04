@@ -25,8 +25,15 @@ interviewing → closed, or skipped); a role scoring 7+ counts as a signal on it
 
 ## Deploying
 
-Always `bash deploy/deploy.sh`: it runs the code scan (`deploy/scan.sh`), pushes to GitHub, updates the Pi and
-checks it's serving that commit. Never edit code on the Pi, and never push with `--no-verify`.
+`main` is protected: nothing reaches it without a pull request that passes the `scan` check on GitHub, so never
+push to `main` directly. Work on a branch, push it (the pre-push hook runs `deploy/scan.sh`, which is the only place
+your personal details are checked), open a PR, then once `scan` passes merge with
+`gh pr merge --squash --author-email SI-LC@users.noreply.github.com --delete-branch`.
+
+Then deploy from `main` with `bash deploy/deploy.sh` (add `minor` or `major` for a bigger version bump): it runs the
+code scan, updates the Pi, checks it's serving that commit and publishes a numbered GitHub release, so the latest
+release is what's on the Pi. To roll back, revert through a PR and deploy again. Never edit code on the Pi, and
+never push with `--no-verify`.
 
 ## Rules
 
