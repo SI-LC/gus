@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for Mac notifications, so a smoke test never shows a real one.
+exit 0

@@ -1,0 +1,9 @@
+id: roles-best-first
+requirement: When I open Roles, I can see which role to act on first and why.
+given: scanned
+check:
+  - open Roles
+  - '"Senior Product Manager" appears before "Product Manager, Growth"'
+  - see "Made-up reason for Senior Product Manager."
+  - not see "Product Owner"
+judge: Is it obvious at a glance what to do next?

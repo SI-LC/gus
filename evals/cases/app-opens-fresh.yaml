@@ -1,0 +1,17 @@
+id: app-opens-fresh
+requirement: On a brand new install, every screen opens and tells me what to do next, with no errors.
+given: empty
+check:
+  - open This week
+  - see "No moves planned yet this week"
+  - open Accounts
+  - see "Accounts"
+  - open Pipeline
+  - see "Applications"
+  - open Roles
+  - see "You're up to date"
+  - open Costs
+  - see "Costs"
+  - open Settings
+  - see "Provider and models"
+judge: Would a new user know what to do first?
