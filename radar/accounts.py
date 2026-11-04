@@ -92,7 +92,7 @@ def events(name: str, c: dict, jobs: dict) -> list[dict]:
     """Stored events plus live roles scoring 7+ (derived, so they're always current)."""
     ev = [dict(e) for e in c.get("events", []) if e.get("url")]
     for j in jobs.values():
-        if j.get("company") == name and (j.get("score") or 0) >= 7 and j.get("stage") not in ("skipped", "closed"):
+        if j.get("company") == name and (j.get("score") or 0) >= 7 and not j.get("ad_closed") and j.get("stage") not in ("skipped", "closed"):
             # the company's own posting date; when we first saw it only if the board doesn't say
             posted = parse_date(j.get("posted")) or parse_date(j.get("first_seen"))
             ev.append({"type": "role_posted", "summary": f"{j['title']} ({j['score']}/10)", "url": j["url"],

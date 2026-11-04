@@ -264,8 +264,10 @@ async function setStage(id, stage, msg) {
   Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
 }
 
-let roleWhere = "London", roleKind = "all";
-const newRoles = () => S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5)
+let roleWhere = "London", roleKind = "all", roleView = "new";
+const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
+  : j.stage === "new" && !j.ad_closed && (j.score == null || j.score >= 5 || (j.history || []).some(h => h.stage === "new"));
+const newRoles = () => S.jobs.filter(j => inView(j, roleView)
     && (roleWhere === "all" || j.where === roleWhere) && (roleKind === "all" || j.role_type === roleKind))
   .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
 const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
@@ -376,9 +378,9 @@ function moveCard(m) {
 }
 
 function chipRow(label, options, value, name, key) {
-  const pool = S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5));
+  const pool = S.jobs.filter(j => name === "roleView" || inView(j, roleView));
   return `<div class="tabs chips-row" role="group" aria-label="${label}">${options.map(([v, l]) => {
-    const n = v === "all" ? pool.length : pool.filter(j => key(j) === v).length;
+    const n = name === "roleView" ? pool.filter(j => inView(j, v)).length : v === "all" ? pool.length : pool.filter(j => key(j) === v).length;
     return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};render(true)">${l} <span class="sub">${n}</span></a>`;
   }).join("")}</div>`;
 }
@@ -459,6 +461,7 @@ const V = {
         return `<div class="card"><div class="co">${esc(j.company)} · ${j.score ?? "–"}</div>
           <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
           ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
+          ${j.ad_closed ? `<div class="sub"><span class="pill due">Ad closed</span></div>` : ""}
           <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
           ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>
           ${roleExtras(j)}</div>`;
@@ -471,14 +474,18 @@ const V = {
   roles() {
     const rows = newRoles();
     return `<h1>Roles <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its account and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
+      ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView", j => j.stage)}
       ${chipRow("Where", [["London", "London"], ["UK", "Rest of UK"], ["Remote", "Remote"], ["Europe", "Europe"], ["all", "All"]], roleWhere, "roleWhere", j => j.where)}
       ${chipRow("Type", [["all", "All"], ["PM", "PM"], ["Forward deployed", "Forward deployed"], ["Product engineer", "Product engineer"]], roleKind, "roleKind", j => j.role_type)}
-      <p class="hint"><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
-      (rows.length ? rows.map(j => roleCard(j, `
+      <p class="hint" ${roleView === "new" ? "" : "hidden"}><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
+      (rows.length ? rows.map(j => roleCard(j, roleView === "new" ? `
         <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>
         <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Account</button>
-        <button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>`)).join("")
-      : `<div class="empty">You're up to date. New roles appear here as the radar finds them.</div>`);
+        <button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>` : roleView === "skipped" ? `
+        <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" : "The radar skipped this: it scored under 5"}</span>
+        <button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>` : `
+        <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(j.stage) : ""}</span>`)).join("")
+      : `<div class="empty">${roleView === "new" ? "You're up to date. New roles appear here as the radar finds them." : roleView === "skipped" ? "Nothing skipped here." : "No closed ads here."}</div>`);
   },
   settings() {
     if (!SET) { loadSettings(); return `<div class="empty">Loading settings…</div>`; }
@@ -728,6 +735,7 @@ document.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
   if (k === "j") { sel = Math.min(sel + 1, cards.length - 1); highlight(true); }
   else if (k === "k") { sel = Math.max(sel - 1, 0); highlight(true); }
+  else if (roleView !== "new") return;
   else if (card && k === "s") setStage(card.dataset.id, "shortlisted");
   else if (card && k === "x") setStage(card.dataset.id, "skipped", "Skipped");
   else if (card && k === "o") window.open(card.querySelector(".title a").href, "_blank", "noopener");

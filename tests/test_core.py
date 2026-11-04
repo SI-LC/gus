@@ -191,6 +191,54 @@ class RoleFolder(unittest.TestCase):
             self.assertIn("error", self.save(bad))
 
 
+class ClosedAds(unittest.TestCase):
+    NOW = "2026-11-05T08:00:00+00:00"
+
+    def scan(self, store, answered=frozenset({"ashby:acme"}), live=frozenset()):
+        from radar.scan import mark_closed
+        return mark_closed(store, set(answered), set(live), self.NOW)
+
+    def test_gone_for_two_scans_closes(self):
+        store = {"ashby:acme:1": {"title": "PM"}}
+        self.assertEqual(self.scan(store), [])
+        self.assertNotIn("ad_closed", store["ashby:acme:1"])
+        self.assertEqual(len(self.scan(store)), 1)
+        self.assertEqual(store["ashby:acme:1"]["ad_closed"], self.NOW)
+
+    def test_a_blip_doesnt_close(self):
+        store = {"ashby:acme:1": {}}
+        self.scan(store)
+        self.scan(store, live={"ashby:acme:1"})
+        self.scan(store)
+        self.assertNotIn("ad_closed", store["ashby:acme:1"])
+
+    def test_a_board_that_failed_closes_nothing(self):
+        store = {"ashby:acme:1": {}}
+        for _ in range(3):
+            self.scan(store, answered=set())
+        self.assertNotIn("ad_closed", store["ashby:acme:1"])
+
+    def test_a_returning_ad_reopens(self):
+        store = {"ashby:acme:1": {"ad_closed": "x", "missed": 2}}
+        self.scan(store, live={"ashby:acme:1"})
+        self.assertEqual(store["ashby:acme:1"], {})
+
+    def test_stage_is_left_alone(self):
+        store = {"ashby:acme:1": {"stage": "applied"}}
+        self.scan(store); self.scan(store)
+        self.assertEqual(store["ashby:acme:1"]["stage"], "applied")
+
+    def test_roles_not_from_a_scanned_board_are_left_alone(self):
+        store = {"hn:1": {}, "manual:x": {}, "sr:wise:1": {}}
+        self.scan(store); self.scan(store)
+        self.assertTrue(all("ad_closed" not in j for j in store.values()))
+
+    def test_closed_roles_stop_being_signals(self):
+        from radar.accounts import events
+        jobs = {"j": {"company": "Acme", "score": 9, "title": "PM", "url": "u", "ad_closed": "x", "stage": "new"}}
+        self.assertEqual(events("Acme", {}, jobs), [])
+
+
 class FollowUps(unittest.TestCase):
     NOW = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
     JOB = {"id": "j", "company": "Acme", "title": "PM", "stage": "applied",
