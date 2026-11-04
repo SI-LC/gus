@@ -44,7 +44,8 @@ class World:
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):
             shutil.copy2(FAKE / tool, tools / tool)
-        self.env = {**os.environ, "HOME": str(self.home), "PYTHONPATH": str(FAKE), "PATH": f"{tools}:{os.environ['PATH']}"}
+        kept = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # a Git hook sets these to the real repo
+        self.env = {**kept, "HOME": str(self.home), "PYTHONPATH": str(FAKE), "PATH": f"{tools}:{os.environ['PATH']}"}
         for key in ("ANTHROPIC_API_KEY", "NTFY_TOPIC", "X_BEARER_TOKEN"):
             self.env.pop(key, None)
         self.server = None

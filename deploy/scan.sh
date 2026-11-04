@@ -62,7 +62,7 @@ fi
 
 # 6. It still works
 python3 -m compileall -q radar tests && good "Python compiles" || bad "Python doesn't compile"
-python3 -m unittest discover -s tests >/dev/null 2>&1 && good "tests pass" || bad "tests fail (python3 -m unittest discover -s tests)"
+if out=$(python3 -m unittest discover -s tests 2>&1); then good "tests pass"; else bad "tests fail (python3 -m unittest discover -s tests)"; echo "$out" | grep -v ResourceWarning | tail -30; fi
 if command -v node >/dev/null; then
   js="$(mktemp).js"; python3 -c "import re;print('\n'.join(re.findall(r'<script>(.*?)</script>',open('radar/cockpit.html').read(),re.S)))" > "$js"
   node --check "$js" 2>/dev/null && good "cockpit script is valid" || bad "cockpit script has errors"; rm -f "$js"
