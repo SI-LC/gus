@@ -28,7 +28,8 @@ class UpdatePi(unittest.TestCase):
             tool = bin_dir / name
             tool.write_text(body)
             tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
-        self.env = {**os.environ, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # a Git hook sets these to the real repo
+        self.env = {**clean, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com", "GIT_CONFIG_GLOBAL": os.devnull}
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.home)
