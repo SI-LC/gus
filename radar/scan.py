@@ -58,6 +58,17 @@ def fetch_bytes(url: str, timeout: int = 30) -> bytes:
     return data
 
 
+_known = None
+
+
+def known_jobs() -> dict:
+    """Roles already saved. Read once per scan."""
+    global _known
+    if _known is None:
+        _known = json.loads(JOBS.read_text()) if JOBS.exists() else {}
+    return _known
+
+
 def get_json(url: str):
     return json.loads(fetch_bytes(url))
 
@@ -70,21 +81,28 @@ def strip_html(s: str) -> str:
 # --- sources: each returns a list of normalised job dicts --------------------
 
 def greenhouse(company: str, slug: str):
-    d = get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true")
-    return [
-        {
-            "id": f"gh:{slug}:{j['id']}",
-            "company": company,
-            "title": j["title"],
+    """Big boards list hundreds of jobs. Get titles first, then full details only for new PM roles."""
+    cfg = load_config()
+    base = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
+    known = known_jobs()
+    out = []
+    for j in get_json(base).get("jobs", []):
+        title = j["title"]
+        if not cfg["title_include"].search(title) or cfg["title_exclude"].search(title):
+            continue
+        jid = f"gh:{slug}:{j['id']}"
+        row = {"id": jid, "company": company, "title": title, "url": j["absolute_url"],
+               "posted": j.get("first_published") or j.get("updated_at"), "description": "",
+               "location": j.get("location", {}).get("name", "")}
+        if jid in known:  # already saved: only needs to count as still live
+            row["location"] = known[jid].get("location") or row["location"]
+        else:
+            d = get_json(f"{base}/{j['id']}")
             # some boards (e.g. Cloudflare) put "Hybrid" in location and the cities in offices
-            "location": " / ".join(dict.fromkeys(filter(None, [j.get("location", {}).get("name", "")]
-                                                         + [o.get("name", "") for o in j.get("offices") or []]))),
-            "url": j["absolute_url"],
-            "posted": j.get("first_published") or j.get("updated_at"),
-            "description": strip_html(j.get("content", "")),
-        }
-        for j in d.get("jobs", [])
-    ]
+            row["location"] = " / ".join(dict.fromkeys(filter(None, [row["location"]] + [o.get("name", "") for o in d.get("offices") or []])))
+            row["description"] = strip_html(d.get("content", ""))
+        out.append(row)
+    return out
 
 
 def ashby(company: str, slug: str):

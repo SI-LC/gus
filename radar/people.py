@@ -78,6 +78,11 @@ def main():
         recent = str(date.today() - timedelta(days=RETRY_DAYS))
         targets = [a["account"] for a in brief()["accounts"] if len(a["people"]) < MIN_PEOPLE
                    and (companies.get(a["account"], {}).get("people_checked") or "") < recent]
+    try:
+        ai._check_budget(load_config())  # before anything is marked as checked
+    except ai.BudgetReached as e:
+        print(f"  people mapping skipped: {e}")
+        return
     for name in targets[:4]:  # a few per run keeps each scan quick
         with locked(COMPANIES) as companies:  # hard accounts wait a week, rather than being searched every run
             companies.setdefault(name, {})["people_checked"] = str(date.today())
