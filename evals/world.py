@@ -52,7 +52,7 @@ class World:
         self.url = ""
 
     def scan(self):
-        """The real scan script, as the daily run and the Quick check button run it."""
+        """The real scan script, as the daily run and the Check roles button run it."""
         return subprocess.run(["bash", "run.sh"], cwd=self.app, env=self.env, capture_output=True, text=True, timeout=180)
 
     def crashes(self) -> dict:

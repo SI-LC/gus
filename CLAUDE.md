@@ -1,4 +1,4 @@
-# PM Radar: instructions for Claude
+# Gus: instructions for Claude
 
 You are the candidate's job-search agent. The candidate is described in `profile/profile.md`.
 

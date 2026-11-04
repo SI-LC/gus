@@ -22,7 +22,7 @@ So this treats a job search like account-based marketing, and doubles as a test 
 
 ## How it works
 
-The radar does one full run a day, or whenever you press **Run radar**. It's one job, in a fixed order, so the parts can't drift out of sync:
+Gus does one full run a day, or whenever you press **Full run**. It's one job, in a fixed order, so the parts can't drift out of sync:
 
 1. **Scan and score:** read every watched job board, feed and social source, and email, then score anything new against your CV
 2. **Read emails:** an offline agent picks out replies and roles
@@ -31,7 +31,7 @@ The radar does one full run a day, or whenever you press **Run radar**. It's one
 5. **Score what's new**, and map the people at strong accounts
 6. **Plan moves:** pick this week's moves, once a week
 
-Only the scanning is AI-free, so **Quick check** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
+Only the scanning is AI-free, so **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
 **No signal, no move.** A move is rejected in code unless it cites a dated, linked signal from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently.
 
@@ -84,7 +84,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Checking it still works
 
-Every pull request installs the radar from scratch, runs a full scan against a made-up job board and a fake AI, and opens the cockpit in a real browser. The requirement checks in [`evals/cases`](evals/README.md) say what the product must do in plain words, and a failure blocks the merge.
+Every pull request installs Gus from scratch, runs a full scan against a made-up job board and a fake AI, and opens the cockpit in a real browser. The requirement checks in [`evals/cases`](evals/README.md) say what the product must do in plain words, and a failure blocks the merge.
 
 ## Checking the scoring
 
@@ -100,15 +100,15 @@ Run it after changing `prompts/triage.md`, the scoring model or your profile. It
 
 ## Privacy: the repo holds code only
 
-Your CV, watchlist, settings, keys, drafts and everything the radar finds are git-ignored. Hooks refuse any commit or push containing those files, keys, or your contact details, and every pull request must pass a code scan and a full-history secret scan before it can merge.
+Your CV, watchlist, settings, keys, drafts and everything Gus finds are git-ignored. Hooks refuse any commit or push containing those files, keys, or your contact details, and every pull request must pass a code scan and a full-history secret scan before it can merge.
 
 Your data stays on your machine. What goes out: requests to public job boards and feeds, your scoring and research prompts to your AI provider, and notifications to your ntfy topic.
 
 ## Security
 
-The radar reads untrusted text from the web and email, so it limits what that text can do.
+Gus reads untrusted text from the web and email, so it limits what that text can do.
 
-- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but the radar's own commands.
+- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
 - **Email** is read-only and filtered before opening. A separate agent with no internet access processes it, so a crafted email can't send your data out.
 - **The cockpit** listens on this machine only by default, and won't listen on a network without an access token. Keep it behind a private network such as Tailscale, never on the public internet.
 - **Known limit:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way.

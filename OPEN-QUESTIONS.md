@@ -4,15 +4,15 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 
 ## Decide first
 
-- **Email access.** The radar doesn't read email. Connecting it through the Claude connector was built and tested, then parked, because it gives an always-on machine access to a mailbox. The work is on the `gmail-connector` branch (closed PR #16). Options: leave email out and log replies by hand, have a session on the main computer send outcomes only, or revisit the connector.
-- **What the Pi's Claude login can reach.** Logging in with a Claude account brings that account's connectors (mail, files, calendar) to the Pi, and only the radar's own agents are limited. Options: use an Anthropic API key on the Pi (pay per use), or a separate Claude account with nothing connected.
+- **Email access.** Gus doesn't read email. Connecting it through the Claude connector was built and tested, then parked, because it gives an always-on machine access to a mailbox. The work is on the `gmail-connector` branch (closed PR #16). Options: leave email out and log replies by hand, have a session on the main computer send outcomes only, or revisit the connector.
+- **What the Pi's Claude login can reach.** Logging in with a Claude account brings that account's connectors (mail, files, calendar) to the Pi, and only Gus's own agents are limited. Options: use an Anthropic API key on the Pi (pay per use), or a separate Claude account with nothing connected.
 - **What should depend on the laptop.** Today deploys run from it, evals copy role data to it, and application status is sent from it. Proposed rule: the Pi runs everything and the laptop is only a screen, plus whatever local apps documents need.
 - **Scoring evals.** Decide what evals should cover before more labelling. The job-first labelling change is on a branch (closed PR #17). Labels are incomplete, and the pass marks haven't been checked against a real run.
 - **How much should a company's name count?** If brand is a real reason to apply, list preferred companies in the profile and have `prompts/triage.md` weigh them openly. If not, keep labels and scoring on fit alone. Comparing old labels with a relabelled set should help.
 
 ## Check next
 
-- **First real full run.** Run radar has only been tested with stand-ins. Press it and watch each step. Consider moving agent runs to a cheaper model first.
+- **First real full run.** Full run has only been tested with stand-ins. Press it and watch each step. Consider moving agent runs to a cheaper model first.
 - **Unread signals.** Discovery hasn't run on the Pi yet, so signals have built up.
 - **Screens not yet clicked through in a browser:** the Skipped and Closed ads filters, Restore, Quick check feedback, Open folder, and the phone layout.
 - **Messaged button.** One click was reported that didn't reach the Pi, and the cause wasn't found.
