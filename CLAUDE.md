@@ -22,6 +22,7 @@ interviewing → closed, or skipped); a role scoring 7+ counts as a signal on it
 - **"map people at <company>"**: `python3 -m radar.people "<Company>"`.
 - **"what's firing"**: `python3 -m radar.accounts brief`, summarised by account.
 - **"applied to <role>"**: update the stage and record the date.
+- **"run the evals"**: `python3 -m radar.evals run`, after any change to `prompts/triage.md`, the scoring model or the profile. It runs on the Mac and shows whether the model still scores roles the way the candidate would.
 
 ## Deploying
 

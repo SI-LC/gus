@@ -80,6 +80,18 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters.
 
+## Checking the scoring
+
+`tests/test_replies.py` checks the code around the model. To check the model's judgement, label some real roles yourself and compare:
+
+```bash
+python3 -m radar.evals sample   # picks about 40 roles from your Pi
+python3 -m radar.evals label    # you mark each one, without seeing its score
+python3 -m radar.evals run      # scores them 3 times, and fails on any good role it would have skipped
+```
+
+Run it after changing `prompts/triage.md`, the scoring model or your profile. It saves nothing to your roles, sends no alerts, and keeps your labels in `data/evals/`.
+
 ## Privacy: the repo holds code only
 
 Your CV, watchlist, settings, keys, drafts and everything the radar finds are git-ignored. Hooks refuse any commit or push containing those files, keys, or your contact details, and every pull request must pass a code scan and a full-history secret scan before it can merge.
