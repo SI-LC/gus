@@ -89,6 +89,7 @@ def state():
         "funnel": A.funnel(),
         "network": net_summary(),
         "running": list(service.status()["running"]),
+        "follow_ups": follow_ups(raw_jobs, people, moves),
         "progress": service.status()["progress"],
         "last_runs": service.status()["last"],
         "ai": ai_state(),
@@ -129,6 +130,41 @@ def allowed_hosts() -> set:
     if url:
         names.add((urlparse(url if "//" in url else "//" + url).hostname or "").lower())
     return names | set(CLI_HOSTS)
+
+
+KIND_REASON = {"hiring_manager": "Likely hiring manager for this role", "product_leader": "Leads product in this area",
+               "recruiter": "Recruits for this company", "peer_pm": "A PM here who can tell you about the team and may introduce you",
+               "warm": "You already know them", "announcer": "Posted about hiring here"}
+KIND_ORDER = list(KIND_REASON)
+FOLLOW_UP_DAYS = 21
+MAX_PER_ROLE = 3
+
+
+def follow_ups(jobs: dict, people: dict, moves: dict, today=None) -> list:
+    """Applied roles, with the people worth contacting about each and why. No AI."""
+    today = today or datetime.now(timezone.utc)
+    busy = {m.get("person_id") for m in moves.values() if m.get("status") in ("todo", "done")}
+    out = []
+    for j in jobs.values():
+        if j.get("stage") != "applied":
+            continue
+        applied = next((h["at"] for h in reversed(j.get("history") or []) if h.get("stage") == "applied"), j.get("first_seen"))
+        try:
+            age = (today - datetime.fromisoformat(applied)).days
+        except (TypeError, ValueError):
+            age = None
+        if age is not None and age > FOLLOW_UP_DAYS:
+            continue
+        done = set(j.get("contacts") or {})
+        who = [dict(p, id=pid) for pid, p in people.items() if p.get("company") == j.get("company")
+               and p.get("stage", "mapped") == "mapped" and pid not in done and pid not in busy]
+        who.sort(key=lambda p: (not p.get("warm"), KIND_ORDER.index(p["kind"]) if p.get("kind") in KIND_ORDER else 99))
+        contacts = [{"id": p["id"], "name": p.get("name"), "role": p.get("role"), "url": p.get("url"), "platform": p.get("platform"),
+                     "reason": KIND_REASON.get(p.get("kind"), "Works at this company"), "evidence": p.get("evidence"),
+                     "confidence": p.get("confidence")} for p in who[:MAX_PER_ROLE]]
+        if contacts or not done:
+            out.append({"id": j["id"], "company": j.get("company"), "title": j.get("title"), "days": age, "contacts": contacts})
+    return sorted(out, key=lambda r: (r["days"] is None, r["days"] or 0))
 
 
 def ai_state():
