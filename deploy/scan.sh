@@ -60,7 +60,7 @@ fi
 python3 -m compileall -q radar tests && good "Python compiles" || bad "Python doesn't compile"
 python3 -m unittest discover -s tests >/dev/null 2>&1 && good "tests pass" || bad "tests fail (python3 -m unittest discover -s tests)"
 if command -v node >/dev/null; then
-  js=$(mktemp); python3 -c "import re;print('\n'.join(re.findall(r'<script>(.*?)</script>',open('radar/cockpit.html').read(),re.S)))" > "$js"
+  js="$(mktemp).js"; python3 -c "import re;print('\n'.join(re.findall(r'<script>(.*?)</script>',open('radar/cockpit.html').read(),re.S)))" > "$js"
   node --check "$js" 2>/dev/null && good "cockpit script is valid" || bad "cockpit script has errors"; rm -f "$js"
 fi
 bash -n run.sh deploy/*.sh && good "shell scripts are valid" || bad "shell script errors"
