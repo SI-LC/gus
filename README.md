@@ -82,6 +82,10 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters.
 
+## Checking it still works
+
+Every pull request installs the radar from scratch, runs a full scan against a made-up job board and a fake AI, and opens the cockpit in a real browser. The requirement checks in [`evals/cases`](evals/README.md) say what the product must do in plain words, and a failure blocks the merge.
+
 ## Checking the scoring
 
 `tests/test_replies.py` checks the code around the model. To check the model's judgement, label some real roles yourself and compare:

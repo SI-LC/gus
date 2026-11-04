@@ -3,6 +3,7 @@ data/
 watchlist.csv
 content/
 __pycache__/
+.venv/
 .DS_Store
 .claude/
 .x_token
