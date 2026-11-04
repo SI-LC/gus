@@ -1,6 +1,6 @@
 """python3 -m unittest discover -s tests"""
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 
 import email
 import re
@@ -189,6 +189,39 @@ class RoleFolder(unittest.TestCase):
     def test_other_schemes_are_refused(self):
         for bad in ("javascript://alert(1)", "file:///etc/passwd"):
             self.assertIn("error", self.save(bad))
+
+
+class FollowUps(unittest.TestCase):
+    NOW = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+    JOB = {"id": "j", "company": "Acme", "title": "PM", "stage": "applied",
+           "history": [{"stage": "applied", "at": "2026-11-04T10:00:00+00:00"}]}
+
+    def rows(self, job=None, people=None, moves=None):
+        from radar.server import follow_ups
+        people = {"p": {"name": "Pat", "company": "Acme", "kind": "hiring_manager", "stage": "mapped"}} if people is None else people
+        return follow_ups({"j": job or self.JOB}, people, moves or {}, self.NOW)
+
+    def test_applied_role_lists_people_and_why(self):
+        r = self.rows()[0]
+        self.assertEqual((r["days"], r["contacts"][0]["name"]), (1, "Pat"))
+        self.assertIn("hiring manager", r["contacts"][0]["reason"])
+
+    def test_role_with_nobody_mapped_still_shows(self):
+        self.assertEqual(self.rows(people={})[0]["contacts"], [])
+
+    def test_only_applied_roles(self):
+        self.assertEqual(self.rows(job={**self.JOB, "stage": "preparing"}), [])
+
+    def test_contacted_people_drop_off(self):
+        self.assertEqual(self.rows(job={**self.JOB, "contacts": {"p": "2026-11-04"}}), [])
+        self.assertEqual(self.rows(people={"p": {"name": "Pat", "company": "Acme", "stage": "contacted"}}, job={**self.JOB, "contacts": {"p": "x"}}), [])
+
+    def test_person_with_a_planned_move_isnt_listed_twice(self):
+        self.assertEqual(self.rows(moves={"m": {"person_id": "p", "status": "todo"}})[0]["contacts"], [])
+
+    def test_old_applications_drop_off(self):
+        old = {**self.JOB, "history": [{"stage": "applied", "at": "2026-09-01T10:00:00+00:00"}]}
+        self.assertEqual(self.rows(job=old), [])
 
 
 class RoleContact(unittest.TestCase):
