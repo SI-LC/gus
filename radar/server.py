@@ -82,6 +82,8 @@ def state():
         "funnel": A.funnel(),
         "network": net_summary(),
         "running": list(service.status()["running"]),
+        "progress": service.status()["progress"],
+        "last_runs": service.status()["last"],
         "ai": ai_state(),
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
@@ -350,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, ai.test())
             if path == "/api/run":
                 job = body.get("job")
-                if job not in ("scan", "agent", "watchlist", "moves"):
+                if job not in ("run", "scan"):
                     return self.send(400, {"error": "Unknown job"})
                 return self.send(200, {"ok": True, "started": service.start(job)})
         except ValueError as e:

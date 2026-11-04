@@ -1,11 +1,10 @@
-"""The always-on service: the cockpit plus a scheduler that reads your Settings
-every minute. One process to run on a Raspberry Pi (or any always-on machine).
+"""The always-on service: the cockpit, plus one full radar run a day.
 
     python3 -m radar.service --host 0.0.0.0
 
-The scheduler only acts when "Run the built-in scheduler" is on in Settings, so a
-Mac using the desktop app's scheduled tasks never runs things twice. "Run now"
-buttons in the cockpit work either way.
+There are two jobs. A full run does everything in a fixed order, so the parts can't drift
+out of sync; it starts at your daily time (if the scheduler is on in Settings) or from the
+Run radar button. A quick check only scans and scores.
 """
 from __future__ import annotations
 
@@ -24,7 +23,15 @@ STATE = DATA / "schedule_state.json"
 _lock = threading.Lock()
 _queue: queue.Queue = queue.Queue()
 running: dict[str, str] = {}   # job -> started at
-last: dict[str, dict] = {}     # job -> {"at", "ok", "summary"}
+last: dict[str, dict] = {}     # job -> {"at", "ok", "summary", "steps"}
+progress: dict = {}            # the job running now, step by step
+
+
+def read_json(path):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
 
 
 def _state():
@@ -44,18 +51,87 @@ def _scan():
     return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
 
 
+def _command(*modules):
+    for m in modules:
+        subprocess.run([sys.executable, "-m", f"radar.{m}"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+    return True, ""
+
+
+def _counts():
+    jobs = read_json(DATA / "jobs.json")
+    return {"roles": len(jobs), "strong": sum((j.get("score") or 0) >= 8 and j.get("stage") == "new" for j in jobs.values())}
+
+
+def _emails_waiting():
+    return sum(e.get("status") == "new" for e in read_json(DATA / "emails.json").values())
+
+
+def _moves_this_week():
+    from radar.accounts import week_id
+    return sum(m.get("week") == week_id() for m in read_json(DATA / "moves.json").values())
+
+
+def _watchlist_due(cfg, s):
+    last_run = s.get("watchlist")
+    return not last_run or (date.today() - date.fromisoformat(last_run)).days >= cfg.get("watchlist_every_days", 3)
+
+
+def _agent_step(name):
+    def go():
+        from radar import agent
+        return True, agent.run(name).strip()[-300:]
+    return go
+
+
+def steps():
+    """The full run, in order. Each step: (label, function, why it's skipped, or None to run it)."""
+    cfg, s = load_config(), _state()
+    every = cfg.get("watchlist_every_days", 3)
+    return [
+        ("Scan and score", _scan, lambda: None),
+        ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
+        ("Discover", _agent_step("discover"), lambda: None),
+        ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
+        ("Score what's new", lambda: _command("triage", "people", "dashboard"), lambda: None),
+        ("Plan moves", _agent_step("moves"), lambda: "Already planned this week" if _moves_this_week() else None),
+    ]
+
+
+def full_run():
+    from radar import ai
+    before, stop = _counts(), None
+    plan = steps()
+    progress["steps"] = [{"name": n, "status": "waiting", "detail": ""} for n, _, _ in plan]
+    ok = True
+    for step, (_, fn, skip_if) in zip(progress["steps"], plan):
+        reason = stop or skip_if()
+        if reason:
+            step.update(status="skipped", detail=reason)
+            continue
+        step["status"] = "running"
+        try:
+            good, _ = fn()
+            step["status"] = "done" if good else "failed"
+            ok = ok and good
+        except ai.BudgetReached as e:  # nothing after this can use AI either
+            stop = f"Stopped: {e}"
+            step.update(status="skipped", detail=stop)
+        except Exception as e:  # one failed step shouldn't lose the rest of the run
+            step.update(status="failed", detail=str(e)[:200])
+            ok = False
+            traceback.print_exc()
+    s = _state()
+    if any(x["name"] == "Refresh accounts" and x["status"] == "done" for x in progress["steps"]):
+        s["watchlist"] = str(date.today())
+        _save(s)
+    after = _counts()
+    new = after["roles"] - before["roles"]
+    summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong, {_moves_this_week()} moves this week"
+    return ok and not stop, f"{stop}. {summary}" if stop else summary
+
+
 def _do(job):
-    if job == "scan":  # scan, score everything unscored, map people
-        return _scan()
-    from radar import agent
-    if job == "cycle":  # the full run: scan and score, discover, then score what discovery found
-        ok, _ = _scan()
-        agent.run("inbox")
-        report = agent.run("discover")
-        ok2, _ = _scan()
-        return ok and ok2, report.strip()[-300:]
-    report = agent.run({"agent": "discover"}.get(job, job))
-    return True, report.strip()[-300:]
+    return full_run() if job == "run" else _scan()
 
 
 def start(job: str) -> bool:
@@ -71,6 +147,8 @@ def start(job: str) -> bool:
 def worker():
     while True:
         job = _queue.get()
+        progress.clear()
+        progress.update(job=job, steps=[])
         try:
             ok, summary = _do(job)
         except Exception as e:
@@ -78,7 +156,8 @@ def worker():
             traceback.print_exc()
         with _lock:
             running.pop(job, None)
-            last[job] = {"at": datetime.now().isoformat(timespec="seconds"), "ok": ok, "summary": summary}
+            last[job] = {"at": datetime.now().isoformat(timespec="seconds"), "ok": ok, "summary": summary,
+                         "steps": list(progress.get("steps", []))}
             s = _state()
             s.setdefault("results", {})[job] = last[job]
             _save(s)
@@ -88,33 +167,14 @@ def _times(spec):
     return [t.strip() for t in (spec or "").split(",") if t.strip()]
 
 
-def current_slot(now: datetime, spec) -> str | None:
-    """The latest time today in a list like "08:00, 13:00" that has already passed."""
-    return max((t for t in _times(spec) if t <= now.strftime("%H:%M")), default=None)
+def run_time(cfg) -> str | None:
+    return (_times(cfg.get("run_time")) or [None])[0]
 
 
-def due(now: datetime, cfg: dict, s: dict) -> list[str]:
-    jobs = []
-    hm = now.strftime("%H:%M")
-    slot = current_slot(now, cfg.get("scan_times"))
-    if slot and s.get("scan") != f"{now.date()} {slot}":
-        jobs.append("scan")
-    slot = current_slot(now, agent_spec(now, cfg))
-    if slot and s.get("agent") != f"{now.date()} {slot}":
-        jobs.append("agent")
-    wl_time = (_times(cfg.get("watchlist_time")) or ["07:30"])[0]
-    last_wl = s.get("watchlist")
-    every = cfg.get("watchlist_every_days", 3)
-    if hm >= wl_time and (not last_wl or (now.date() - date.fromisoformat(last_wl)).days >= every):
-        jobs.append("watchlist")
-    mv_day, mv_time = cfg.get("moves_day", "Mon"), (_times(cfg.get("moves_time")) or ["07:45"])[0]
-    if now.strftime("%a") == mv_day and hm >= mv_time and s.get("moves") != str(now.date()):
-        jobs.append("moves")
-    return jobs
-
-
-def agent_spec(now: datetime, cfg: dict):
-    return cfg.get("agent_times_weekends" if now.weekday() >= 5 else "agent_times_weekdays")
+def due(now: datetime, cfg: dict, s: dict) -> bool:
+    """One full run a day, at your daily time."""
+    t = run_time(cfg)
+    return bool(t and now.strftime("%H:%M") >= t and s.get("run") != str(now.date()))
 
 
 def scheduler():
@@ -125,25 +185,12 @@ def scheduler():
             if cfg.get("scheduler_enabled"):
                 now = datetime.now()
                 s = _state()
-                if first:  # after a restart, don't fire slots that passed while it was down
-                    for job, spec in (("scan", cfg.get("scan_times")), ("agent", agent_spec(now, cfg))):
-                        slot = current_slot(now, spec)
-                        if slot and not str(s.get(job, "")).startswith(str(now.date())):
-                            s[job] = f"{now.date()} {slot}"
+                if first and due(now, cfg, s):  # started after today's time: don't fire straight away
+                    s["run"] = str(now.date())
                     _save(s)
-                jobs = due(now, cfg, s)
-                if "scan" in jobs and "agent" in jobs:  # same slot: one run, in order, not two at once
-                    jobs = ["cycle"] + [j for j in jobs if j not in ("scan", "agent")]
-                for job in jobs:
-                    if start(job):
-                        s = _state()
-                        if job in ("scan", "cycle"):
-                            s["scan"] = f"{now.date()} {current_slot(now, cfg.get('scan_times'))}"
-                        if job in ("agent", "cycle"):
-                            s["agent"] = f"{now.date()} {current_slot(now, agent_spec(now, cfg))}"
-                        if job in ("watchlist", "moves"):
-                            s[job] = str(now.date())
-                        _save(s)
+                elif due(now, cfg, s) and start("run"):
+                    s["run"] = str(now.date())
+                    _save(s)
             first = False
         except Exception:
             traceback.print_exc()
@@ -153,9 +200,10 @@ def scheduler():
 def status() -> dict:
     s = _state()
     with _lock:
+        cfg = load_config()
         return {"running": dict(running), "last": {**s.get("results", {}), **last},
-                "scheduled": {k: s.get(k) for k in ("scan", "agent", "watchlist", "moves")},
-                "enabled": bool(load_config().get("scheduler_enabled"))}
+                "progress": json.loads(json.dumps(progress)) if running else {},
+                "run_time": run_time(cfg), "enabled": bool(cfg.get("scheduler_enabled"))}
 
 
 def main():

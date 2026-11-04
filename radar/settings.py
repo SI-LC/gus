@@ -25,7 +25,6 @@ PROVIDERS = {
     "openai_compatible": "OpenAI-compatible API (scoring only)",
 }
 CLAUDE_MODELS = ["haiku", "sonnet", "opus"]
-WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # key, label, type, group, help. Types: text, regex, int, bool, select:<options>, times
 SCHEMA = [
@@ -47,15 +46,10 @@ SCHEMA = [
     ("notify_min_score", "Notify at score", "int:1-10", "Matching", "Push a notification for roles at or above this."),
     ("people_min_score", "Find people at score", "int:1-10", "Matching", "Search for the people behind roles at or above this."),
 
-    ("scheduler_enabled", "Run the built-in scheduler", "bool", "Schedule",
-     "On for a Raspberry Pi or always-on machine. Leave off on a Mac that uses the desktop app's scheduled tasks, so nothing runs twice."),
-    ("scan_times", "Scan times", "times", "Schedule", "Comma-separated 24h times. Job boards and feeds; AI only scores what's new."),
-    ("agent_times_weekdays", "Agent runs on weekdays", "times", "Schedule", "Comma-separated 24h times, e.g. 08:00, 13:00, 18:00. Empty to skip."),
-    ("agent_times_weekends", "Agent runs at weekends", "times", "Schedule", "Comma-separated 24h times. Empty to skip."),
-    ("watchlist_every_days", "Watchlist loop every (days)", "int:1-30", "Schedule", "Finds, enriches and assesses companies."),
-    ("watchlist_time", "Watchlist loop time", "times", "Schedule", "24h time, e.g. 07:30."),
-    ("moves_day", "Plan the week on", "select:weekday", "Schedule", "The agent picks this week's moves (at most 5)."),
-    ("moves_time", "Plan the week at", "times", "Schedule", "24h time. Runs after the morning scan and discovery, so it plans on fresh signals."),
+    ("scheduler_enabled", "Run automatically each day", "bool", "Schedule",
+     "Starts the full run at your daily time. Off means it only runs from the button."),
+    ("run_time", "Daily run time", "times", "Schedule", "When the full run starts each day, 24h, e.g. 08:00. Leave empty to run it only from the button."),
+    ("watchlist_every_days", "Refresh accounts every (days)", "int:1-30", "Schedule", "The heaviest step of the run, so it's skipped until this many days have passed."),
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
 
     ("source_hn", "HN Who is hiring", "bool", "Feeds", "Monthly thread, scanned with the job boards."),
@@ -153,8 +147,6 @@ def validate(key: str, value):
         return ", ".join(times)
     if kind == "select:provider" and value not in PROVIDERS:
         raise ValueError("Unknown provider")
-    if kind == "select:weekday" and value not in WEEKDAYS:
-        raise ValueError("Pick a day")
     if kind == "select:claude_model" and value not in CLAUDE_MODELS:
         raise ValueError("Unknown model")
     return str(value).strip()
