@@ -22,8 +22,8 @@ TOOLS = ["Read(./**)", "Glob", "Grep", "Edit(./data/**)", "Write(./data/**)", "E
 DENY = [f"Read(./{f})" for f in (".secrets.json", ".x_token", ".ntfy_topic", ".cockpit_token", ".companies_house_key", ".env", "settings.json")] + \
        ["Read(./data/network.json)", "Edit(./data/moves.json)", "Write(./data/moves.json)"]  # moves only via accounts plan
 # Emails and internet access never meet in one run, or a crafted email could send your data out.
-NO_EMAIL = ["Read(./data/emails.json)", "Read(./data/meetings.json)", "Grep(./data/emails.json)"]
-OFFLINE = [t for t in TOOLS if t not in ("WebSearch", "WebFetch") and "radar.feeds" not in t and "radar.social" not in t and "radar.x:" not in t]
+NO_EMAIL = ["Read(./data/emails.json)", "Read(./data/meetings.json)"]
+OFFLINE = ["Read(./**)", "Glob", "Grep", "Edit(./data/**)", "Write(./data/**)", "Bash(python3 -m radar.accounts:*)"]  # nothing that reaches the network
 
 PROMPT = """You are the candidate's job-search agent. Your working directory is the PM Radar repo.
 

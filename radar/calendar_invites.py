@@ -44,7 +44,7 @@ def _when(value: str, params: str):
 
 
 def _text(v: str) -> str:
-    return v.replace("\\n", " ").replace("\\N", " ").replace("\\,", ",").replace("\;", ";").replace("\\\\", "\\").strip()
+    return v.replace("\\n", " ").replace("\\N", " ").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\").strip()
 
 
 def parse_ics(text: str) -> list[dict]:
