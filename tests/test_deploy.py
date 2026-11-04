@@ -9,7 +9,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / "deploy" / "update-pi.sh"
 FAKE_CURL = """#!/bin/sh
 # Answers as the cockpit would. A BROKEN or NO_DATA file in the checkout makes it unhealthy; BUSY means a job is running.
-app="$HOME/pm-radar"
+app="$HOME/gus"
 case "$*" in
   *api/run*) [ -f "$HOME/BUSY" ] && echo '{"running": {"scan": 1}}' || echo '{"running": {}}' ;;
   *api/state*) [ -f "$app/NO_DATA" ] && echo '{}' || echo '{"jobs": []}' ;;
@@ -21,7 +21,7 @@ esac
 class UpdatePi(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())
-        self.app, self.origin = self.home / "pm-radar", self.home / "origin.git"
+        self.app, self.origin = self.home / "gus", self.home / "origin.git"
         bin_dir = self.home / "bin"
         bin_dir.mkdir()
         for name, body in (("curl", FAKE_CURL), ("pkill", "#!/bin/sh\necho restarted >> \"$HOME/restarts\"\n"), ("sleep", "#!/bin/sh\n")):

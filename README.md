@@ -53,7 +53,7 @@ For a role you want to pursue, ask Claude Code to prep it: it saves the job desc
 Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code).
 
 ```bash
-git clone https://github.com/<you>/pm-radar && cd pm-radar
+git clone https://github.com/<you>/gus && cd gus
 git config core.hooksPath .githooks                 # the code-only commit guard
 cp profile/profile.example.md profile/profile.md    # your CV and what you want (never committed)
 python3 -m radar.scan                               # first scan; creates watchlist.csv from the example
@@ -67,7 +67,7 @@ Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https:/
 Always on, and private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi with Tailscale and Claude Code installed and logged in.
 
 ```bash
-git clone https://github.com/<you>/pm-radar && cd pm-radar
+git clone https://github.com/<you>/gus && cd gus
 sudo bash deploy/install-pi.sh
 ```
 

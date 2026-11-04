@@ -29,7 +29,7 @@ def free_port() -> int:
 
 class World:
     def __init__(self):
-        self.base = Path(tempfile.mkdtemp(prefix="pm-radar-smoke-"))
+        self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
                                capture_output=True, text=True, check=True).stdout.split("\n")

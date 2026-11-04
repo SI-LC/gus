@@ -52,7 +52,7 @@ grep -qE '"(Read|Edit|Write)"' radar/agent.py && bad "agent has unrestricted fil
 grep -q '"Read(./data/emails.json)"' radar/agent.py && good "web agents can't read email" || bad "web agents can read email"
 
 # 5. Bandit, high severity only (installed outside the repo, only if missing)
-venv="${XDG_CACHE_HOME:-$HOME/.cache}/pm-radar-scan"
+venv="${XDG_CACHE_HOME:-$HOME/.cache}/gus-scan"
 [ -x "$venv/bin/bandit" ] || { python3 -m venv "$venv" >/dev/null && "$venv/bin/pip" -q install bandit >/dev/null 2>&1; }
 if [ -x "$venv/bin/bandit" ]; then
   "$venv/bin/bandit" -q -r radar -lll >/dev/null 2>&1 && good "bandit: nothing high severity" || bad "bandit found high-severity issues (run: $venv/bin/bandit -r radar -lll)"

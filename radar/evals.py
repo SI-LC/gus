@@ -70,8 +70,8 @@ def choose(jobs: dict, n: int = SAMPLE, seed: int = 1) -> list[dict]:
 def fetch_jobs(local: bool) -> dict:
     if local:
         return json.loads(JOBS.read_text())
-    pi = os.environ.get("PM_RADAR_PI", "sipi")
-    out = subprocess.run(["ssh", "-o", "BatchMode=yes", pi, "cat ~/pm-radar/data/jobs.json"],
+    pi = os.environ.get("GUS_PI", "sipi")
+    out = subprocess.run(["ssh", "-o", "BatchMode=yes", pi, "cat ~/gus/data/jobs.json"],
                          capture_output=True, text=True, timeout=60)
     if out.returncode != 0:
         sys.exit(f"Couldn't read the roles on the Pi: {out.stderr.strip()[:200]}")

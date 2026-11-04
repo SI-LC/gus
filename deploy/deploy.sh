@@ -3,7 +3,7 @@
 #   bash deploy/deploy.sh [patch|minor|major]   (default patch)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PI="${PM_RADAR_PI:-sipi}"
+PI="${GUS_PI:-sipi}"
 bump="${1:-patch}"
 case "$bump" in patch|minor|major) ;; *) echo "Usage: bash deploy/deploy.sh [patch|minor|major]"; exit 1 ;; esac
 [ -z "$(git status --porcelain)" ] || { echo "Commit your changes first:"; git status --short; exit 1; }

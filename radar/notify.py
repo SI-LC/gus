@@ -25,7 +25,7 @@ def _topic():
 
 
 def _cockpit_url():
-    return os.environ.get("PM_RADAR_URL") or _cfg().get("cockpit_url", "")
+    return os.environ.get("GUS_URL") or _cfg().get("cockpit_url", "")
 
 
 def quiet_now(spec=None) -> bool:

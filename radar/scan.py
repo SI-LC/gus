@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
-UA = {"User-Agent": "pm-radar/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
+UA = {"User-Agent": "gus/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
 
 
 MAX_RESPONSE = 50_000_000
