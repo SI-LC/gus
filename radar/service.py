@@ -74,14 +74,18 @@ def _times(spec):
     return [t.strip() for t in (spec or "").split(",") if t.strip()]
 
 
+def current_slot(now: datetime, spec) -> str | None:
+    """The latest time today in a list like "08:00, 13:00" that has already passed."""
+    return max((t for t in _times(spec) if t <= now.strftime("%H:%M")), default=None)
+
+
 def due(now: datetime, cfg: dict, s: dict) -> list[str]:
     jobs = []
-    last_scan = s.get("scan")
-    if not last_scan or (now - datetime.fromisoformat(last_scan)).total_seconds() >= cfg.get("scan_every_min", 10) * 60:
-        jobs.append("scan")
     hm = now.strftime("%H:%M")
-    slots = _times(cfg.get("agent_times_weekends" if now.weekday() >= 5 else "agent_times_weekdays"))
-    slot = max((t for t in slots if t <= hm), default=None)
+    slot = current_slot(now, cfg.get("scan_times"))
+    if slot and s.get("scan") != f"{now.date()} {slot}":
+        jobs.append("scan")
+    slot = current_slot(now, agent_spec(now, cfg))
     if slot and s.get("agent") != f"{now.date()} {slot}":
         jobs.append("agent")
     wl_time = (_times(cfg.get("watchlist_time")) or ["07:30"])[0]
@@ -95,6 +99,10 @@ def due(now: datetime, cfg: dict, s: dict) -> list[str]:
     return jobs
 
 
+def agent_spec(now: datetime, cfg: dict):
+    return cfg.get("agent_times_weekends" if now.weekday() >= 5 else "agent_times_weekdays")
+
+
 def scheduler():
     first = True
     while True:
@@ -103,24 +111,21 @@ def scheduler():
             if cfg.get("scheduler_enabled"):
                 now = datetime.now()
                 s = _state()
-                if first:  # don't fire every agent slot already past today on start-up
-                    slots = [t for t in _times(cfg.get("agent_times_weekends" if now.weekday() >= 5 else "agent_times_weekdays"))
-                             if t <= now.strftime("%H:%M")]
-                    if slots and not s.get("agent", "").startswith(str(now.date())):
-                        s["agent"] = f"{now.date()} {max(slots)}"
+                if first:  # after a restart, don't fire slots that passed while it was down
+                    for job, spec in (("scan", cfg.get("scan_times")), ("agent", agent_spec(now, cfg))):
+                        slot = current_slot(now, spec)
+                        if slot and not str(s.get(job, "")).startswith(str(now.date())):
+                            s[job] = f"{now.date()} {slot}"
                     _save(s)
                 for job in due(now, cfg, s):
                     if start(job):
                         s = _state()
                         if job == "scan":
-                            s["scan"] = now.isoformat(timespec="seconds")
+                            s["scan"] = f"{now.date()} {current_slot(now, cfg.get('scan_times'))}"
                         elif job == "agent":
-                            slots = _times(cfg.get("agent_times_weekends" if now.weekday() >= 5 else "agent_times_weekdays"))
-                            s["agent"] = f"{now.date()} {max(t for t in slots if t <= now.strftime('%H:%M'))}"
-                        elif job == "moves":
-                            s["moves"] = str(now.date())
+                            s["agent"] = f"{now.date()} {current_slot(now, agent_spec(now, cfg))}"
                         else:
-                            s["watchlist"] = str(now.date())
+                            s[job] = str(now.date())
                         _save(s)
             first = False
         except Exception:

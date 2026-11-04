@@ -49,7 +49,7 @@ SCHEMA = [
 
     ("scheduler_enabled", "Run the built-in scheduler", "bool", "Schedule",
      "On for a Raspberry Pi or always-on machine. Leave off on a Mac that uses the desktop app's scheduled tasks, so nothing runs twice."),
-    ("scan_every_min", "Scan every (minutes)", "int:5-240", "Schedule", "Job boards and feeds. Free; no AI."),
+    ("scan_times", "Scan times", "times", "Schedule", "Comma-separated 24h times. Job boards and feeds; AI only scores what's new."),
     ("agent_times_weekdays", "Agent runs on weekdays", "times", "Schedule", "Comma-separated 24h times, e.g. 08:00, 13:00, 18:00. Empty to skip."),
     ("agent_times_weekends", "Agent runs at weekends", "times", "Schedule", "Comma-separated 24h times. Empty to skip."),
     ("watchlist_every_days", "Watchlist loop every (days)", "int:1-30", "Schedule", "Finds, enriches and assesses companies."),

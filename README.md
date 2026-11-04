@@ -3,7 +3,7 @@
 **An agentic job search for product managers.** It watches the job boards of the companies you care about, tells you within minutes when a relevant role opens, and has Claude score it against your CV before you've finished reading the notification.
 
 ```
- every 10 min            only when something is new         when you say so
+ three times a day, or on demand            only when something is new         when you say so
 ┌──────────────┐        ┌─────────────────────────┐        ┌──────────────────────┐
 │  scan        │  new?  │  triage (Claude)        │  ≥8?   │  prep (Claude Code)  │
 │  19 boards   │──────▶ │  score 1–10 vs your CV  │──────▶ │  JD saved, answers   │
@@ -26,7 +26,7 @@ This project uses the job market as a test bed for how product work is changing:
 | **Discover** | An hourly agent ([`prompts/discover.md`](prompts/discover.md)) harvests signals from newsletters, funding news, HN, X and Bluesky, sweeps every Ashby/Greenhouse/Lever/Workable board on the web for London PM roles, and adds new companies itself | Agent run, hourly |
 | **Resolve** | `radar.resolve` works out which public job board any company uses (6 systems) and adds it to the watchlist | Free |
 | **Enrich** | The agent profiles each company: stage, last round, London presence, product leaders, recent signals | Agent run |
-| **Watch** | Polls every watched board plus HN "Who is hiring", RSS feeds ([`feeds.csv`](feeds.csv)) and X every 10 min | Free (X billed per post, capped) |
+| **Watch** | Polls every watched board plus HN "Who is hiring", RSS feeds ([`feeds.csv`](feeds.csv)) and X three times a day, or on demand | Free (X billed per post, capped) |
 | **Filter** | Title and location regex in [`config.json`](config.json) | Free |
 | **Notify** | Native macOS notification the moment a matching role appears | Free |
 | **Triage** | Claude scores each new role 1–10 against `profile/profile.md` with a one-line rationale and red flags | Only runs on new roles |
@@ -41,8 +41,8 @@ Inbox-only sources such as newsletter job posts, LinkedIn alerts and Slack #jobs
 git clone https://github.com/<you>/pm-radar && cd pm-radar
 cp profile/profile.example.md profile/profile.md   # your CV + what you want (never committed)
 python3 -m radar.scan                               # first scan; creates watchlist.csv from the example
-python3 -m radar.server                             # the cockpit: http://127.0.0.1:8484
-./install.sh                                        # scan every 10 min in the background
+git config core.hooksPath .githooks                 # the code-only commit guard
+python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
 
 Python 3.9+, standard library only. Scoring and the agent need [Claude Code](https://claude.com/claude-code).

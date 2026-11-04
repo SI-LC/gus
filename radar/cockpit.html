@@ -73,6 +73,7 @@
             padding: 10px 28px; border-bottom: 1px solid var(--line); background: var(--bg); font: 11px var(--mono);
             text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
   .ticker b { color: var(--text); font-weight: 500; }
+  .scan-now { min-height: 26px; padding: 3px 10px; font-size: 10px; flex: none; }
   .live { color: var(--hi); } .live::before { content: "● "; animation: pulse 2s infinite; }
   .stale { color: var(--accent); } .stale::before { content: "● "; }
   @keyframes pulse { 50% { opacity: .25; } }
@@ -574,9 +575,11 @@ function drawTheme() {
 }
 function cycleTheme() { const i = THEMES.findIndex(t => t[0] === theme()); setTheme(THEMES[(i + 1) % 3][0]); }
 function drawTicker() {
-  const h = S.health, fresh = h.last_scan && Date.now() - new Date(h.last_scan) < 30 * 6e4;
+  const h = S.health, fresh = h.last_scan && Date.now() - new Date(h.last_scan) < 16 * 36e5;
+  const scanning = (S.running || []).includes("scan");
   const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
-  $("ticker").innerHTML = `<span class="${fresh ? "live" : "stale"}">${fresh ? "Live" : "Scan " + ago(h.last_scan)}</span>
+  $("ticker").innerHTML = `<button class="scan-now" onclick="scanNow()">${scanning ? "Scanning…" : "Scan now"}</button>
+    <span class="${fresh ? "live" : "stale"}">Scanned ${ago(h.last_scan)}</span>
     <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
     <span><b>${Object.values(S.companies).filter(c => c.status === "watched").length}</b> watched</span>
     <span><b>${h.signals_waiting}</b> signals queued</span>
@@ -633,6 +636,13 @@ async function setPerson(id, stage) { if (await post("/api/person", { id, stage 
 async function setDegree(id, value) {
   const p = S.people[id], sel = value === undefined ? (p.degree || "") : value, via = (document.getElementById("via-" + id) || {}).value || "";
   if (await post("/api/person", { id, degree: sel ? Number(sel) : null, via })) { toast(sel ? "Distance confirmed" : "Cleared"); load(); }
+}
+async function scanNow() {
+  const d = await post("/api/run", { job: "scan" });
+  if (!d) return;
+  toast(d.started ? "Scan started" : "Already scanning");
+  S.running = [...(S.running || []), "scan"]; drawTicker();
+  const poll = setInterval(async () => { await load(); if (!(S.running || []).includes("scan")) { clearInterval(poll); toast("Scan finished"); } }, 5000);
 }
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
 async function vetoCo(name) {

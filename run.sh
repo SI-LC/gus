@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Called every 10 minutes (launchd on a Mac, cron on a Pi). Cheap scan; Claude only when something is new.
+# One scan, run by the scheduler or the Scan now button. Claude is only used when something is new.
 cd "$(dirname "$0")"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 mkdir -p data
