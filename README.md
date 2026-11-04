@@ -1,107 +1,106 @@
 # PM Radar
 
-**An agentic job search for product managers.** It watches the job boards of the companies you care about, tells you within minutes when a relevant role opens, and has Claude score it against your CV before you've finished reading the notification.
+**An agentic, account-based job search for product managers.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 
 ```
- three times a day, or on demand            only when something is new         when you say so
-┌──────────────┐        ┌─────────────────────────┐        ┌──────────────────────┐
-│  scan        │  new?  │  triage (Claude)        │  ≥8?   │  prep (Claude Code)  │
-│  19 boards   │──────▶ │  score 1–10 vs your CV  │──────▶ │  JD saved, answers   │
-│  + HN hiring │        │  one-line why + flags   │ notify │  drafted, team intel │
-└──────────────┘        └─────────────────────────┘        └──────────────────────┘
-   plain Python            headless `claude -p`               you still hit submit
-   free to run             a few calls a day
+ SIGNALS     job boards · newsletters · funding news · social · email
+    ↓
+ ACCOUNTS    target companies, tiered A/B/C, with the people who matter
+    ↓
+ MOVES       at most 5 a week: one person, one fresh signal, one draft
+    ↓
+ YOU         edit it, send it, log what happened
+    ↓
+ PIPELINE    replies → conversations → interviews
 ```
 
 ## Why this exists
 
-Good PM roles fill fast, and the best ones are visible on the company's own board hours or days before they reach LinkedIn. Job alerts are noisy, keyword-based and blind to fit.
+Finding roles isn't the hard part of a senior PM search. Getting real conversations with the right people is. Job alerts are noisy and blind to fit, and more applications rarely help.
 
-This project uses the job market as a test bed for how product work is changing: **the deterministic bits are code, the judgement bits are an agent, and the human makes the call.**
+So this treats a job search like account-based marketing, and doubles as a test bed for how product work is changing: **the deterministic bits are code, the judgement bits are agents, and the human makes the call.**
 
-## What it does
+## How it works
 
-| Stage | How | Cost |
+| When | What runs | Uses AI? |
 |---|---|---|
-| **Discover** | An hourly agent ([`prompts/discover.md`](prompts/discover.md)) harvests signals from newsletters, funding news, HN, X and Bluesky, sweeps every Ashby/Greenhouse/Lever/Workable board on the web for London PM roles, and adds new companies itself | Agent run, hourly |
-| **Resolve** | `radar.resolve` works out which public job board any company uses (6 systems) and adds it to the watchlist | Free |
-| **Enrich** | The agent profiles each company: stage, last round, London presence, product leaders, recent signals | Agent run |
-| **Watch** | Polls every watched board plus HN "Who is hiring", RSS feeds ([`feeds.csv`](feeds.csv)) and X three times a day, or on demand | Free (X billed per post, capped) |
-| **Filter** | Title and location regex in [`config.json`](config.json) | Free |
-| **Notify** | Native macOS notification the moment a matching role appears | Free |
-| **Triage** | Claude scores each new role 1–10 against `profile/profile.md` with a one-line rationale and red flags | Only runs on new roles |
-| **Find the people** | For roles scoring 7+, Claude finds who's announcing the role or hiring for it (Bluesky API, plus web search over public X, LinkedIn, Threads and blog posts) and drafts a short DM to each | A few calls per strong match |
-| **Prep** | In Claude Code: "prep the Synthesia enterprise role" saves the job description, drafts application answers in your voice and researches the team | On demand |
+| **Three times a day**, or **Scan now** | Reads every watched job board, RSS feeds, social media and email, then scores anything new against your CV | Only to score new roles |
+| **Once a day on weekdays** | The discovery agent turns signals into companies, roles and dated events, and searches the web for London PM roles | Yes |
+| **Every 3 days** | The watchlist loop finds companies through VCs, funding news and London openings, then researches them, scores their fit and tiers them | Yes |
+| **Mondays** | The planner picks this week's moves | Yes |
 
-Inbox-only sources such as newsletter job posts, LinkedIn alerts and Slack #jobs digests are read by Claude through the Gmail connector. See [CLAUDE.md](CLAUDE.md).
+Jobs run one at a time, in order, so agents never overlap. Everything is configurable in the cockpit, including which provider and models it uses, and a daily AI limit (0 turns AI off).
+
+**No signal, no move.** A move is rejected in code unless it cites a dated, linked signal from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently.
+
+## The cockpit
+
+A small web app, and the place you work:
+
+- **This week:** your moves, each with why now, your angle and a draft, plus funnel numbers
+- **Accounts:** target companies by tier, with their signals and people
+- **Pipeline:** conversations and applications
+- **Roles:** new roles by score, filtered by place and type
+- **Costs:** what AI runs use, by day and task
+- **Settings:** AI provider, matching, schedule, sources, email, keys and your profile
+
+For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
 
 ## Quick start
 
+Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code).
+
 ```bash
 git clone https://github.com/<you>/pm-radar && cd pm-radar
-cp profile/profile.example.md profile/profile.md   # your CV + what you want (never committed)
-python3 -m radar.scan                               # first scan; creates watchlist.csv from the example
 git config core.hooksPath .githooks                 # the code-only commit guard
+cp profile/profile.example.md profile/profile.md    # your CV and what you want (never committed)
+python3 -m radar.scan                               # first scan; creates watchlist.csv from the example
 python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
 
-Python 3.9+, standard library only. Scoring and the agent need [Claude Code](https://claude.com/claude-code).
-
-**Phone notifications:** install [ntfy](https://ntfy.sh), subscribe to a long random topic name, and put it in `.ntfy_topic`.
-
-**The cockpit** is where you work: new roles (shortlist or skip), the pipeline, the outreach queue with drafted
-messages, the watchlist (remove companies you don't want) and radar health.
+Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the built-in scheduler.
 
 ## Run it on a Raspberry Pi
 
-Always on, with the cockpit private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi, and Tailscale and Claude Code installed and logged in.
+Always on, and private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi with Tailscale and Claude Code installed and logged in.
 
 ```bash
 git clone https://github.com/<you>/pm-radar && cd pm-radar
 sudo bash deploy/install-pi.sh
 ```
 
-To update it later, merge your change to `main` through a pull request, then run `bash deploy/deploy.sh` from your own machine: it scans the code, updates the Pi, checks it came back and publishes a numbered GitHub release. Add `minor` or `major` for a bigger version bump.
+Turn on HTTPS certificates in the Tailscale admin console and open `https://<your-pi>.<your-tailnet>.ts.net`. In the cockpit, set that as **Cockpit address** under Settings → Notifications, then turn on the scheduler under Settings → Schedule.
 
-Then turn on HTTPS certificates in the Tailscale admin console, open `https://<your-pi>.<your-tailnet>.ts.net`, set that as **Cockpit address** under Settings → Notifications, and turn on the built-in scheduler under Settings → Schedule.
+To update it, merge your change through a pull request, then run `bash deploy/deploy.sh` from your own machine. It scans the code, updates the Pi, checks it came back and publishes a numbered release.
 
 ## Make it yours
 
-**Add a company.** Add a line to `watchlist.csv` (your copy of [`watchlist.example.csv`](watchlist.example.csv)), or let the watchlist loop do it:
-
-```csv
-company,ats,slug,sector
-Monzo,greenhouse,monzo,fintech
-```
-
-Find the slug in the company's careers URL: `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>` or `jobs.lever.co/<slug>`.
-
-**Change what counts as a match.** Edit the regexes in [`config.json`](config.json).
-
-**Change how roles are judged.** Edit [`prompts/triage.md`](prompts/triage.md). It's the most opinionated file in the repo.
+- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of six job board systems it uses.
+- **Change what counts as a match:** Settings → Matching.
+- **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
+- **Add a source:** paste any newsletter link under Settings → Newsletters.
 
 ## Privacy: the repo holds code only
 
-Your CV (`profile/profile.md`), your watchlist (`watchlist.csv`), drafts (`content/`), tokens and
-everything the radar finds (`data/`) are git-ignored. A pre-commit guard (`.githooks/pre-commit`)
-refuses any commit that includes those files, or that contains an email address or phone number from your profile.
-Every pull request must pass the code scan and a full-history secret scan on GitHub before it can merge into `main`.
-Nothing leaves your machine except calls to public job APIs, your ntfy topic, and Claude.
+Your CV, watchlist, settings, keys, drafts and everything the radar finds are git-ignored. Hooks refuse any commit or push containing those files, keys, or your contact details, and every pull request must pass a code scan and a full-history secret scan before it can merge.
+
+Your data stays on your machine. What goes out: requests to public job boards and feeds, your scoring and research prompts to your AI provider, and notifications to your ntfy topic.
 
 ## Security
 
-The radar reads untrusted text from the web, so it's built to limit what that text can do.
+The radar reads untrusted text from the web and email, so it limits what that text can do.
 
-- **Agent runs** can read this repo and search the web, but can only write to `data/`. They can't read your keys or files outside the repo, can't change code, and can only run the radar's own commands.
-- **The cockpit** listens on this machine only by default, and won't listen on a network without an access token. Keep it behind a private network such as Tailscale; don't expose it to the internet.
-- **Known limit:** an agent run reads your profile and can fetch web pages, so a page that tricks it could in theory leak what's in your profile. Treat `profile/profile.md` as something an agent may see. The agent can't reach your keys this way.
+- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but the radar's own commands.
+- **Email** is read-only and filtered before opening. A separate agent with no internet access processes it, so a crafted email can't send your data out.
+- **The cockpit** listens on this machine only by default, and won't listen on a network without an access token. Keep it behind a private network such as Tailscale, never on the public internet.
+- **Known limit:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way.
 
 ## Principles
 
-1. **Code for the deterministic, agents for the judgement.** Polling is a cron job, not an LLM call.
-2. **Signal over volume.** One 9/10 notification beats fifty "new jobs for you" emails.
-3. **Human in the loop where it counts.** The agent prepares, you apply and you hit send. No auto-submitting or auto-DMs, ever.
-4. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
+1. **Code for the deterministic, agents for the judgement.** Polling is a job for code, not an LLM.
+2. **Signal over volume.** Five good moves a week beat 40 roles in a queue.
+3. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
+4. **Human in the loop where it counts.** The agent prepares; you apply and you press send. No auto-submitting or auto-DMs, ever.
 
 ## License
 
