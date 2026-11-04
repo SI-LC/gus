@@ -146,6 +146,28 @@ class RoleContact(unittest.TestCase):
             self.assertEqual((moves["m"]["status"], people["p"]["stage"], jobs["j"]["contacts"]), ("todo", "mapped", {}))
 
 
+class Service(unittest.TestCase):
+    def test_buttons_and_worker_share_one_queue(self):
+        """Started the way the Pi starts it, a job queued by the cockpit must actually run."""
+        import subprocess
+        import sys
+        code = """
+import runpy, sys, threading, time
+from unittest import mock
+sys.argv = ["radar.service"]
+import radar.server, radar.service as svc
+def fake_server():
+    with mock.patch.object(svc, "_do", lambda job: (True, "ran")):
+        radar.server.service.start("scan")
+        time.sleep(1)
+        print("RAN" if "scan" in radar.server.service.last else "STUCK", flush=True)
+mock.patch.object(radar.server, "main", fake_server).start()
+runpy.run_module("radar.service", run_name="__main__")
+"""
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=20)
+        self.assertIn("RAN", out.stdout, out.stderr)
+
+
 class Distance(unittest.TestCase):
     CONNS = [{"name": "Ada Example", "url": "u", "company": "Acme Ltd", "position": "PM"}]
 

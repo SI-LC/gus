@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
-UA = {"User-Agent": "pm-radar/0.1 (+https://github.com/)"}
+UA = {"User-Agent": "pm-radar/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
 
 
 MAX_RESPONSE = 50_000_000
@@ -42,6 +43,9 @@ def fetch_bytes(url: str, timeout: int = 30) -> bytes:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 data = r.read(MAX_RESPONSE + 1)
+                if r.headers.get("Content-Encoding") == "gzip":
+                    d = zlib.decompressobj(16 + zlib.MAX_WBITS)  # bounded, so a tiny download can't expand without limit
+                    data = d.decompress(data, MAX_RESPONSE + 1)
             break
         except urllib.error.HTTPError:
             raise

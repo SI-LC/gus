@@ -166,4 +166,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Run through the imported module: `python -m` would otherwise make a second copy, with its
+    # own queue, and the cockpit's buttons would queue jobs that nothing ever picks up.
+    from radar import service
+    service.main()
