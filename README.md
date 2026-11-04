@@ -88,3 +88,7 @@ The radar reads untrusted text from the web, so it's built to limit what that te
 2. **Signal over volume.** One 9/10 notification beats fifty "new jobs for you" emails.
 3. **Human in the loop where it counts.** The agent prepares, you apply and you hit send. No auto-submitting or auto-DMs, ever.
 4. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
+
+## License
+
+[MIT](LICENSE)
