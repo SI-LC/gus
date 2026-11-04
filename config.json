@@ -1,7 +1,7 @@
 {
-  "title_include": "\\b(product manager|product lead|head of product|group product|principal product|director of product|vp,? product|product owner)\\b",
-  "title_exclude": "\\b(marketing|designer|design|engineer|engineering manager|operations|analyst|intern|sales)\\b",
-  "location_include": "london|united kingdom|\\buk\\b|england|emea|europe",
+  "title_include": "\\b(product manager|product lead|head of product|group product|principal product|director of product|vp,? product|product owner|product engineer|product builder|founding product|forward.deployed|deployed (staff|engineer|pm)|applied ai)\\b",
+  "title_exclude": "\\b(marketing|designer|design|(?<!product )(?<!deployed )(?<!applied ai )engineer|engineering manager|operations|analyst|intern|sales)\\b",
+  "location_include": "london|united kingdom|\\buk\\b|england|emea|europe|^\\s*remote\\s*$|remote[ ,(/-]*(global|worldwide|anywhere)",
   "notify_min_score": 8,
   "people_min_score": 7,
 

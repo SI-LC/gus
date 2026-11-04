@@ -15,7 +15,7 @@ a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's
 b. **Board sweep** (web search, every run): find PM roles in London on *any* company's board, not
    just watched ones, with searches like `site:jobs.ashbyhq.com "product manager" London`,
    `site:job-boards.greenhouse.io "product manager" London`, `site:jobs.lever.co "product manager" London`,
-   `site:apply.workable.com "product manager" London`. Every unwatched company you find is a candidate company.
+   `site:apply.workable.com "product manager" London`, and the same for "forward deployed" and "product engineer". Every unwatched company you find is a candidate company.
 c. **Emails** are handled by a separate offline run. You can't read them, on purpose.
 d. **Market signals** (web search, last 7 days): UK and European AI/devtools/fintech funding
    rounds (Series A+), "opening London office", new product launches with hiring,

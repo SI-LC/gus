@@ -157,6 +157,7 @@
   button.mini { min-height: 26px; padding: 3px 7px; font-size: 10px; }
   .extras { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .contact { width: 100%; } .contact button { margin-left: 4px; min-height: 22px; padding: 1px 6px; }
+  .chips-row { margin-bottom: 8px; border-bottom: 0; } .chips-row a { padding: 6px 10px; }
   .pill.warm { color: var(--mid); border-color: var(--mid); }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--sans); letter-spacing: -.01em; }
@@ -246,7 +247,9 @@ async function setStage(id, stage, msg) {
   Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
 }
 
-const newRoles = () => S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5))
+let roleWhere = "London", roleKind = "all";
+const newRoles = () => S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5)
+    && (roleWhere === "all" || j.where === roleWhere) && (roleKind === "all" || j.role_type === roleKind))
   .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
 const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
 const daysAgo = n => n == null ? "undated" : n === 0 ? "today" : n + "d ago";
@@ -339,13 +342,20 @@ function moveCard(m) {
     </div>${outcome}</article>`;
 }
 
+function chipRow(label, options, value, name, key) {
+  const pool = S.jobs.filter(j => j.stage === "new" && (j.score == null || j.score >= 5));
+  return `<div class="tabs chips-row" role="group" aria-label="${label}">${options.map(([v, l]) => {
+    const n = v === "all" ? pool.length : pool.filter(j => key(j) === v).length;
+    return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};render(true)">${l} <span class="sub">${n}</span></a>`;
+  }).join("")}</div>`;
+}
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
-      <div class="sub">${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : '<span class="sub">Waiting to be scored.</span>'}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}</div>
@@ -427,6 +437,8 @@ const V = {
   roles() {
     const rows = newRoles();
     return `<h1>Roles <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its account and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
+      ${chipRow("Where", [["London", "London"], ["UK", "Rest of UK"], ["Remote", "Remote"], ["Europe", "Europe"], ["all", "All"]], roleWhere, "roleWhere", j => j.where)}
+      ${chipRow("Type", [["all", "All"], ["PM", "PM"], ["Forward deployed", "Forward deployed"], ["Product engineer", "Product engineer"]], roleKind, "roleKind", j => j.role_type)}
       <p class="hint"><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
       (rows.length ? rows.map(j => roleCard(j, `
         <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>

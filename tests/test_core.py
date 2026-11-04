@@ -168,6 +168,35 @@ runpy.run_module("radar.service", run_name="__main__")
         self.assertIn("RAN", out.stdout, out.stderr)
 
 
+class Targeting(unittest.TestCase):
+    def test_where(self):
+        from radar.scan import where
+        for loc, want in (("Berlin / London", "London"), ("Remote, United Kingdom", "Remote"), ("Manchester, UK", "UK"), ("Paris, Europe", "Europe")):
+            self.assertEqual(where(loc), want)
+
+    def test_titles(self):
+        import json
+        from radar.scan import ROOT, role_type
+        c = json.loads((ROOT / "config.json").read_text())
+        keep = lambda t: bool(re.search(c["title_include"], t, re.I)) and not re.search(c["title_exclude"], t, re.I)
+        for t in ("Senior Product Manager", "Forward Deployed Engineer", "Forward-Deployed PM", "Product Engineer", "Founding Product Engineer", "Applied AI Engineer", "Member of Deployed Staff"):
+            self.assertTrue(keep(t), t)
+        for t in ("Software Engineer", "Product Designer", "Product Marketing Manager", "Engineering Manager", "Product Operations Lead"):
+            self.assertFalse(keep(t), t)
+        self.assertEqual(role_type("Forward Deployed Engineer"), "Forward deployed")
+        self.assertEqual(role_type("Product Engineer"), "Product engineer")
+        self.assertEqual(role_type("Senior Product Manager"), "PM")
+
+    def test_remote_locations(self):
+        import json
+        from radar.scan import ROOT
+        loc = json.loads((ROOT / "config.json").read_text())["location_include"]
+        for l in ("Remote", "London", "Remote - Worldwide", "Remote, United Kingdom", "Remote (EMEA)"):
+            self.assertTrue(re.search(loc, l, re.I), l)
+        for l in ("Remote - US", "San Francisco", "Remote, Canada"):
+            self.assertFalse(re.search(loc, l, re.I), l)
+
+
 class Distance(unittest.TestCase):
     CONNS = [{"name": "Ada Example", "url": "u", "company": "Acme Ltd", "position": "PM"}]
 

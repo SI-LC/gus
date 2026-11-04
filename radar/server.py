@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from radar.companies import COMPANIES, veto
-from radar.scan import DATA, JOBS, ROOT
+from radar.scan import DATA, JOBS, ROOT, role_type, where
 from radar import service, settings, usage
 from radar.settings import secret
 from radar.store import locked
@@ -44,7 +44,8 @@ def read(path, default):
 
 
 def state():
-    jobs = [{k: v for k, v in j.items() if k != "description"} for j in read(JOBS, {}).values()]
+    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location")),
+             "role_type": role_type(j.get("title"))} for j in read(JOBS, {}).values()]
     signals = read(DATA / "signals.json", {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
     runs = sorted(p.name for p in (DATA / "runs").glob("*.md")) if (DATA / "runs").exists() else []

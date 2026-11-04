@@ -78,6 +78,28 @@ def strip_html(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+# --- labels: London stays the focus; other places and role types stay visible, not mixed in ---------
+
+def where(location: str) -> str:
+    loc = (location or "").lower()
+    if "london" in loc:
+        return "London"
+    if re.search(r"remote|anywhere", loc):
+        return "Remote"
+    if re.search(r"united kingdom|\buk\b|england|scotland|wales", loc):
+        return "UK"
+    return "Europe"
+
+
+def role_type(title: str) -> str:
+    t = (title or "").lower()
+    if re.search(r"forward.deployed|deployed (staff|engineer|pm)", t):
+        return "Forward deployed"
+    if re.search(r"product (engineer|builder)|founding product|applied ai", t):
+        return "Product engineer"
+    return "PM"
+
+
 # --- sources: each returns a list of normalised job dicts --------------------
 
 def greenhouse(company: str, slug: str):

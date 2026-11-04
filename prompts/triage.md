@@ -16,6 +16,9 @@ For each role, score fit 1–10:
 Weigh: domain (as listed in the candidate's profile), seniority match,
 whether London is genuinely an option, and whether the candidate's specific
 experience is a differentiator rather than merely relevant.
+London is the target: a role based in London scores highest. Remote roles open to the UK and European roles
+can be scored on merit, but say so in a flag. Forward deployed and product engineer roles are of interest too:
+score them on the same fit, and flag how much is hands-on engineering rather than product.
 For HN posts, first decide whether there is a real PM opening in the UK at all.
 
 Reply with ONLY a JSON array, no prose:
