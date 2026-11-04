@@ -13,6 +13,16 @@ def at(day, h, m=0):
     return datetime(2026, 11, day, h, m)
 
 
+class AppIcon(unittest.TestCase):
+    def test_every_icon_file_exists(self):
+        import json
+        from radar import server
+        for name, _ in server.STATIC.values():
+            self.assertTrue((server.ROOT / "radar" / "static" / name).exists(), name)
+        for icon in json.loads(server.MANIFEST)["icons"]:
+            self.assertIn(icon["src"], server.STATIC)
+
+
 class Schedule(unittest.TestCase):
     CFG = {"run_time": "08:00"}
 
