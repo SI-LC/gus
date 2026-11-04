@@ -36,9 +36,10 @@ checks in `evals/cases/`, in a real browser. When a change adds or alters someth
 update a case (`evals/README.md`).
 
 Then deploy from `main` with `bash deploy/deploy.sh` (add `minor` or `major` for a bigger version bump): it runs the
-code scan, updates the Pi, checks it's serving that commit and publishes a numbered GitHub release, so the latest
-release is what's on the Pi. To roll back, revert through a PR and deploy again. Never edit code on the Pi, and
-never push with `--no-verify`.
+code scan, updates the Pi, checks it's working and publishes a numbered GitHub release, so the latest release is
+what's on the Pi. If the new commit doesn't work, the Pi goes back to the last commit by itself and no release is
+published: fix it through a PR, as `main` still holds the broken commit. Never edit code on the Pi, and never push
+with `--no-verify`.
 
 ## Rules
 
