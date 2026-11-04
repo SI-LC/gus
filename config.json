@@ -36,6 +36,11 @@
   "x_daily_post_cap": 150,
   "x_cost_per_post": 0.005,
 
+  "source_gmail": false,
+  "gmail_address": "",
+  "inbox_days": 3,
+  "inbox_senders": "linkedin.com\nashbyhq.com\ngreenhouse.io\ngreenhouse-mail.io\nlever.co\nworkable.com\nworkablemail.com\nsmartrecruiters.com",
+  "inbox_subjects": "interview|your application|next steps|recruit|hiring|opportunity|role at",
   "my_employers": "",
   "feeds_disabled": "",
   "feeds_extra": "",

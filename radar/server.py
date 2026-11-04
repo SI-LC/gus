@@ -288,6 +288,9 @@ class Handler(BaseHTTPRequestHandler):
                 from radar.feeds import remove_feed
                 remove_feed(str(body.get("name", "")))
                 return self.send(200, settings_payload())
+            if path == "/api/test-gmail":
+                from radar import inbox
+                return self.send(200, inbox.test())
             if path == "/api/test-ai":
                 from radar import ai
                 return self.send(200, ai.test())

@@ -480,6 +480,21 @@ const SETTINGS_TABS = [
       <p class="sub">LinkedIn doesn't let other apps see your 2nd-degree network, so a <b>~</b> means the route is estimated from your connections' current employers, people's past employers and investors. Open someone's profile, read the degree LinkedIn shows, and log it on the move: confirmed distances replace estimates.</p></section>
       <section class="group"><h2>Your background</h2>${fieldsOf("Network")}</section>`;
   }],
+  ["email", "Email", () => {
+    const set = SET.secrets.gmail_app_password;
+    return `<section class="group"><h2>Connect Gmail</h2>
+      <p class="sub">Read-only. Senders and subjects are checked first, and only matching emails are opened, with a short snippet saved on this machine. Nothing is sent, deleted or marked as read.</p>
+      <ol class="sub" style="line-height:1.9;margin:12px 0"><li>Turn on <b>2-Step Verification</b> in your Google account, if it isn't already.</li>
+      <li>Create an app password at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>. Call it PM Radar.</li>
+      <li>Enter your address and the password below, then test it.</li></ol>
+      ${fieldsOf("Email", ["inbox_days", "inbox_senders", "inbox_subjects"])}
+      <div class="field"><label for="s_gmail_app_password">App password</label>
+        <div class="row"><input type="password" id="s_gmail_app_password" placeholder="${set ? esc(set) : "Not set"}" autocomplete="off" style="flex:1;min-width:160px">
+        <button onclick="saveSecret('gmail_app_password')">Save</button>${set ? `<button onclick="$('s_gmail_app_password').value='';saveSecret('gmail_app_password')">Clear</button>` : ""}</div>
+        <div class="help">Revoke it any time from the same Google page. Your normal password won't work here.</div></div>
+      <div class="field"><label>Connection</label><div class="row"><button onclick="testGmail()">Test Gmail</button><span id="gmail-test" class="sub"></span></div></div></section>
+      <section class="group"><h2>What gets read</h2>${SET.schema.filter(f => ["inbox_days", "inbox_senders", "inbox_subjects"].includes(f.key)).map(fieldRow).join("")}</section>`;
+  }],
   ["notifications", "Notifications", () => `<section class="group"><h2>Notifications</h2><p class="sub">Install the ntfy app on your phone, subscribe to a long random topic, and set that topic under Keys.</p>${fieldsOf("Notifications")}</section>`],
   ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git.</p>` +
     Object.entries(SET.secret_keys).map(([k, s]) => `<div class="field"><label for="s_${k}">${esc(s.label)}</label>
@@ -540,6 +555,11 @@ async function saveSecret(key) {
   const el = $("s_" + key);
   const d = await post("/api/secret", { key, value: el.value });
   if (d) { SET.secrets = d.secrets; el.value = ""; toast(d.secrets[key] ? "Key saved" : "Key removed"); render(true); }
+}
+async function testGmail() {
+  $("gmail-test").textContent = "Testing…";
+  const d = await post("/api/test-gmail", {});
+  $("gmail-test").innerHTML = d && d.ok ? `<span class="ok">${esc(d.reply)}</span>` : `<span class="bad">${esc(d ? d.reply : "Failed")}</span>`;
 }
 async function testAI() {
   $("ai-test").textContent = "Testing…";

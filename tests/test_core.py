@@ -2,7 +2,10 @@
 import unittest
 from datetime import datetime
 
-from radar import ai
+import email
+import re
+
+from radar import ai, inbox
 from radar.network import distance, paths_for
 from radar.service import due
 
@@ -45,6 +48,27 @@ class Budget(unittest.TestCase):
 
     def test_room_left_allows_a_run(self):
         ai._check_budget({"ai_daily_budget_usd": 1000000})
+
+
+class Inbox(unittest.TestCase):
+    SENDERS = ["linkedin.com", "ashbyhq.com"]
+    SUBJECTS = re.compile("interview|next steps", re.I)
+
+    def test_only_matching_emails_are_opened(self):
+        self.assertTrue(inbox.matches("LinkedIn <messages-noreply@linkedin.com>", "New message", self.SENDERS, self.SUBJECTS))
+        self.assertTrue(inbox.matches("Sam <sam@acme.com>", "Interview on Friday", self.SENDERS, self.SUBJECTS))
+        self.assertFalse(inbox.matches("Mum <mum@example.com>", "Sunday lunch", self.SENDERS, self.SUBJECTS))
+
+    def test_sender_name_alone_does_not_match(self):
+        self.assertFalse(inbox.matches('"linkedin.com" <spam@example.com>', "Hello", self.SENDERS, None))
+
+    def test_body_prefers_plain_text(self):
+        msg = email.message_from_string("Content-Type: text/plain; charset=utf-8\n\nHello   there\nworld")
+        self.assertEqual(inbox.body_text(msg), "Hello there world")
+
+    def test_html_body_is_stripped(self):
+        msg = email.message_from_string("Content-Type: text/html; charset=utf-8\n\n<p>Role <b>open</b></p>")
+        self.assertEqual(inbox.body_text(msg), "Role open")
 
 
 class Distance(unittest.TestCase):
