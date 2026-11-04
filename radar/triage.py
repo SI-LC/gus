@@ -27,26 +27,37 @@ def usable(r, ids):
             and isinstance(r.get("why"), str) and bool(r["why"].strip()))
 
 
-def score_batch(profile_path, todo):
+class ScoringFailed(Exception):
+    pass
+
+
+def ask(profile_path, todo):
+    """Score up to 15 roles and return the usable results. Saves nothing, so radar.evals can use it too."""
     batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": (j.get("description") or "")[:6000]} for j in todo[:15]]
     prompt = PROMPT.replace("{{PROFILE}}", profile_path.read_text()).replace("{{JOBS}}", json.dumps(batch, ensure_ascii=False))
     try:
         text = ai.run(prompt, task="scoring", timeout=600)
     except Exception as e:
-        sys.exit(f"scoring failed: {e}")
-    if "[" not in text:
-        sys.exit(f"scoring failed: unexpected reply {text.strip()[:200]}")
+        raise ScoringFailed(f"scoring failed: {e}")
     try:
         results = json.loads(text[text.index("["): text.rindex("]") + 1])
     except ValueError:
-        sys.exit(f"scoring failed: unexpected reply {text.strip()[:200]}")
+        raise ScoringFailed(f"scoring failed: unexpected reply {text.strip()[:200]}")
     ids = {b["id"] for b in batch}
+    return [r for r in results if usable(r, ids)]
+
+
+def score_batch(profile_path, todo):
+    try:
+        results = ask(profile_path, todo)
+    except ScoringFailed as e:
+        sys.exit(str(e))
 
     threshold = load_config()["notify_min_score"]
     alerts = []
     with locked(JOBS) as store:  # re-read: the cockpit may have changed things meanwhile
         for r in results:
-            j = store.get(r["id"]) if usable(r, ids) else None
+            j = store.get(r["id"])
             if not j:
                 continue
             flags = r.get("flags")
