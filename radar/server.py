@@ -31,7 +31,7 @@ STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-180.png": ("icon-18
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
           "/favicon.ico": ("icon-180.png", "image/png")}
 MANIFEST = json.dumps({"name": "PM Radar", "short_name": "Radar", "start_url": "/", "display": "standalone",
-                       "background_color": "#0b0b0a", "theme_color": "#0b0b0a",
+                       "background_color": "#ff4f12", "theme_color": "#0b0b0a",
                        "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
                                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}).encode()
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
