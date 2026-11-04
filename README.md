@@ -39,11 +39,11 @@ Only the scanning is AI-free, so **Quick check** does just step 1. Everything is
 
 A small web app, and the place you work:
 
-- **This week:** your moves, each with why now, your angle and a draft, plus funnel numbers
-- **Accounts:** target companies by tier, with their signals and people
-- **Pipeline:** conversations and applications
-- **Roles:** new roles by score, filtered by place and type
-- **Costs:** what AI runs use, by day and task
+- **Pipeline:** conversations and applications, and the page the cockpit opens on
+- **Role Inbox:** new roles by score, filtered by place and type
+- **To do:** your moves, each with why now, your angle and a draft, plus funnel numbers
+- **Companies:** target companies by tier, with their signals and people
+- **Usage:** what AI runs use, by day and task
 - **Settings:** AI provider, matching, schedule, sources, email, keys and your profile
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.

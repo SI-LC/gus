@@ -1,8 +1,8 @@
 id: roles-best-first
-requirement: When I open Roles, I can see which role to act on first and why.
+requirement: When I open Role Inbox, I can see which role to act on first and why.
 given: scanned
 check:
-  - open Roles
+  - open Role Inbox
   - '"Senior Product Manager" appears before "Product Manager, Growth"'
   - see "Made-up reason for Senior Product Manager."
   - not see "Product Owner"

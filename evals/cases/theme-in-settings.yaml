@@ -1,0 +1,11 @@
+id: theme-in-settings
+requirement: I choose light, dark or system in Settings, and the choice sticks.
+given: empty
+check:
+  - open Settings
+  - click "Appearance"
+  - see "System follows your device"
+  - click "Dark"
+  - reload
+  - see "System follows your device"
+judge: Is it easy to find where the theme is changed?
