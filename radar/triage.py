@@ -20,6 +20,13 @@ PROMPT = (ROOT / "prompts" / "triage.md").read_text()
 MAX_BATCHES = 8  # 15 roles each
 
 
+def usable(r, ids):
+    """Anything else leaves the role unscored for the next run: a bad reply must never skip a role or score another."""
+    return (isinstance(r, dict) and isinstance(r.get("id"), str) and r["id"] in ids
+            and type(r.get("score")) is int and 1 <= r["score"] <= 10
+            and isinstance(r.get("why"), str) and bool(r["why"].strip()))
+
+
 def score_batch(profile_path, todo):
     batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": (j.get("description") or "")[:6000]} for j in todo[:15]]
     prompt = PROMPT.replace("{{PROFILE}}", profile_path.read_text()).replace("{{JOBS}}", json.dumps(batch, ensure_ascii=False))
@@ -29,16 +36,21 @@ def score_batch(profile_path, todo):
         sys.exit(f"scoring failed: {e}")
     if "[" not in text:
         sys.exit(f"scoring failed: unexpected reply {text.strip()[:200]}")
-    results = json.loads(text[text.index("["): text.rindex("]") + 1])
+    try:
+        results = json.loads(text[text.index("["): text.rindex("]") + 1])
+    except ValueError:
+        sys.exit(f"scoring failed: unexpected reply {text.strip()[:200]}")
+    ids = {b["id"] for b in batch}
 
     threshold = load_config()["notify_min_score"]
     alerts = []
     with locked(JOBS) as store:  # re-read: the cockpit may have changed things meanwhile
         for r in results:
-            j = store.get(r["id"])
+            j = store.get(r["id"]) if usable(r, ids) else None
             if not j:
                 continue
-            j.update(score=r["score"], why=r["why"], flags=r.get("flags", []))
+            flags = r.get("flags")
+            j.update(score=r["score"], why=r["why"], flags=flags if isinstance(flags, list) else [])
             if r["score"] < 5 and j.get("stage") == "new":
                 j["stage"] = "skipped"
             if r["score"] >= threshold:
