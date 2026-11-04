@@ -59,6 +59,10 @@ def fetch_bytes(url: str, timeout: int = 30) -> bytes:
 
 
 _known = None
+_listed: set = set()
+# Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
+PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee"}
+MISSES_TO_CLOSE = 2
 
 
 def known_jobs() -> dict:
@@ -112,6 +116,7 @@ def greenhouse(company: str, slug: str):
     out = []
     for j in get_json(base).get("jobs", []):
         title = j["title"]
+        _listed.add(f"gh:{slug}:{j['id']}")  # every live job, even titles the filter drops, so nothing looks closed by mistake
         if not cfg["title_include"].search(title) or cfg["title_exclude"].search(title):
             continue
         jid = f"gh:{slug}:{j['id']}"
@@ -263,6 +268,27 @@ def matches(job, cfg, hn=False) -> bool:
             and bool(cfg["location_include"].search(job["location"])))
 
 
+_boards_answered: set = set()
+
+
+def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
+    """Roles gone from a board that answered, two scans running, are marked closed; if one returns, it's reopened."""
+    closed = []
+    for jid, j in store.items():
+        board = ":".join(jid.split(":")[:2])
+        if board not in answered:
+            continue
+        if jid in live:
+            j.pop("missed", None)
+            j.pop("ad_closed", None)
+        elif not j.get("ad_closed"):
+            j["missed"] = j.get("missed", 0) + 1
+            if j["missed"] >= MISSES_TO_CLOSE:
+                j["ad_closed"] = now
+                closed.append(j)
+    return closed
+
+
 def fetch_all():
     rows = list(csv.DictReader(watchlist_path().open()))
     tasks = [(r["company"], r["ats"], r["slug"]) for r in rows if r["ats"] in SOURCES]
@@ -271,15 +297,20 @@ def fetch_all():
     def run(t):
         company, ats, slug = t
         try:
-            return SOURCES[ats](company, slug), None
+            return t, SOURCES[ats](company, slug), None
         except Exception as e:  # one dead board shouldn't stop the scan
-            return [], (company, f"{ats}:{slug}: {e}")
+            return t, [], (company, f"{ats}:{slug}: {e}")
 
+    answered = set()
     with ThreadPoolExecutor(max_workers=6) as pool:
-        for found, err in pool.map(run, tasks):
+        for (_, ats, slug), found, err in pool.map(run, tasks):
             jobs += found
             if err:
                 errors.append(err)
+            elif ats in PREFIX:
+                answered.add(f"{PREFIX[ats]}:{slug}")
+    _boards_answered.clear()
+    _boards_answered.update(answered)
     (DATA / "board_errors.json").write_text(json.dumps(dict(e for e in errors if isinstance(e, tuple))))
     errors = [e if isinstance(e, str) else f"{e[0]} ({e[1]})" for e in errors]
     if load_config().get("source_hn", True):
@@ -297,7 +328,9 @@ def main():
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     new = []
+    live = {j["id"] for j in jobs} | _listed
     with locked(JOBS) as store:
+      closed = mark_closed(store, _boards_answered, live, now)
       for j in jobs:
         hn = j.pop("_hn", False)
         if not matches(j, cfg, hn):
