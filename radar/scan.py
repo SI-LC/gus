@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import csv
 import html
+import http.client
 import json
 import re
 import shutil
 import sys
+import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -35,8 +38,17 @@ def fetch_bytes(url: str, timeout: int = 30) -> bytes:
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = r.read(MAX_RESPONSE + 1)
+    for attempt in range(3):  # wifi connections drop now and then; a 4xx won't change, so don't retry those
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = r.read(MAX_RESPONSE + 1)
+            break
+        except urllib.error.HTTPError:
+            raise
+        except (OSError, http.client.HTTPException):
+            if attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
     if len(data) > MAX_RESPONSE:
         raise ValueError(f"Response too large: {url[:60]}")
     return data
@@ -217,7 +229,7 @@ def fetch_all():
         except Exception as e:  # one dead board shouldn't stop the scan
             return [], (company, f"{ats}:{slug}: {e}")
 
-    with ThreadPoolExecutor(max_workers=12) as pool:
+    with ThreadPoolExecutor(max_workers=6) as pool:
         for found, err in pool.map(run, tasks):
             jobs += found
             if err:
