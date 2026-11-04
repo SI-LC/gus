@@ -39,6 +39,11 @@ def _total(items) -> dict:
             "searches": sum(r.get("searches") or 0 for r in items)}
 
 
+def today_cost() -> float:
+    today = str(date.today())
+    return sum(r.get("cost_usd") or 0 for r in rows() if r.get("kind") == "ai" and r["at"][:10] == today)
+
+
 def summary() -> dict:
     all_rows = rows()
     today = date.today()

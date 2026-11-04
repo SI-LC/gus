@@ -10,10 +10,27 @@ import json
 import os
 import subprocess
 import urllib.request
+from datetime import date
 
 from radar import usage
-from radar.scan import ROOT, load_config
+from radar.scan import DATA, ROOT, load_config
 from radar.settings import secret
+
+
+class BudgetReached(RuntimeError):
+    """Today's AI limit is used up; runs resume tomorrow or when the limit is raised."""
+
+
+def _check_budget(cfg):
+    limit = float(cfg.get("ai_daily_budget_usd") or 0)
+    if limit and usage.today_cost() >= limit:
+        flag = DATA / "budget_notified"
+        today = str(date.today())
+        if not flag.exists() or flag.read_text() != today:
+            flag.write_text(today)
+            from radar.notify import notify
+            notify("PM Radar: daily AI limit reached", "", f"AI runs are paused until tomorrow (limit ${limit:g}).")
+        raise BudgetReached(f"Daily AI limit of ${limit:g} reached")
 
 
 class NeedsTools(Exception):
@@ -33,9 +50,11 @@ def _claude_env(provider):
 
 
 def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, timeout: int = 900,
-        deny: list[str] | None = None) -> str:
+        deny: list[str] | None = None, budget: bool = True) -> str:
     """task picks the model (scoring | people | agent). tools are Claude Code tool rules."""
     cfg = load_config()
+    if budget:
+        _check_budget(cfg)
     provider = cfg.get("ai_provider", "claude_subscription")
     if provider == "openai_compatible":
         if tools:
@@ -83,7 +102,7 @@ def _openai(prompt, cfg):
 def test() -> dict:
     """Small round-trip used by the cockpit's Test connection button."""
     try:
-        text = run('Reply with exactly: {"ok": true}', task="scoring", timeout=120)
+        text = run('Reply with exactly: {"ok": true}', task="scoring", timeout=120, budget=False)
         return {"ok": '"ok"' in text, "reply": text.strip()[:200]}
     except Exception as e:
         return {"ok": False, "reply": str(e)[:300]}

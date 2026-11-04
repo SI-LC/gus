@@ -9,6 +9,7 @@
   "model_scoring": "sonnet",
   "model_people": "sonnet",
   "model_agent": "opus",
+  "ai_daily_budget_usd": 10,
   "openai_base_url": "https://api.openai.com/v1",
   "openai_model": "gpt-4.1-mini",
 

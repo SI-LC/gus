@@ -52,6 +52,17 @@ Python 3.9+, standard library only. Scoring and the agent need [Claude Code](htt
 **The cockpit** is where you work: new roles (shortlist or skip), the pipeline, the outreach queue with drafted
 messages, the watchlist (remove companies you don't want) and radar health.
 
+## Run it on a Raspberry Pi
+
+Always on, with the cockpit private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi, and Tailscale and Claude Code installed and logged in.
+
+```bash
+git clone https://github.com/<you>/pm-radar && cd pm-radar
+sudo bash deploy/install-pi.sh
+```
+
+Then turn on HTTPS certificates in the Tailscale admin console, open `https://<your-pi>.<your-tailnet>.ts.net`, set that as **Cockpit address** under Settings → Notifications, and turn on the built-in scheduler under Settings → Schedule.
+
 ## Make it yours
 
 **Add a company.** Add a line to `watchlist.csv` (your copy of [`watchlist.example.csv`](watchlist.example.csv)), or let the watchlist loop do it:

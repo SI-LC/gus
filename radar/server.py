@@ -80,7 +80,7 @@ def state():
         "week": A.week_id(),
         "funnel": A.funnel(),
         "network": net_summary(),
-        "usage": usage.summary(),
+        "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
         "labels": {"events": A.EVENT_LABEL, "outcomes": A.OUTCOMES, "person_stages": A.PERSON_STAGES},
         "health": {
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),

@@ -38,6 +38,9 @@ SCHEMA = [
      "e.g. https://api.openai.com/v1, https://openrouter.ai/api/v1, or http://localhost:11434/v1 for Ollama."),
     ("openai_model", "OpenAI-compatible model", "text", "AI", "Only used when that provider is selected."),
 
+    ("ai_daily_budget_usd", "Daily AI limit (USD)", "money", "AI",
+     "Runs pause for the day at this much, in the equivalent API prices shown on Costs. 0 for no limit."),
+
     ("title_include", "Titles to include", "regex", "Matching", "Regular expression, case-insensitive."),
     ("title_exclude", "Titles to exclude", "regex", "Matching", "Regular expression, case-insensitive."),
     ("location_include", "Locations to include", "regex", "Matching", "Regular expression, case-insensitive."),
