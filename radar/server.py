@@ -1,4 +1,4 @@
-"""The PM Radar cockpit: a tiny local web app over the data files.
+"""The Gus cockpit: a tiny local web app over the data files.
 
     python3 -m radar.server                 # http://127.0.0.1:8484 (this machine only)
     python3 -m radar.server --host 0.0.0.0  # reachable on your network, e.g. on a Pi
@@ -30,7 +30,7 @@ MAX_BODY = 5_000_000
 STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-180.png": ("icon-180.png", "image/png"),
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
           "/favicon.ico": ("icon-180.png", "image/png")}
-MANIFEST = json.dumps({"name": "PM Radar", "short_name": "Radar", "start_url": "/", "display": "standalone",
+MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "display": "standalone",
                        "background_color": "#ff4f12", "theme_color": "#0b0b0a",
                        "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
                                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}).encode()
@@ -416,7 +416,7 @@ def main():
         sys.exit("Refusing to listen on the network without a cockpit token. Set one in Settings, Keys, first.")
     if host not in ("0.0.0.0", "::"):
         CLI_HOSTS.add(host.lower())
-    print(f"PM Radar cockpit on http://{host}:{port}")
+    print(f"Gus cockpit on http://{host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
