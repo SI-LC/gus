@@ -2,7 +2,7 @@
 # Runs on the Pi, sent by deploy.sh: update to a commit, check it works, and go back to the last commit if it doesn't.
 #   bash -s <short commit> < deploy/update-pi.sh
 set -euo pipefail
-cd ~/pm-radar
+cd ~/gus
 target=$1
 
 busy=$(curl -s --max-time 10 http://127.0.0.1:8484/api/run | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['running']))")
@@ -36,8 +36,8 @@ fi
 echo "$target didn't work. Going back to $previous."
 git reset -q --hard "$previous"
 if restart; then
-  echo "Rolled back: the Pi is running $previous. Check what went wrong with: journalctl -u pm-radar -n 30"
+  echo "Rolled back: the Pi is running $previous. Check what went wrong with: journalctl -u gus -n 30"
 else
-  echo "Rolled back to $previous, but the cockpit still isn't responding. Check: journalctl -u pm-radar -n 30"
+  echo "Rolled back to $previous, but the cockpit still isn't responding. Check: journalctl -u gus -n 30"
 fi
 exit 1

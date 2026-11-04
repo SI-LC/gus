@@ -8,7 +8,8 @@ HOME_DIR="$(getent passwd "$OWNER" | cut -d: -f6)"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PORT:-8484}"
 
-cat > /etc/systemd/system/pm-radar.service <<UNIT
+UNIT_DIR="${UNIT_DIR:-/etc/systemd/system}"
+cat > "$UNIT_DIR/gus.service" <<UNIT
 [Unit]
 Description=Gus cockpit and scheduler
 After=network-online.target tailscaled.service
@@ -33,7 +34,7 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable --now pm-radar.service
+systemctl enable --now gus.service
 tailscale serve --bg "$PORT"
 tailscale serve status
-echo "Gus is running. Logs: journalctl -u pm-radar -f"
+echo "Gus is running. Logs: journalctl -u gus -f"
