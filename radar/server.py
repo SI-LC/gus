@@ -120,6 +120,40 @@ def allowed_hosts() -> set:
     return names | set(CLI_HOSTS)
 
 
+def role_contact(body):
+    """You messaged a person about a role: record it on the role, their move and their stage."""
+    from radar import accounts as A
+    job_id, pid, sent = body.get("id"), body.get("person_id"), bool(body.get("sent", True))
+    if pid not in read(A.PEOPLE, {}):
+        return {"error": "No such person"}
+    with locked(JOBS) as store:
+        j = store.get(job_id)
+        if not j:
+            return {"error": "No such role"}
+        contacts = j.setdefault("contacts", {})
+        if sent:
+            contacts.setdefault(pid, now())
+        else:
+            contacts.pop(pid, None)
+    with locked(A.MOVES) as moves:
+        for m in moves.values():
+            if m.get("person_id") != pid:
+                continue
+            if sent and m.get("status") == "todo":
+                m.update(status="done", done_at=now())
+            elif not sent and m.get("status") == "done" and not m.get("outcome"):
+                m.update(status="todo", done_at=None)
+    with locked(A.PEOPLE) as people:
+        p = people[pid]
+        if sent and p.get("stage", "mapped") == "mapped":
+            p["stage"] = "contacted"
+            p.setdefault("history", []).append({"stage": "contacted", "at": now()})
+        elif not sent and p.get("stage") == "contacted":
+            p["stage"] = "mapped"
+            p.setdefault("history", []).append({"stage": "mapped", "at": now()})
+    return {"ok": True}
+
+
 def update_job(body):
     with locked(JOBS) as store:
         j = store.get(body.get("id"))
@@ -130,6 +164,11 @@ def update_job(body):
             j["stage"] = body["stage"]
         if "note" in body:
             j["note"] = str(body["note"])[:2000]
+        if "folder" in body:  # a path on your own computer: lives in data/ only, never in the repo
+            folder = str(body["folder"] or "").strip()
+            if "\n" in folder or len(folder) > 500:
+                return {"error": "That doesn't look like a folder path"}
+            j["folder"] = folder
         if "person" in body:
             p = (j.get("people") or [])[int(body["person"])]
             p["sent_at"] = now() if body.get("sent", True) else None
@@ -209,6 +248,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/job":
             return self.send(200, update_job(body))
+        if path == "/api/role-contact":
+            return self.send(200, role_contact(body))
         if path == "/api/company/veto":
             if body.get("name") not in read(COMPANIES, {}):
                 return self.send(200, {"error": "No such account"})

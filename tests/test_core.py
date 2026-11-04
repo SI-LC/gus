@@ -122,6 +122,30 @@ class AgentLimits(unittest.TestCase):
         self.assertIn("Read(./data/emails.json)", agent.NO_EMAIL)
 
 
+class RoleContact(unittest.TestCase):
+    def test_logging_a_message_updates_role_move_and_person(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from radar import accounts as A, server
+        d = Path(tempfile.mkdtemp())
+        files = {n: d / f"{n}.json" for n in ("jobs", "moves", "people")}
+        files["jobs"].write_text(json.dumps({"j": {"id": "j"}}))
+        files["moves"].write_text(json.dumps({"m": {"person_id": "p", "status": "todo"}, "other": {"person_id": "q", "status": "todo"}}))
+        files["people"].write_text(json.dumps({"p": {"name": "Pat", "stage": "mapped"}}))
+        with mock.patch.object(server, "JOBS", files["jobs"]), mock.patch.object(A, "MOVES", files["moves"]), mock.patch.object(A, "PEOPLE", files["people"]):
+            self.assertTrue(server.role_contact({"id": "j", "person_id": "p"}).get("ok"))
+            moves, people, jobs = [json.loads(files[n].read_text()) for n in ("moves", "people", "jobs")]
+            self.assertEqual((moves["m"]["status"], moves["other"]["status"]), ("done", "todo"))
+            self.assertEqual(people["p"]["stage"], "contacted")
+            self.assertIn("p", jobs["j"]["contacts"])
+            server.role_contact({"id": "j", "person_id": "p", "sent": False})
+            moves, people, jobs = [json.loads(files[n].read_text()) for n in ("moves", "people", "jobs")]
+            self.assertEqual((moves["m"]["status"], people["p"]["stage"], jobs["j"]["contacts"]), ("todo", "mapped", {}))
+
+
 class Distance(unittest.TestCase):
     CONNS = [{"name": "Ada Example", "url": "u", "company": "Acme Ltd", "position": "PM"}]
 

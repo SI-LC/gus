@@ -154,6 +154,9 @@
   .spark { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; height: 72px; align-items: end; padding: 8px; background: var(--surface); border: 1px solid var(--line); }
   .spark div { height: 100%; display: flex; align-items: flex-end; background: var(--sunk); }
   .spark i { display: block; width: 100%; min-height: 1px; background: var(--accent); }
+  button.mini { min-height: 26px; padding: 3px 7px; font-size: 10px; }
+  .extras { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .contact { width: 100%; } .contact button { margin-left: 4px; min-height: 22px; padding: 1px 6px; }
   .pill.warm { color: var(--mid); border-color: var(--mid); }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--sans); letter-spacing: -.01em; }
@@ -266,6 +269,28 @@ function routes(p) {
 }
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
 const TASKS = { scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs" };
+function roleExtras(j) {
+  const sent = p => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
+  const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 4).map(p => {
+    const at = sent(p);
+    return at ? `<div class="sub contact">Messaged <b>${esc(p.name)}</b> ${ago(at)} <button class="mini" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button></div>`
+      : `<button class="mini" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, true)">Messaged ${esc(p.name)}</button>`;
+  }).join("");
+  return `<div class="extras">${j.folder
+    ? `<button class="mini" onclick="copyPath(${jsq(j.folder)})">Copy folder path</button><button class="mini" onclick="setFolder(${jsq(j.id)}, ${jsq(j.folder)})">Change</button>`
+    : `<button class="mini" onclick="setFolder(${jsq(j.id)}, '')">Add folder</button>`}${who}</div>`;
+}
+async function roleContact(id, person_id, sent) { if (await post("/api/role-contact", { id, person_id, sent })) { toast(sent ? "Logged" : "Undone"); load(); } }
+async function setFolder(id, current) {
+  const folder = prompt("Path to this application's folder on your Mac:", current);
+  if (folder === null) return;
+  if (await post("/api/job", { id, folder })) { toast("Folder saved"); load(); }
+}
+async function copyPath(path) {
+  const done = () => toast("Copied. In Finder, press Cmd+Shift+G and paste");
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(path).then(done);
+  const a = Object.assign(document.createElement("textarea"), { value: path }); document.body.append(a); a.select(); document.execCommand("copy"); a.remove(); done();
+}
 function meetingsBlock() {
   const ms = S.meetings || [];
   if (!ms.length) return "";
@@ -391,7 +416,8 @@ const V = {
           <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
           ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
           <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
-          ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select></div>`;
+          ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>
+          ${roleExtras(j)}</div>`;
       }).join("") + `</div>`; }).join("");
     return `<h1>Pipeline</h1><p class="lede">Conversations with people, and applications for roles. Moves update people automatically when you log an outcome.</p>
       ${meetingsBlock()}
