@@ -61,6 +61,8 @@ git clone https://github.com/<you>/pm-radar && cd pm-radar
 sudo bash deploy/install-pi.sh
 ```
 
+To update it later, run `bash deploy/deploy.sh` from your own machine: it scans the code, pushes to GitHub, updates the Pi and checks it came back.
+
 Then turn on HTTPS certificates in the Tailscale admin console, open `https://<your-pi>.<your-tailnet>.ts.net`, set that as **Cockpit address** under Settings → Notifications, and turn on the built-in scheduler under Settings → Schedule.
 
 ## Make it yours

@@ -55,7 +55,7 @@ SCHEMA = [
     ("watchlist_every_days", "Watchlist loop every (days)", "int:1-30", "Schedule", "Finds, enriches and assesses companies."),
     ("watchlist_time", "Watchlist loop time", "times", "Schedule", "24h time, e.g. 07:30."),
     ("moves_day", "Plan the week on", "select:weekday", "Schedule", "The agent picks this week's moves (at most 5)."),
-    ("moves_time", "Plan the week at", "times", "Schedule", "24h time, e.g. 07:45."),
+    ("moves_time", "Plan the week at", "times", "Schedule", "24h time. Runs after the morning scan and discovery, so it plans on fresh signals."),
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
 
     ("source_hn", "HN Who is hiring", "bool", "Feeds", "Monthly thread, scanned with the job boards."),

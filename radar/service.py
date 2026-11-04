@@ -10,6 +10,7 @@ buttons in the cockpit work either way.
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import sys
 import threading
@@ -21,6 +22,7 @@ from radar.scan import DATA, ROOT, load_config
 
 STATE = DATA / "schedule_state.json"
 _lock = threading.Lock()
+_queue: queue.Queue = queue.Queue()
 running: dict[str, str] = {}   # job -> started at
 last: dict[str, dict] = {}     # job -> {"at", "ok", "summary"}
 
@@ -37,23 +39,37 @@ def _save(s):
     STATE.write_text(json.dumps(s, indent=2))
 
 
+def _scan():
+    out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+    return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
+
+
 def _do(job):
-    if job == "scan":
-        out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=1800, cwd=ROOT)
-        return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
+    if job == "scan":  # scan, score everything unscored, map people
+        return _scan()
     from radar import agent
+    if job == "cycle":  # the full run: scan and score, discover, then score what discovery found
+        ok, _ = _scan()
+        report = agent.run("discover")
+        ok2, _ = _scan()
+        return ok and ok2, report.strip()[-300:]
     report = agent.run({"agent": "discover"}.get(job, job))
     return True, report.strip()[-300:]
 
 
 def start(job: str) -> bool:
-    """Run a job in the background unless it's already running."""
+    """Queue a job. Jobs run strictly one at a time, so two agents never edit the same files."""
     with _lock:
         if job in running:
             return False
         running[job] = datetime.now().isoformat(timespec="seconds")
+    _queue.put(job)
+    return True
 
-    def go():
+
+def worker():
+    while True:
+        job = _queue.get()
         try:
             ok, summary = _do(job)
         except Exception as e:
@@ -65,9 +81,6 @@ def start(job: str) -> bool:
             s = _state()
             s.setdefault("results", {})[job] = last[job]
             _save(s)
-
-    threading.Thread(target=go, daemon=True).start()
-    return True
 
 
 def _times(spec):
@@ -117,14 +130,17 @@ def scheduler():
                         if slot and not str(s.get(job, "")).startswith(str(now.date())):
                             s[job] = f"{now.date()} {slot}"
                     _save(s)
-                for job in due(now, cfg, s):
+                jobs = due(now, cfg, s)
+                if "scan" in jobs and "agent" in jobs:  # same slot: one run, in order, not two at once
+                    jobs = ["cycle"] + [j for j in jobs if j not in ("scan", "agent")]
+                for job in jobs:
                     if start(job):
                         s = _state()
-                        if job == "scan":
+                        if job in ("scan", "cycle"):
                             s["scan"] = f"{now.date()} {current_slot(now, cfg.get('scan_times'))}"
-                        elif job == "agent":
+                        if job in ("agent", "cycle"):
                             s["agent"] = f"{now.date()} {current_slot(now, agent_spec(now, cfg))}"
-                        else:
+                        if job in ("watchlist", "moves"):
                             s[job] = str(now.date())
                         _save(s)
             first = False
@@ -142,6 +158,7 @@ def status() -> dict:
 
 
 def main():
+    threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=scheduler, daemon=True).start()
     from radar import server
     server.main()

@@ -23,6 +23,11 @@ interviewing → closed, or skipped); a role scoring 7+ counts as a signal on it
 - **"what's firing"**: `python3 -m radar.accounts brief`, summarised by account.
 - **"applied to <role>"**: update the stage and record the date.
 
+## Deploying
+
+Always `bash deploy/deploy.sh`: it runs the code scan (`deploy/scan.sh`), pushes to GitHub, updates the Pi and
+checks it's serving that commit. Never edit code on the Pi, and never push with `--no-verify`.
+
 ## Rules
 
 - Never submit applications, enter credentials or message anyone on the candidate's behalf. Draft only.

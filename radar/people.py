@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sys
 import urllib.parse
-from datetime import date
+from datetime import date, timedelta
 
 from radar import ai
 from radar.accounts import COMPANIES, PEOPLE, brief, person_id, read
@@ -21,6 +21,7 @@ from radar.store import locked
 
 PROMPT = (ROOT / "prompts" / "people.md").read_text()
 MIN_PEOPLE = 2
+RETRY_DAYS = 7
 
 
 def bluesky(company: str, limit: int = 25):
@@ -73,8 +74,13 @@ def main():
     if len(sys.argv) > 1:
         targets = [" ".join(sys.argv[1:])]
     else:
-        targets = [a["account"] for a in brief()["accounts"] if len(a["people"]) < MIN_PEOPLE]
+        companies = read(COMPANIES, {})
+        recent = str(date.today() - timedelta(days=RETRY_DAYS))
+        targets = [a["account"] for a in brief()["accounts"] if len(a["people"]) < MIN_PEOPLE
+                   and (companies.get(a["account"], {}).get("people_checked") or "") < recent]
     for name in targets[:4]:  # a few per run keeps each scan quick
+        with locked(COMPANIES) as companies:  # hard accounts wait a week, rather than being searched every run
+            companies.setdefault(name, {})["people_checked"] = str(date.today())
         try:
             added = map_account(name)
         except ai.NeedsTools as e:

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Nothing reaches GitHub without passing the code scan.
+exec bash deploy/scan.sh

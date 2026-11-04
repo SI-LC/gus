@@ -6,7 +6,6 @@ Runs only when scan found something, so Claude is called rarely.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -18,15 +17,11 @@ from radar.store import locked
 PROMPT = (ROOT / "prompts" / "triage.md").read_text()
 
 
-def main():
-    profile_path = ROOT / "profile" / "profile.md"
-    if not profile_path.exists():
-        sys.exit("profile/profile.md missing — copy profile/profile.example.md and fill it in")
-    store = json.loads(JOBS.read_text())
-    todo = [j for j in store.values() if j.get("score") is None]
-    if not todo:
-        return
-    batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": j["description"][:6000]} for j in todo[:15]]
+MAX_BATCHES = 8  # 15 roles each
+
+
+def score_batch(profile_path, todo):
+    batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": (j.get("description") or "")[:6000]} for j in todo[:15]]
     prompt = PROMPT.replace("{{PROFILE}}", profile_path.read_text()).replace("{{JOBS}}", json.dumps(batch, ensure_ascii=False))
     try:
         text = ai.run(prompt, task="scoring", timeout=600)
@@ -50,6 +45,20 @@ def main():
                 alerts.append((f"{r['score']}/10 · {j['company']}", j["title"], r["why"], j["url"]))
     for a in alerts:
         notify(*a)
+
+
+def main():
+    profile_path = ROOT / "profile" / "profile.md"
+    if not profile_path.exists():
+        sys.exit("profile/profile.md missing: copy profile/profile.example.md and fill it in")
+    seen = set()
+    for _ in range(MAX_BATCHES):  # score everything waiting, not just what this scan found
+        store = json.loads(JOBS.read_text())
+        todo = [j for j in store.values() if j.get("score") is None and j["id"] not in seen]
+        if not todo:
+            return
+        seen |= {j["id"] for j in todo[:15]}  # a role Claude skips isn't retried forever
+        score_batch(profile_path, todo)
 
 
 if __name__ == "__main__":
