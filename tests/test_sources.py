@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest import mock
 
 from radar import settings, sources
+from radar.scan import left_out, load_config
+from radar.settings import to_pattern
 
-CFG = {**{k: re.compile(v, re.I) if k.endswith(("include", "exclude")) else v for k, v in settings.load().items()},
-       "source_adzuna": True, "source_jsearch": True, "sources_searches": "product manager\nproduct lead", "adzuna_pages_per_search": 3}
+CFG = {**load_config(), "source_adzuna": True, "source_jsearch": True, "sources_searches": "product manager\nproduct lead", "adzuna_pages_per_search": 3}
 TODAY = date.today()
 
 
@@ -26,11 +27,12 @@ class Clean(unittest.TestCase):
         self.assertEqual((len(kept), dropped["repeat"]), (1, 1))
 
     def test_trialled_agencies_go_and_real_employers_stay(self):
-        cfg = CFG["source_company_exclude"]
-        self.assertTrue(cfg.search("Sterling Bridge Limited"))
-        self.assertTrue(cfg.search("SR2 REC LTD"))
-        self.assertFalse(cfg.search("Talent Systems"))
-        self.assertFalse(cfg.search("United Talent Agency"))
+        out = lambda name: left_out(name, CFG, "source_company_exclude")
+        self.assertTrue(out("Sterling Bridge Limited"))
+        self.assertTrue(out("SR2 REC LTD"))
+        self.assertTrue(out("Vivo Talent"))
+        self.assertFalse(out("Talent Systems"))
+        self.assertFalse(out("United Talent Agency"))
 
     def reasons(self, rows, store=None):
         return sources.clean(rows, store or {}, CFG)
@@ -61,7 +63,7 @@ class Clean(unittest.TestCase):
         self.assertEqual((kept, dropped["not a match"]), ([], 2))
 
     def test_an_empty_setting_removes_nothing(self):
-        cfg = {**CFG, "source_company_exclude": re.compile(""), "source_text_exclude": re.compile("")}
+        cfg = {**CFG, "source_company_exclude": re.compile(to_pattern("")), "source_text_exclude": re.compile(to_pattern(""))}
         self.assertEqual(len(sources.clean([role(1)], {}, cfg)[0]), 1)
 
 
