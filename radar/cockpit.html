@@ -299,7 +299,7 @@ function routes(p) {
       <input type="text" id="via-${esc(p.id)}" placeholder="Mutual connection" value="${esc(p.via || "")}" aria-label="Mutual connection" onchange="setDegree(${jsq(p.id)})" style="flex:1;min-width:140px;max-width:240px"></div></div>`;
 }
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
-const TASKS = { scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs" };
+const TASKS = { scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
 function roleExtras(j) {
   const sent = p => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
   const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 4).map(p => {

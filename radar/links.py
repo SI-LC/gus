@@ -4,20 +4,85 @@
 
 Public job boards are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes
 when the same title is found on the company's board. Otherwise the role keeps its link and the cockpit offers a web search.
+
+With "Find employer pages with AI" on in Settings, strong roles still without a link get a Claude web search. That uses
+your Claude allowance, so it's limited per run and stops at your daily AI limit.
 """
 from __future__ import annotations
 
 import csv
 import json
+import re
+import urllib.error
 from datetime import date
+from urllib.parse import urlparse
 
+from radar import ai
 from radar.resolve import resolve
-from radar.scan import JOBS, SOURCES, watchlist_path
+from radar.scan import JOBS, ROOT, SOURCES, fetch_bytes, load_config, watchlist_path
 from radar.sources import LABEL, same_company, same_title
 from radar.store import locked
 
 MIN_SCORE = 5  # the same line as the Role Inbox: anything you might open
 PER_RUN = 40  # each company tries several boards and names, so keep a run polite
+
+
+JOB_SITES = re.compile(r"(^|\.)(linkedin|adzuna|indeed|glassdoor|totaljobs|reed|jobleads|jooble|bebee|jobijoba|simplyhired|talent|jobrapido|cv-library|"
+                       r"monster|ziprecruiter|justlondonjobs|efinancialcareers|otta|welcometothejungle|builtin|google|bing)\.", re.I)
+NO_TOOLS = ["Read", "Grep", "Glob", "Bash", "Edit", "Write"]  # web pages can hold instructions, so it can only search and read the web
+
+
+def usable(url) -> bool:
+    """Only a real web address that isn't a job site, and doesn't answer 'gone'. A site blocking the check still counts."""
+    parsed = urlparse(str(url or ""))
+    if parsed.scheme != "https" or not parsed.hostname or JOB_SITES.search(parsed.hostname) or parsed.path in ("", "/"):
+        return False
+    try:
+        fetch_bytes(str(url), timeout=20)
+    except urllib.error.HTTPError as e:
+        return e.code not in (404, 410)
+    except Exception:
+        pass
+    return True
+
+
+def ai_find(job):
+    """The employer's page from a Claude web search, or None."""
+    about = {k: job.get(k) for k in ("company", "title", "location")} | {"description": (job.get("description") or "")[:800]}
+    prompt = (ROOT / "prompts" / "find_link.md").read_text().replace("{{JOB}}", json.dumps(about, ensure_ascii=False))
+    text = ai.run(prompt, task="links", tools=["WebSearch", "WebFetch"], deny=NO_TOOLS, timeout=300)
+    try:
+        url = json.loads(text[text.index("{"): text.rindex("}") + 1]).get("url")
+    except (ValueError, AttributeError):
+        return None
+    return url if usable(url) else None
+
+
+def ai_waiting(store, cfg) -> list:
+    return [j for j in store.values() if j.get("source") in LABEL and (j.get("score") or 0) >= int(cfg.get("links_ai_min_score", 7))
+            and j.get("link_checked") and j.get("link_kind") != "company" and not j.get("ai_link_checked")
+            and j.get("stage") != "skipped" and not j.get("ad_closed")][:int(cfg.get("links_ai_per_run", 5))]
+
+
+def run_ai(cfg) -> None:
+    done = {}
+    for j in ai_waiting(json.loads(JOBS.read_text()) if JOBS.exists() else {}, cfg):
+        try:
+            done[j["id"]] = ai_find(j)
+        except (ai.BudgetReached, ai.NeedsTools) as e:
+            print(f"AI link search stopped: {e}")
+            break
+        except Exception as e:  # tried again next time
+            print(f"{j['company']}: {type(e).__name__}")
+    with locked(JOBS) as store:
+        for jid, url in done.items():
+            j = store.get(jid)
+            if not j:
+                continue
+            j["ai_link_checked"] = str(date.today())
+            if url:
+                j.update(source_url=j["url"], url=url, link_kind="company")
+    print(f"AI searched {len(done)} roles, found {sum(bool(u) for u in done.values())} employer pages")
 
 
 def find(company, title, boards):
@@ -72,6 +137,9 @@ def main():
             if hit:
                 j.update(source_url=j["url"], url=hit["url"], link_kind="company", board={"ats": hit["ats"], "slug": hit["slug"]})
     print(f"Checked {len(found)} roles, found {sum(bool(h) for h in found.values())} on company sites")
+    cfg = load_config()
+    if cfg.get("links_ai_search"):
+        run_ai(cfg)
 
 
 if __name__ == "__main__":
