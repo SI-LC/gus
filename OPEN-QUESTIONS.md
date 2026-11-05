@@ -38,6 +38,12 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 
 ## Sources
 
+- **Adzuna and JSearch trial.** A 14-day quality trial has been run, and nothing from it is in live Gus. Adzuna passed the proposed bar, and the permanent integration still needs a go-ahead. JSearch isn't proven: five searches gave no results or didn't run, so its result is incomplete. Still to decide:
+  - Rerun the five missing JSearch searches, using up to 20 free requests?
+  - Is the proposed bar right: at least five new 7+ roles, at least three good new companies, and under one in ten junk? Should "new 7+ roles" count only roles the candidate would also consider?
+  - Confirm Adzuna's limits for this account before it runs regularly.
+  - Should the company check rank roles lower rather than remove them?
+  - Adzuna only gives short job extracts, so are its scores reliable enough?
 - Big companies run their own careers sites, which this can't scan and whose rules may forbid it. Options are job alert emails, which depend on the email decision, or adding roles by hand.
 - Most VC job boards need a browser, so they're left to agents. Some sites block automated access entirely.
 - Optional keys: X, Reddit, Companies House. ntfy for phone notifications isn't set up.
