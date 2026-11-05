@@ -1,0 +1,11 @@
+id: role-inbox-remembers-filters
+requirement: Role Inbox opens on the place and role type I last looked at.
+given: scanned
+check:
+  - open Role Inbox
+  - pick "Remote"
+  - pick "Forward deployed"
+  - reload
+  - '"Remote" is picked'
+  - '"Forward deployed" is picked'
+judge: Does coming back to Role Inbox feel like picking up where I left off?

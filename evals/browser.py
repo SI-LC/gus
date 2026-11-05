@@ -32,6 +32,10 @@ def step(page, text):
         assert m[1] in shown and m[2] in shown and shown.index(m[1]) < shown.index(m[2]), f"{m[1]!r} isn't before {m[2]!r}"
     elif m := re.fullmatch(r'click "(.+)"', text):
         page.locator("#main").get_by_text(m[1], exact=True).first.click()
+    elif m := re.fullmatch(r'pick "(.+)"', text):
+        page.locator("#main .chips-row a", has_text=m[1]).first.click()
+    elif m := re.fullmatch(r'"(.+)" is picked', text):
+        page.locator("#main .chips-row a.on", has_text=m[1]).first.wait_for(timeout=WAIT_MS)
     elif text == "reload":
         page.reload()
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)
