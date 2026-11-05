@@ -13,13 +13,13 @@ Skip anything already present, whatever its status. Never re-add a company with 
 
 - **VCs** (`vcs.csv`): for each VC, look for companies added to its portfolio or announced in the
   last ~3 weeks (portfolio page, the VC's news and blog, and "<VC> leads Series" searches). Where the
-  `jobs` column has a portfolio job board, look there for companies hiring PMs in London.
-- **New in London**: "opening London office", "launches in the UK", "London hub", new UK
-  general managers, and UK branches of overseas companies (Companies House when a key exists in
+  `jobs` column has a portfolio job board, look there for companies hiring the candidate's target roles in their locations.
+- **New in a target location**: new offices, local launches and hubs, new regional
+  general managers, and local branches of overseas companies (Companies House when a key exists in
   `.companies_house_key`, otherwise news).
-- **Funding**: Series A+ rounds for UK/European or London-hiring companies (Sifted, TechCrunch,
+- **Funding**: Series A+ rounds for companies in, or hiring in, the candidate's region (Sifted, TechCrunch,
   EU-Startups, UKTN, plus new signals in `data/signals.json`).
-- **Programmes and lists**: Entrepreneur First, YC companies with London staff, Air Street's
+- **Programmes and lists**: Entrepreneur First, YC companies with staff in a target location, Air Street's
   State of AI, Sifted's lists.
 - **Lookalikes**: 2 per top-5 company by fit score.
 Aim for 10–30 candidates per run; quality over volume.
@@ -33,7 +33,7 @@ For flagged companies, read their `pending_signals` first, then clear `pending_s
 ## 3. Assess fit (1–10)
 Score against the candidate profile:
 - **Domain**: the domains listed under "What I want" in the profile
-- **London**: real London presence where PMs sit (not just a sales office)
+- **Location**: real presence in a target location where the target role sits (not just a sales office)
 - **Stage and health**: Series A+ with runway; recent layoffs or a down round count against
 - **PM demand**: has a product team and hires PMs at senior/staff level
 - **Edge**: would the candidate's strongest experience (the "Strongest edge" in their profile) be a

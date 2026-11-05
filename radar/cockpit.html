@@ -579,7 +579,7 @@ const SETTINGS_TABS = [
       <span class="sub">${SET.run.last.sources ? `${SET.run.last.sources.ok ? "Last run" : "Had a problem"} ${ago(SET.run.last.sources.at)}: ${esc(String(SET.run.last.sources.summary).slice(-160))}` : "Not run yet"}</span></div></div>
       ${sourceLimits(SET.sources)}${fieldsOf("Source limits")}</section>
     <section class="group"><h2>Details</h2>${fieldsOf("Source details")}</section>`],
-  ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Posts that mention a product role and one of your locations become signals for the agent. LinkedIn and Threads don't allow keyword search by other apps.</p>${fieldsOf("Social")}</section>`],
+  ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Posts that mention a target role and one of your locations become signals for the agent. LinkedIn and Threads don't allow keyword search by other apps.</p>${fieldsOf("Social")}</section>`],
   ["feeds", "Newsletters", () => {
     const yours = SET.feeds.filter(f => !f.builtin), built = SET.feeds.filter(f => f.builtin);
     const have = new Set(SET.feeds.map(f => f.url.replace(/\/$/, "")));
