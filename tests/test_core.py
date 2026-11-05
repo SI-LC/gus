@@ -31,11 +31,12 @@ class Schedule(unittest.TestCase):
     CFG = {"run_time": "08:00"}
 
     def test_job_sources_check_daily_with_the_daily_run_off(self):
-        cfg = {"scheduler_enabled": False, "sources_auto": True, "sources_run_time": "09:00"}
+        cfg = {"scheduler_enabled": False, "sources_auto": True, "sources_run_time": "09:00", "source_adzuna": True}
         self.assertFalse(sources_due(at(4, 8, 59), cfg, {}))
         self.assertTrue(sources_due(at(4, 9), cfg, {}))
         self.assertFalse(sources_due(at(4, 10), cfg, {"sources": str(at(4, 10).date())}))
         self.assertFalse(sources_due(at(4, 9), {**cfg, "sources_auto": False}, {}))
+        self.assertFalse(sources_due(at(4, 9), {**cfg, "source_adzuna": False}, {}), "nothing automatic with sources off")
 
 
     def test_nothing_before_the_daily_time(self):

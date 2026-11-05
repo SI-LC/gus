@@ -395,11 +395,14 @@ function chipRow(label, options, value, name) {
 }
 const SOURCE_LABEL = { adzuna: "Adzuna", jsearch: "JSearch" };
 const limitLine = (s, r) => `<tr><td><b>${esc(s.label)}</b> ${esc(r.period)}${r.left <= 0 ? ' <span class="flag">At limit</span>' : ""}</td><td>${r.used} of ${r.limit} used</td><td>${r.left} left</td><td class="sub">Resets ${esc(r.resets)}${r.exact ? "" : " (estimate)"}</td></tr>`;
+const sourcesDue = list => (list || []).filter(s => s.on).map(s => ` ${s.label} next due: ${s.next_run || "now"}.`).join("");
 function sourceLimits(list) {
   const on = (list || []).filter(s => s.on || s.limits.some(r => r.used));
+  const warned = (list || []).flatMap(s => s.on ? s.warnings : []);
   if (!on.length) return `<div class="sub">No job sources turned on yet.</div>`;
   return `<table>${on.flatMap(s => s.limits.length ? s.limits.map(r => limitLine(s, r)) : [`<tr><td><b>${esc(s.label)}</b></td><td colspan="3" class="sub">Limit not checked yet: it appears after the next run.</td></tr>`]).join("")}</table>` +
-    on.map(s => `<div class="sub" style="margin-top:6px"><b>${esc(s.label)}:</b> ${s.has_key ? "" : "key missing. "}${s.last_run ? `last run ${esc(s.last_run)}, next due ${esc(s.next_run)}${s.last_result ? `. ${esc(s.last_result)}` : ""}` : "not run yet"}</div>`).join("");
+    on.map(s => `<div class="sub" style="margin-top:6px"><b>${esc(s.label)}:</b> ${s.has_key ? "" : "key missing. "}${s.last_run ? `last run ${esc(s.last_run)}, next due ${esc(s.next_run)}${s.last_result ? `. ${esc(s.last_result)}` : ""}` : "not run yet"}</div><div class="sub">${esc(s.plan)}</div>`).join("") +
+    warned.map(w => `<div style="margin-top:8px"><span class="flag">${esc(w)}</span></div>`).join("");
 }
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
@@ -559,7 +562,8 @@ const SETTINGS_TABS = [
     <section class="group"><h2>Limits and timing</h2><p class="sub">This doesn't need the daily run, which can stay off. Gus checks once a day, and a Full run checks too, but a source only makes requests when it's due and has allowance left. Check roles doesn't touch these sources.</p>
       <div class="field"><label>Job sources</label><div class="row"><button onclick="startRun('sources')">${SET.run.running.sources ? "Running…" : "Run what's due"}</button>
       <span class="sub">${SET.run.last.sources ? `${SET.run.last.sources.ok ? "Last run" : "Had a problem"} ${ago(SET.run.last.sources.at)}: ${esc(String(SET.run.last.sources.summary).slice(-160))}` : "Not run yet"}</span></div></div>
-      ${sourceLimits(S.health.sources)}${fieldsOf("Source limits")}</section>`],
+      ${sourceLimits(SET.sources)}${fieldsOf("Source limits")}</section>
+    <section class="group"><h2>Details</h2>${fieldsOf("Source details")}</section>`],
   ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Posts that mention a product role and one of your locations become signals for the agent. LinkedIn and Threads don't allow keyword search by other apps.</p>${fieldsOf("Social")}</section>`],
   ["feeds", "Newsletters", () => {
     const yours = SET.feeds.filter(f => !f.builtin), built = SET.feeds.filter(f => f.builtin);
@@ -665,7 +669,7 @@ function input(f, v) {
 async function saveField(key, el) {
   const value = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
   const d = await post("/api/settings", { changes: { [key]: value } });
-  if (d) { SET = d; toast("Saved"); if (key === "ai_provider") render(true); }
+  if (d) { SET = d; toast("Saved"); if (key === "ai_provider" || /^(source|adzuna|jsearch)/.test(key)) render(true); }
 }
 async function saveSecret(key) {
   const el = $("s_" + key);
@@ -718,7 +722,7 @@ function drawTicker() {
   const lastRun = ((S.last_runs || {}).run || {}).at || h.last_scan, fresh = lastRun && Date.now() - new Date(lastRun) < 26 * 36e5;
   drawProgress();
   const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
-  $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI." onclick="startRun('run')">${busy === "run" ? "Running…" : "Full run"}</button>
+  $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')">${busy === "run" ? "Running…" : "Full run"}</button>
     <button class="scan-now" title="Checks your job boards for new roles and scores them. Nothing else." onclick="startRun('scan')">${busy === "scan" ? "Checking…" : "Check roles"}</button>
     <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
     <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
@@ -793,8 +797,8 @@ function drawProgress() {
   const show = steps || ((S.running || []).length ? [] : null);
   el.hidden = !show;
   if (!show) return;
-  el.innerHTML = `<b>${p.job === "scan" ? "Check roles: scanning and scoring" : "Full run"}</b>` + show.map(s =>
-    `<span class="step ${esc(s.status)}" title="${esc(s.detail)}">${STEP_MARK[s.status] || ""} ${esc(s.name)}</span>`).join("");
+  el.innerHTML = `<b>${p.job === "scan" ? "Check roles: scanning and scoring" : p.job === "sources" ? "Job sources" : "Full run"}</b>` + show.map(s =>
+    `<span class="step ${esc(s.status)}" title="${esc(s.detail)}">${STEP_MARK[s.status] || ""} ${esc(s.name)}${s.name === "Job sources" && s.detail ? `: ${esc(s.detail)}` : ""}</span>`).join("");
 }
 let watching = null;
 function watchRun() {
@@ -804,13 +808,13 @@ function watchRun() {
     if ((S.running || []).length) return;
     clearInterval(watching); watching = null;
     const r = Object.values(S.last_runs || {}).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
-    toast(r ? `Finished: ${r.summary}`.slice(0, 180) : "Finished");
+    toast(r ? `Finished: ${r.summary}`.slice(0, 320) : "Finished");
   }, 4000);
 }
 async function startRun(job) {
   const d = await post("/api/run", { job });
   if (!d) return;
-  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : "Quick check started. It takes about 2 minutes");
+  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : job === "sources" ? "Checking job sources. Only those due make requests, and it can take a while" : "Quick check started. It takes about 2 minutes");
   await load(); watchRun();
 }
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }

@@ -53,9 +53,18 @@ def _scan():
 
 def _sources():
     """Job sources on their own: fetch whatever is due, then score it. Separate from scans and the daily run."""
+    if not _sources_on(load_config()):
+        return True, "Job sources are turned off"
+    before = _counts()["roles"]
     out = subprocess.run([sys.executable, "-m", "radar.sources"], capture_output=True, text=True, timeout=3600, cwd=ROOT)
-    _command("triage", "dashboard")
-    return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Nothing to do"
+    if _counts()["roles"] > before:  # nothing new means nothing to score
+        _command("triage", "dashboard")
+    lines = [line for line in out.stdout.splitlines() if line.strip() and not line.endswith("turned off")]
+    return out.returncode == 0, ". ".join(lines)[-300:] or "Nothing to do"
+
+
+def _sources_on(cfg) -> bool:
+    return bool(cfg.get("source_adzuna") or cfg.get("source_jsearch"))
 
 
 def _command(*modules):
@@ -96,7 +105,7 @@ def steps():
     every = cfg.get("watchlist_every_days", 3)
     return [
         ("Scan and score", _scan, lambda: None),
-        ("Job sources", _sources, lambda: None if cfg.get("source_adzuna") or cfg.get("source_jsearch") else "Turned off"),
+        ("Job sources", _sources, lambda: None if _sources_on(cfg) else "Turned off"),
         ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
         ("Discover", _agent_step("discover"), lambda: None),
         ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
@@ -107,7 +116,7 @@ def steps():
 
 def full_run():
     from radar import ai
-    before, stop = _counts(), None
+    before, stop, sources_note = _counts(), None, ""
     plan = steps()
     progress["steps"] = [{"name": n, "status": "waiting", "detail": ""} for n, _, _ in plan]
     ok = True
@@ -118,8 +127,10 @@ def full_run():
             continue
         step["status"] = "running"
         try:
-            good, _ = fn()
+            good, detail = fn()
             step["status"] = "done" if good else "failed"
+            if step["name"] == "Job sources":
+                step["detail"] = sources_note = detail
             ok = ok and good
         except ai.BudgetReached as e:  # nothing after this can use AI either
             stop = f"Stopped: {e}"
@@ -135,6 +146,7 @@ def full_run():
     after = _counts()
     new = after["roles"] - before["roles"]
     summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong, {_moves_this_week()} moves this week"
+    summary += f". {sources_note}" if sources_note else ""
     return ok and not stop, f"{stop}. {summary}" if stop else summary
 
 
@@ -188,7 +200,7 @@ def due(now: datetime, cfg: dict, s: dict) -> bool:
 def sources_due(now: datetime, cfg: dict, s: dict) -> bool:
     """Once a day, whether or not the daily run is on. Each source then decides if it's due, so an extra check costs nothing."""
     t = (_times(cfg.get("sources_run_time")) or [None])[0]
-    return bool(cfg.get("sources_auto") and t and now.strftime("%H:%M") >= t and s.get("sources") != str(now.date()))
+    return bool(_sources_on(cfg) and cfg.get("sources_auto") and t and now.strftime("%H:%M") >= t and s.get("sources") != str(now.date()))
 
 
 def scheduler():

@@ -120,6 +120,7 @@ def settings_payload():
         "feeds": [{k: f[k] for k in ("name", "url", "kind", "enabled", "builtin")} for f in all_feeds()],
         "suggested": [{"name": n, "url": u, "kind": k} for n, u, k in SUGGESTED],
         "run": service.status(),
+        "sources": sources.status(),
     }
 
 

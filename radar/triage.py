@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from radar import ai
+from radar import ai, salary
 from radar.notify import notify
 from radar.scan import JOBS, ROOT, load_config
 from radar.store import locked
@@ -53,7 +53,8 @@ def score_batch(profile_path, todo):
     except ScoringFailed as e:
         sys.exit(str(e))
 
-    threshold = load_config()["notify_min_score"]
+    cfg = load_config()
+    threshold = cfg["notify_min_score"]
     alerts = []
     with locked(JOBS) as store:  # re-read: the cockpit may have changed things meanwhile
         for r in results:
@@ -61,11 +62,15 @@ def score_batch(profile_path, todo):
             if not j:
                 continue
             flags = r.get("flags")
-            j.update(score=r["score"], why=r["why"], flags=flags if isinstance(flags, list) else [])
-            if r["score"] < 5 and j.get("stage") == "new":
+            flags = flags if isinstance(flags, list) else []
+            score, note = salary.apply(j, r["score"], cfg)
+            j.update(score=score, why=r["why"], flags=flags + [note] if note else flags)
+            if note:
+                j["score_before_salary"] = r["score"]
+            if score < 5 and j.get("stage") == "new":
                 j["stage"] = "skipped"
-            if r["score"] >= threshold:
-                alerts.append((f"{r['score']}/10 · {j['company']}", j["title"], r["why"], j["url"]))
+            if score >= threshold:
+                alerts.append((f"{score}/10 · {j['company']}", j["title"], r["why"], j["url"]))
     for a in alerts:
         notify(*a)
 

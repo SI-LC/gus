@@ -10,7 +10,7 @@ from unittest import mock
 from radar import settings, sources
 
 CFG = {**{k: re.compile(v, re.I) if k.endswith(("include", "exclude")) else v for k, v in settings.load().items()},
-       "source_adzuna": True, "source_jsearch": True, "sources_searches": "product manager\nproduct lead"}
+       "source_adzuna": True, "source_jsearch": True, "sources_searches": "product manager\nproduct lead", "adzuna_pages_per_search": 3}
 TODAY = date.today()
 
 
@@ -20,6 +20,18 @@ def role(n, company="Acme", title=None, posted=None, location="London, UK", text
 
 
 class Clean(unittest.TestCase):
+    def test_the_same_advert_under_another_title_is_a_repeat(self):
+        text = "Own the roadmap for our platform. " * 10
+        kept, dropped = self.reasons([role(1, text=text), role(2, text=text)])
+        self.assertEqual((len(kept), dropped["repeat"]), (1, 1))
+
+    def test_trialled_agencies_go_and_real_employers_stay(self):
+        cfg = CFG["source_company_exclude"]
+        self.assertTrue(cfg.search("Sterling Bridge Limited"))
+        self.assertTrue(cfg.search("SR2 REC LTD"))
+        self.assertFalse(cfg.search("Talent Systems"))
+        self.assertFalse(cfg.search("United Talent Agency"))
+
     def reasons(self, rows, store=None):
         return sources.clean(rows, store or {}, CFG)
 
@@ -69,20 +81,20 @@ class Limits(unittest.TestCase):
     def test_requests_are_counted_even_if_they_fail(self):
         st = {}
         with mock.patch.dict(sources.FETCH, adzuna=mock.Mock(side_effect=sources.Failed(502))):
-            *_, faults, _ = sources.collect("adzuna", CFG, st, 30, 14)
-        self.assertEqual((sum(st["adzuna"]["days"].values()), faults), (2, 2))
+            run = sources.collect("adzuna", CFG, st, 30, 14)
+        self.assertEqual((sum(st["adzuna"]["days"].values()), run["faults"]), (2, 2))
 
     def test_a_refusal_stops_the_source(self):
         st, fetch = {}, mock.Mock(side_effect=sources.Failed(429))
         with mock.patch.dict(sources.FETCH, adzuna=fetch):
-            *_, stopped = sources.collect("adzuna", CFG, st, 30, 14)
+            run = sources.collect("adzuna", CFG, st, 30, 14)
         self.assertEqual(fetch.call_count, 1)
-        self.assertIn("refused", stopped)
+        self.assertIn("refused", run["stopped"])
 
     def test_a_run_never_spends_more_than_its_allowance(self):
         st, fetch = {}, mock.Mock(side_effect=lambda t, p, c, a: [role(f"{t}{p}{i}") for i in range(50)])
         with mock.patch.dict(sources.FETCH, adzuna=fetch):
-            sources.collect("adzuna", {**CFG, "sources_pages_per_search": 10}, st, 3, 14)
+            sources.collect("adzuna", {**CFG, "adzuna_pages_per_search": 10}, st, 3, 14)
         self.assertEqual(fetch.call_count, 3)
 
     def test_jsearch_makes_no_requests_without_a_figure_from_today(self):
@@ -90,10 +102,101 @@ class Limits(unittest.TestCase):
         self.assertEqual(sources.budget("jsearch", CFG, {"jsearch": {"quota": old}}), 0)
         self.assertEqual(sources.budget("jsearch", CFG, {}), 0)
 
-    def test_jsearch_keeps_its_reserve(self):
-        q = {"limit": 200, "used": 170, "remaining": 30, "reset_at": "2026-12-05T00:00:00Z", "checked": str(TODAY)}
-        self.assertEqual(sources.budget("jsearch", {**CFG, "jsearch_reserve": 20}, {"jsearch": {"quota": q}}), 10)
-        self.assertEqual(sources.limits("jsearch", CFG, {"jsearch": {"quota": q}})[0]["resets"], "2026-12-05")
+    def quota(self, used, limit=200):
+        return {"limit": limit, "used": used, "remaining": limit - used, "reset_at": "2026-12-05T00:00:00Z", "checked": str(TODAY)}
+
+    def test_jsearch_stops_at_the_allowance_you_set(self):
+        st = {"jsearch": {"quota": self.quota(170)}}
+        cfg = {**CFG, "jsearch_allow_month": 180, "jsearch_every_days": 7}
+        self.assertEqual(sources.budget("jsearch", cfg, st), 10)
+        row = sources.limits("jsearch", cfg, st)[0]
+        self.assertEqual((row["limit"], row["left"], row["resets"]), (180, 10, "2026-12-05"))
+        self.assertEqual(sources.limits("jsearch", {**cfg, "jsearch_allow_month": 170}, st)[0]["left"], 0)
+
+    def test_the_allowance_is_shared_across_runs(self):
+        self.assertEqual(sources.per_run("jsearch", {**CFG, "jsearch_allow_month": 180, "jsearch_every_days": 1}), 6)
+        self.assertEqual(sources.per_run("jsearch", {**CFG, "jsearch_allow_month": 180, "jsearch_every_days": 7}), 42)
+
+    def test_a_cut_short_run_keeps_the_older_window(self):
+        st = {"adzuna": {"covered": str(TODAY - timedelta(days=9)), "last_run": str(TODAY - timedelta(days=2))}}
+        ages = []
+        with mock.patch.object(sources, "JOBS", Path(sources.STATE).parent / "jobs.json"), \
+             mock.patch.object(sources, "collect", side_effect=lambda n, c, s, l, a: ages.append(a) or {"rows": {}, "spent": 1, "empty": 0, "faults": 1, "cut": 0, "stopped": ""}):
+            sources.run_source("adzuna", {**CFG, "sources_max_age_days": 14}, st)
+        self.assertEqual(ages, [11])
+        self.assertEqual(st["adzuna"]["covered"], str(TODAY - timedelta(days=9)))
+
+    def test_a_weekly_jsearch_run_only_asks_for_a_week(self):
+        with mock.patch.object(sources, "call", return_value={}) as call:
+            sources.jsearch("pm", 1, CFG, 7 + sources.OVERLAP)
+        self.assertIn("date_posted=week", call.call_args.args[0])
+
+    def test_a_bad_usage_reply_is_not_trusted(self):
+        reply = {"data": {"plan": {}, "quotas": [{"limit": 200, "used": 0, "remaining": 200, "reset_at": None}]}}
+        with mock.patch.object(sources, "call", return_value=reply):
+            self.assertFalse(sources.refresh_quota({}))
+
+    def test_one_source_failing_doesnt_stop_the_other(self):
+        ran = []
+        def run_one(name, cfg, st):
+            ran.append(name)
+            raise RuntimeError("boom")
+        with mock.patch.object(sources, "run_one", run_one), mock.patch.object(sources, "load_config", return_value=CFG), \
+             mock.patch.object(sources, "secret", return_value="x"):
+            sources.main()
+        self.assertEqual(ran, ["adzuna", "jsearch"])
+
+    def test_a_limit_reached_during_a_run_is_reported(self):
+        st = {"adzuna": {"days": {str(TODAY): 249}}}
+        cfg = {**CFG, "adzuna_limit_day": 250}
+        def run(name, c, s):
+            sources.spend(s, name)
+            return "done"
+        with mock.patch.object(sources, "run_source", run), mock.patch.object(sources, "secret", return_value="x"), mock.patch("radar.notify.notify") as told:
+            sources.run_one("adzuna", cfg, st)
+        self.assertEqual(told.call_count, 1)
+
+    def test_a_skipped_run_says_when_its_next_due(self):
+        st = {"adzuna": {"last_run": str(TODAY)}}
+        self.assertIn("next due", sources.run_one("adzuna", {**CFG, "adzuna_every_days": 2}, st))
+
+    def test_old_untouched_roles_are_closed(self):
+        old = str(TODAY - timedelta(days=60))
+        store = {"a": {"source": "adzuna", "stage": "new", "posted": old}, "b": {"source": "adzuna", "stage": "shortlisted", "posted": old},
+                 "c": {"source": "board", "stage": "new", "posted": old}, "d": {"source": "jsearch", "stage": "new", "posted": str(TODAY)}}
+        sources.close_old(store, {**CFG, "sources_close_after_days": 45}, "now")
+        self.assertEqual([k for k, j in store.items() if j.get("ad_closed")], ["a"])
+
+    def warn(self, st=None, **cfg):
+        with mock.patch.object(sources, "secret", return_value="x"):
+            return " ".join(sources.warnings(cfg.pop("name", "jsearch"), {**CFG, **cfg}, st or {}))
+
+    def test_warns_about_a_free_plan_running_every_day(self):
+        q = {**self.quota(0), "free": True}
+        text = self.warn({"jsearch": {"quota": q}}, jsearch_allow_month=180, jsearch_every_days=1, jsearch_pages_per_search=3,
+                         sources_searches="a\nb\nc\nd\ne\nf\ng\nh")
+        self.assertIn("free plan", text)
+        self.assertIn("6 requests", text)
+
+    def test_warns_when_allowance_is_above_the_plan(self):
+        self.assertIn("gives 200", self.warn({"jsearch": {"quota": self.quota(0)}}, jsearch_allow_month=500))
+
+    def test_warns_about_a_missing_key(self):
+        with mock.patch.object(sources, "secret", return_value=""):
+            self.assertIn("key is missing", " ".join(sources.warnings("jsearch", CFG, {})))
+
+    def test_warns_until_adzuna_limits_are_confirmed(self):
+        self.assertIn("aren't confirmed", self.warn(name="adzuna"))
+        self.assertNotIn("aren't confirmed", self.warn(name="adzuna", adzuna_limits_confirmed=True))
+
+    def test_warns_when_a_search_was_cut_short(self):
+        self.assertIn("older ones were missed", self.warn({"adzuna": {"cut": 1}}, name="adzuna"))
+
+    def test_the_default_settings_raise_no_warning(self):
+        d = {**settings.load(), "source_adzuna": True, "adzuna_limits_confirmed": True}
+        with mock.patch.object(sources, "secret", return_value="x"):
+            self.assertEqual(sources.warnings("adzuna", d, {}), [])
+            self.assertEqual(sources.warnings("jsearch", d, {}), [])
 
     def test_runs_only_when_due(self):
         st = {"adzuna": {"last_run": str(TODAY - timedelta(days=1))}}
@@ -126,7 +229,7 @@ class Reading(unittest.TestCase):
             a = sources.adzuna("pm", 1, CFG, 14)[0]
         with mock.patch.object(sources, "call", return_value=js):
             j = sources.jsearch("pm", 1, CFG, 14)[0]
-        self.assertEqual(set(a), set(j))
+        self.assertEqual(set(a) - {"salary_max"}, set(j))
         self.assertEqual((a["location"], j["location"]), ("London, UK", "Remote, UK"))
 
     def test_the_location_comes_from_settings(self):

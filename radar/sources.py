@@ -11,6 +11,7 @@ and your limits in Settings: neither is in the repo.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import sys
@@ -34,6 +35,7 @@ REFUSED = (401, 403, 429)  # a refusal won't improve by trying again
 TIME_LIMIT = 900           # seconds per source, so a slow service can't use up the whole run
 FULL_PAGE = {"adzuna": 50, "jsearch": 1}
 PERIODS = ("day", "week", "month")
+OVERLAP = 2                # days re-checked each run, so nothing posted around a run is missed
 
 
 class Failed(Exception):
@@ -50,7 +52,7 @@ def call(url, headers=None):
             return json.load(r)
     except urllib.error.HTTPError as e:
         raise Failed(e.code) from None
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         raise Failed(0) from None
 
 
@@ -99,6 +101,7 @@ def limits(name, cfg, st, today=None) -> list:
         rows = []
         for p in PERIODS:
             limit = int(cfg.get(f"adzuna_limit_{p}", 0))
+            limit = min(limit, allowed(name, cfg)) if p == "month" else limit
             used = used_in(p, s.get("days", {}), today)
             rows.append({"period": p, "limit": limit, "used": used, "left": max(0, limit - used),
                          "resets": str(resets(p, today)), "exact": False})
@@ -106,20 +109,26 @@ def limits(name, cfg, st, today=None) -> list:
     q = s.get("quota")
     if not q:
         return []
-    return [{"period": "month", "limit": q["limit"], "used": q["used"], "left": q["remaining"],
+    limit = min(q["limit"], allowed(name, cfg))
+    return [{"period": "month", "limit": limit, "used": q["used"], "left": max(0, min(q["remaining"], limit - q["used"])),
              "resets": q["reset_at"][:10], "exact": True}]
+
+
+def per_run(name, cfg) -> int:
+    """The monthly allowance shared evenly across runs, so a free plan lasts the whole month."""
+    every = int(cfg.get(f"{name}_every_days", 7))
+    return max(1, int(allowed(name, cfg) * every / 30))
+
+
+def allowed(name, cfg) -> int:
+    return int(cfg.get(f"{name}_allow_month", 0))
 
 
 def budget(name, cfg, st) -> int:
     """How many requests this run may make. No confirmed figure means none, so a fault can't lead to overspending."""
-    rows = limits(name, cfg, st)
-    run = int(cfg.get(f"{name}_requests_per_run", 0))
-    if name == "jsearch":
-        q = st.get(name, {}).get("quota") or {}
-        if q.get("checked") != str(date.today()):
-            return 0
-        return max(0, min(run, q["remaining"] - int(cfg.get("jsearch_reserve", 0))))
-    return max(0, min([run] + [r["left"] for r in rows]))
+    if name == "jsearch" and (st.get(name, {}).get("quota") or {}).get("checked") != str(date.today()):
+        return 0
+    return max(0, min([per_run(name, cfg)] + [r["left"] for r in limits(name, cfg, st)]))
 
 
 def is_due(name, cfg, st, today=None) -> bool:
@@ -131,13 +140,66 @@ def refresh_quota(st) -> bool:
     """Ask JSearch how much is left. This doesn't use up a request."""
     url = JSEARCH_USAGE + "?" + urllib.parse.urlencode({"api_id": "jsearch"})
     try:
-        q = call(url, {"x-api-key": secret("jsearch_api_key")})["data"]["quotas"][0]
+        data = call(url, {"x-api-key": secret("jsearch_api_key")})["data"]
+        q = data["quotas"][0]
     except (Failed, KeyError, IndexError, TypeError):
         return False
-    st.setdefault("jsearch", {})["quota"] = {"limit": q["limit"], "used": q["used"], "remaining": q["remaining"],
-                                             "reset_at": q["reset_at"], "checked": str(date.today())}
+    if not (all(isinstance(q.get(k), int) for k in ("limit", "used", "remaining")) and isinstance(q.get("reset_at"), str)):
+        return False  # a reply we can't trust counts as no reply
+    st.setdefault("jsearch", {})["quota"] = {"limit": q["limit"], "used": q["used"], "remaining": q["remaining"], "reset_at": q["reset_at"],
+                                             "free": bool(((data.get("plan") or {}).get("is_free"))), "checked": str(date.today())}
     save_state(st)
     return True
+
+
+def searches(cfg) -> list:
+    return [t.strip() for t in str(cfg.get("sources_searches", "")).splitlines() if t.strip()]
+
+
+def plan(name, cfg) -> dict:
+    """The most a source could use, worked out from the settings. Real use is usually lower: searches stop when they run dry."""
+    every, pages = int(cfg.get(f"{name}_every_days", 7)), int(cfg.get(f"{name}_pages_per_search", 3))
+    wanted = len(searches(cfg)) * pages
+    month = round(wanted * 30 / every)
+    return {"wanted": wanted, "per_run": per_run(name, cfg), "month": month, "allowed": allowed(name, cfg),
+            "line": f"{len(searches(cfg))} searches × {pages} pages, every {every} day{'' if every == 1 else 's'}: up to {month} of the {allowed(name, cfg)} you've allowed a month"}
+
+
+def warnings(name, cfg, st) -> list:
+    """Choices that won't do what you'd expect, shown before any requests are spent."""
+    s, p, out = st.get(name, {}), plan(name, cfg), []
+    label, every, quota = LABEL[name], int(cfg.get(f"{name}_every_days", 7)), st.get(name, {}).get("quota") or {}
+    if cfg.get(f"source_{name}") and not all(secret(k) for k in KEYS[name]):
+        out.append(f"{label} is on but won't run: its key is missing.")
+    if not searches(cfg):
+        out.append("No searches set, so no roles will be found.")
+    if not re.fullmatch(r"[a-z]{2}", str(cfg.get("sources_country", ""))):
+        out.append("Country code should be two lower-case letters, like gb.")
+    if p["wanted"] > p["per_run"]:
+        better = next((d for d in (2, 3, 7, 14, 30) if d > every and allowed(name, cfg) * d / 30 >= p["wanted"]), None)
+        hint = f" Running every {better} days would cover them." if better else " Use fewer searches or pages."
+        free = "On a free plan, each" if quota.get("free") else "Each"
+        out.append(f"{free} run only gets {p['per_run']} requests but could need {p['wanted']}, so later searches may not run.{hint}")
+    if name == "adzuna" and allowed(name, cfg) > int(cfg.get("adzuna_limit_month", 0)):
+        out.append("You've allowed more each month than your Adzuna monthly limit, so the limit applies.")
+    if name == "jsearch" and quota and allowed(name, cfg) > quota["limit"]:
+        out.append(f"You've allowed {allowed(name, cfg)} a month, but your JSearch plan gives {quota['limit']}.")
+    if name == "adzuna" and cfg.get("source_adzuna") and not cfg.get("adzuna_limits_confirmed"):
+        out.append("Adzuna limits aren't confirmed: copy them from your account, then tick the box.")
+    rows = limits(name, cfg, st)
+    low = next((r for r in rows if 0 < r["left"] < p["per_run"]), None)
+    full = next((r for r in rows if r["left"] <= 0), None)
+    if full:
+        out.append(f"{label} is at its {full['period']}ly limit and paused until {nice(full['resets'])}.")
+    elif low:
+        out.append(f"Only {low['left']} {label} requests left until {nice(low['resets'])}, so the next run will stop early.")
+    if s.get("cut"):
+        out.append(f"{s['cut']} search{'es' if s['cut'] > 1 else ''} had more roles than the pages allowed, so older ones were missed. Raise the pages, or narrow the search.")
+    return out
+
+
+def nice(day) -> str:
+    return date.fromisoformat(str(day)).strftime("%a %-d %b")
 
 
 def status() -> list:
@@ -151,7 +213,8 @@ def status() -> list:
         next_run = str(date.fromisoformat(last) + timedelta(days=int(cfg.get(f"{name}_every_days", 7)))) if last else None
         out.append({"name": name, "label": LABEL[name], "on": bool(cfg.get(f"source_{name}")),
                     "has_key": all(secret(k) for k in KEYS[name]), "limits": rows, "at_limit": any(r["left"] <= 0 for r in rows),
-                    "last_run": last, "next_run": next_run, "last_result": s.get("last_result", "")})
+                    "last_run": last, "next_run": next_run, "last_result": s.get("last_result", ""),
+                    "plan": plan(name, cfg)["line"], "warnings": warnings(name, cfg, st)})
     return out
 
 
@@ -170,13 +233,15 @@ def adzuna(term, page, cfg, age):
         out.append({"id": f"adzuna:{r['id']}", "company": ((r.get("company") or {}).get("display_name") or "").strip(),
                     "title": (r.get("title") or "").strip(), "url": r.get("redirect_url"), "posted": r.get("created"),
                     "location": ", ".join(filter(None, [loc.get("display_name"), country])),
+                    "salary_max": None if str(r.get("salary_is_predicted")) != "0" else r.get("salary_max"),  # Adzuna's guesses don't count
                     "description": strip_html(r.get("description") or "")})
     return out
 
 
 def jsearch(term, page, cfg, age):
     place = cfg.get("sources_location") or {"gb": "United Kingdom"}.get(cfg.get("sources_country", "gb"), "")
-    window = "today" if age <= 1 else "3days" if age <= 3 else "week" if age <= 7 else "month"
+    since = age - OVERLAP  # JSearch only has fixed windows, so the overlap would otherwise push a weekly run up to a month
+    window = "today" if since <= 1 else "3days" if since <= 3 else "week" if since <= 7 else "month"
     q = {"query": f"{term} in {place}".strip(), "country": cfg.get("sources_country", "gb"), "date_posted": window, "page": page, "num_pages": 1}
     d = call(JSEARCH + "?" + urllib.parse.urlencode(q), {"x-api-key": secret("jsearch_api_key")})
     data = d.get("data")
@@ -209,6 +274,12 @@ def same_title(s) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", s)).strip()
 
 
+def ad_text(j) -> str:
+    """The same advert under a slightly different title. Short extracts are too alike to compare."""
+    text = re.sub(r"\W+", " ", (j.get("description") or "").lower())[:400]
+    return f"{same_company(j.get('company'))}|{text}" if len(text) >= 200 else ""
+
+
 def hits(pattern, text) -> bool:
     return bool(pattern and pattern.pattern and pattern.search(text))  # an empty setting must not match everything
 
@@ -217,6 +288,7 @@ def clean(rows, store, cfg, today=None):
     """Keep real, fresh, wanted roles that Gus doesn't already have. Returns the roles and why others went."""
     cutoff = str((today or date.today()) - timedelta(days=int(cfg.get("sources_max_age_days", 14))))
     seen = {(same_company(j.get("company")), same_title(j.get("title"))) for j in store.values()}
+    texts = {ad_text(j) for j in store.values()} - {""}
     kept, dropped = [], dict.fromkeys(("old", "no employer", "agency", "repeat", "not a match"), 0)
     for j in rows:
         key = (same_company(j["company"]), same_title(j["title"]))
@@ -228,12 +300,13 @@ def clean(rows, store, cfg, today=None):
             why = "no employer"
         elif hits(cfg.get("source_company_exclude"), j["company"]) or hits(cfg.get("source_text_exclude"), j["description"][:6000]):
             why = "agency"
-        elif key in seen:
+        elif key in seen or ad_text(j) in texts:
             why = "repeat"
         elif not matches(j, cfg):
             why = "not a match"
         else:
             seen.add(key)
+            texts.add(ad_text(j))
             kept.append(j)
             continue
         dropped[why] += 1
@@ -242,33 +315,39 @@ def clean(rows, store, cfg, today=None):
 
 # --- a run -----------------------------------------------------------------------
 
-def collect(name, cfg, st, allowed, age):
-    """Spend at most `allowed` requests. Stops a source on a refusal; a passing fault only skips that search."""
-    rows, spent, empty, faults, stopped = {}, 0, [], 0, ""
+def collect(name, cfg, st, limit, age):
+    """Spend at most `limit` requests. A refusal stops the source; a passing fault only skips that search."""
+    run = {"rows": {}, "spent": 0, "empty": 0, "faults": 0, "cut": 0, "stopped": ""}
     started = time.monotonic()
-    terms = [t.strip() for t in str(cfg.get("sources_searches", "")).splitlines() if t.strip()]
-    for term in terms:
-        for page in range(1, int(cfg.get("sources_pages_per_search", 3)) + 1):
-            if spent >= allowed:
-                return rows, spent, empty, faults, f"stopped at the {allowed} request limit"
+    pages = int(cfg.get(f"{name}_pages_per_search", 3))
+    for term in searches(cfg):
+        for page in range(1, pages + 1):
+            if run["spent"] >= limit:
+                run["stopped"] = f"stopped at the {limit} request limit"
+                return run
             if time.monotonic() - started > TIME_LIMIT:
-                return rows, spent, empty, faults, "stopped: taking too long"
+                run["stopped"] = "stopped: taking too long"
+                return run
             spend(st, name)  # before the call: a request that times out may still have counted
-            spent += 1
+            run["spent"] += 1
             try:
                 found = FETCH[name](term, page, cfg, age)
             except Failed as e:
                 if e.code in REFUSED:
-                    return rows, spent, empty, faults, f"refused ({e})"
-                faults += 1
+                    run["stopped"] = f"refused ({e})"
+                    return run
+                run["faults"] += 1
                 break
-            fresh = [j for j in found if j["id"] not in rows]
-            rows.update((j["id"], j) for j in fresh)
-            if page == 1 and not found:
-                empty.append(term)
+            except (KeyError, TypeError, AttributeError):  # a reply in an unexpected shape
+                run["faults"] += 1
+                break
+            fresh = [j for j in found if j["id"] not in run["rows"]]
+            run["rows"].update((j["id"], j) for j in fresh)
+            run["empty"] += page == 1 and not found
             if len(found) < FULL_PAGE[name] or len(fresh) < 3:
                 break
-    return rows, spent, empty, faults, stopped
+            run["cut"] += page == pages and FULL_PAGE[name] > 1  # JSearch has no page size to judge this by
+    return run
 
 
 def tell_limit(name, st, row) -> None:
@@ -285,10 +364,11 @@ def tell_limit(name, st, row) -> None:
 def run_source(name, cfg, st):
     s = st.setdefault(name, {})
     today = date.today()
-    last = s.get("last_run")
+    covered = s.get("covered")  # only moves on after a complete run, so a failed or cut-short one doesn't lose roles
     max_age = int(cfg.get("sources_max_age_days", 14))
-    age = min(max_age, (today - date.fromisoformat(last)).days + 2) if last else max_age
-    rows, spent, empty, faults, stopped = collect(name, cfg, st, budget(name, cfg, st), age)
+    age = min(max_age, (today - date.fromisoformat(covered)).days + OVERLAP) if covered else max_age
+    run = collect(name, cfg, st, budget(name, cfg, st), age)
+    rows = run["rows"]
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with locked(JOBS) as store:
         for jid in rows.keys() & store.keys():
@@ -297,47 +377,76 @@ def run_source(name, cfg, st):
         for j in kept:
             j.update(first_seen=now, last_seen=now, stage="new", score=None, why=None, source=name)
             store[j["id"]] = j
-    notes = [f"{len(rows)} found, {len(kept)} new, {spent} requests"]
-    if empty:
-        notes.append(f"no results for {len(empty)} search{'es' if len(empty) > 1 else ''}")
-    if faults:
-        notes.append(f"{faults} failed")
-    if stopped:
-        notes.append(stopped)
-    s.update(last_run=str(today), last_result="; ".join(notes), last_dropped=dropped)
+        close_old(store, cfg, now)
+    notes = [f"{len(rows)} found, {len(kept)} new, {run['spent']} requests"]
+    if run["empty"]:
+        notes.append(f"no results for {run['empty']} search{'es' if run['empty'] > 1 else ''}")
+    if run["faults"]:
+        notes.append(f"{run['faults']} failed")
+    if run["stopped"]:
+        notes.append(run["stopped"])
+    if not (run["stopped"] or run["faults"] or run["cut"]):
+        s["covered"] = str(today)
+    s.update(last_run=str(today), last_result="; ".join(notes), last_dropped=dropped, cut=run["cut"])
     save_state(st)
-    return notes[0] if len(notes) == 1 else "; ".join(notes)
+    return s["last_result"]
+
+
+def close_old(store, cfg, now) -> None:
+    """These sources can't say when an ad has gone, so roles nobody acted on are closed once they're this old."""
+    cutoff = str(date.today() - timedelta(days=int(cfg.get("sources_close_after_days", 45))))
+    for j in store.values():
+        if j.get("source") in LABEL and j.get("stage") == "new" and not j.get("ad_closed") and str(j.get("posted"))[:10] < cutoff:
+            j["ad_closed"] = now
+
+
+def check_limits(name, cfg, st) -> None:
+    full = next((r for r in limits(name, cfg, st) if r["left"] <= 0), None)
+    if full:
+        tell_limit(name, st, full)
+
+
+def run_one(name, cfg, st) -> str:
+    label = LABEL[name]
+    confirmed = name != "jsearch" or refresh_quota(st)
+    check_limits(name, cfg, st)
+    if not is_due(name, cfg, st):
+        last = date.fromisoformat(st[name]["last_run"])
+        return f"{label}: next due {nice(last + timedelta(days=int(cfg.get(f'{name}_every_days', 7))))}"
+    if not confirmed:
+        return f"{label}: couldn't confirm the allowance, so nothing was requested"
+    if budget(name, cfg, st) <= 0:
+        full = next((r for r in limits(name, cfg, st) if r["left"] <= 0), None)
+        return f"{label}: limit reached, resets {nice(full['resets'])}" if full else f"{label}: no allowance left"
+    result = run_source(name, cfg, st)
+    if name == "jsearch":
+        refresh_quota(st)  # so Health shows what this run used
+    check_limits(name, cfg, st)
+    return f"{label}: {result}"
 
 
 def main():
     cfg, st = load_config(), load_state()
     for name in LABEL:
-        label = LABEL[name]
         if not cfg.get(f"source_{name}"):
-            print(f"{label}: turned off in settings")
-            continue
-        if not all(secret(k) for k in KEYS[name]):
-            print(f"{label}: no key set (Settings → Keys); skipping")
-            continue
-        confirmed = name != "jsearch" or refresh_quota(st)
-        at_limit = next((r for r in limits(name, cfg, st) if r["left"] <= 0), None)
-        if at_limit:
-            tell_limit(name, st, at_limit)
-        if not is_due(name, cfg, st):
-            print(f"{label}: not due yet")
-        elif not confirmed:
-            print(f"{label}: couldn't confirm the allowance, so nothing was requested")
-        elif budget(name, cfg, st) <= 0:
-            print(f"{label}: no allowance left")
+            print(f"{LABEL[name]}: turned off")
+        elif not all(secret(k) for k in KEYS[name]):
+            print(f"{LABEL[name]}: key missing")
         else:
-            print(f"{label}: {run_source(name, cfg, st)}")
+            try:
+                print(run_one(name, cfg, st))
+            except Exception as e:  # one source's fault shouldn't stop the other. The type only: details could hold a key
+                print(f"{LABEL[name]}: had a problem ({type(e).__name__})")
 
 
 def show():
     for s in status():
         print(f"{s['label']}: {'on' if s['on'] else 'off'}, key {'set' if s['has_key'] else 'missing'}, last run {s['last_run'] or 'never'}")
+        print(f"  {s['plan']}")
         for r in s["limits"]:
             print(f"  {r['period']}: {r['used']} used of {r['limit']}, {r['left']} left, resets {r['resets']}{'' if r['exact'] else ' (estimate)'}")
+        for w in s["warnings"]:
+            print(f"  ! {w}")
 
 
 if __name__ == "__main__":
