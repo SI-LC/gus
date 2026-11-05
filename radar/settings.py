@@ -211,8 +211,8 @@ def _checked(key, row, value):
     if key.endswith(PATTERN_ENDINGS) or key == "inbox_subjects":
         try:
             re.compile(to_pattern(value))
-        except re.error:
-            raise ValueError(f"{row[1]}: one of these lines can't be read. Remove any brackets or symbols.")
+        except re.error as e:
+            raise ValueError(f"{row[1]}: one of these lines can't be read. Remove any brackets or symbols.") from e
     return value
 
 
