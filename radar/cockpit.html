@@ -273,7 +273,11 @@ async function setStage(id, stage, msg) {
   Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
 }
 
-let roleWhere = "London", roleKind = "all", roleView = "new";
+const savedFilter = (key, allowed, fallback) => { try { const v = localStorage.getItem(key); return allowed.includes(v) ? v : fallback; } catch (e) { return fallback; } };
+let roleWhere = savedFilter("gus-role-where", ["London", "UK", "Remote", "Europe", "all"], "London");
+let roleKind = savedFilter("gus-role-kind", ["all", "PM", "Forward deployed", "Product engineer"], "all");
+let roleView = "new";
+function saveRoleFilters() { try { localStorage.setItem("gus-role-where", roleWhere); localStorage.setItem("gus-role-kind", roleKind); } catch (e) {} }
 const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
   : j.stage === "new" && !j.ad_closed && (j.score == null || j.score >= 5 || (j.history || []).some(h => h.stage === "new"));
 const roleMatch = (j, view, w, kind) => inView(j, view) && (w === "all" || j.where === w) && (kind === "all" || j.role_type === kind);
@@ -390,7 +394,7 @@ function moveCard(m) {
 function chipRow(label, options, value, name) {
   return `<div class="tabs chips-row" role="group" aria-label="${label}">${options.map(([v, l]) => {
     const n = S.jobs.filter(j => roleMatch(j, name === "roleView" ? v : roleView, name === "roleWhere" ? v : roleWhere, name === "roleKind" ? v : roleKind)).length;
-    return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};render(true)">${l} <span class="sub">${n}</span></a>`;
+    return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};saveRoleFilters();render(true)">${l} <span class="sub">${n}</span></a>`;
   }).join("")}</div>`;
 }
 const SOURCE_LABEL = { adzuna: "Adzuna", jsearch: "JSearch" };

@@ -16,7 +16,7 @@ judge: Is it clear the role has moved, and where to find it?
 ```
 
 - `given`: `empty` is a brand new install, and `scanned` has run one scan of the made-up job board.
-- `check`: `open <screen>`, `see "text"`, `not see "text"`, `click "text"`, `"text" appears before "other text"`, `reload`.
+- `check`: `open <screen>`, `see "text"`, `not see "text"`, `click "text"`, `pick "chip"`, `"chip" is picked`, `"text" appears before "other text"`, `reload`.
 - `judge`: a question for an AI reviewer. It isn't run yet.
 
 The made-up roles are in `fake/sitecustomize.py` and their scores are in `fake/claude`. This repo is public, so keep cases
