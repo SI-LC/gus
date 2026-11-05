@@ -14,6 +14,10 @@ def at(day, h, m=0):
 
 
 class AppIcon(unittest.TestCase):
+    def test_browser_icon_has_light_and_dark_versions(self):
+        from radar.scan import ROOT
+        self.assertIn("prefers-color-scheme:dark", (ROOT / "radar" / "static" / "icon.svg").read_text())
+
     def test_every_icon_file_exists(self):
         import json
         from radar import server
