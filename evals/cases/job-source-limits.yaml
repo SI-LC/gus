@@ -4,6 +4,6 @@ given: empty
 check:
   - open Settings
   - click "Job sources"
-  - see "Adzuna: daily limit"
+  - see "Check job sources each day"
   - see "Limits and timing"
 judge: Is it clear how often each source runs and how much allowance is left?
