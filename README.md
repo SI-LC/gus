@@ -1,9 +1,9 @@
 # Gus
 
-**An agentic, account-based job search for product managers.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
+**An agentic, account-based job search.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 
 ```
- SIGNALS     job boards · newsletters · funding news · social · email
+ SIGNALS     job boards · job search sites · newsletters · funding news · social · email
     ↓
  ACCOUNTS    target companies, tiered A/B/C, with the people who matter
     ↓
@@ -16,7 +16,7 @@
 
 ## Why this exists
 
-Finding roles isn't the hard part of a senior PM search. Getting real conversations with the right people is. Job alerts are noisy and blind to fit, and more applications rarely help.
+Finding roles isn't the hard part of a senior job search. Getting real conversations with the right people is. Job alerts are noisy and blind to fit, and more applications rarely help.
 
 So this treats a job search like account-based marketing, and doubles as a test bed for how product work is changing: **the deterministic bits are code, the judgement bits are agents, and the human makes the call.**
 
@@ -24,14 +24,15 @@ So this treats a job search like account-based marketing, and doubles as a test 
 
 Gus does one full run a day, or whenever you press **Full run**. It's one job, in a fixed order, so the parts can't drift out of sync:
 
-1. **Scan and score:** read every watched job board, feed and social source, and email, then score anything new against your CV
-2. **Read emails:** an offline agent picks out replies and roles
-3. **Discover:** turn signals into companies, roles and dated events, and search the web for London PM roles
-4. **Refresh accounts:** find companies through VCs, funding news and London openings, then research, score and tier them. The heaviest step, so it runs every few days
-5. **Score what's new**, and map the people at strong accounts
-6. **Plan moves:** pick this week's moves, once a week
+1. **Scan and score:** read every watched job board, feed and social source, and email if connected, then score anything new against your CV
+2. **Job sources:** if you've turned them on, search Adzuna and JSearch for roles beyond your company list, within the limits you set
+3. **Read emails:** if connected, an offline agent picks out replies and roles
+4. **Discover:** turn signals into companies, roles and dated events, and search the web for your target roles
+5. **Refresh accounts:** find companies through VCs, funding news and new local openings, then research, score and tier them. The heaviest step, so it runs every few days
+6. **Score what's new**, and map the people at strong accounts
+7. **Plan moves:** pick this week's moves, once a week
 
-Only the scanning is AI-free, so **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
+Scanning uses no AI. Scoring does, but only for new roles. **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
 **No signal, no move.** A move is rejected in code unless it cites a dated, linked signal from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently.
 
@@ -39,9 +40,9 @@ Only the scanning is AI-free, so **Check roles** does just step 1. Everything is
 
 A small web app, and the place you work:
 
-- **Pipeline:** conversations and applications, and the page the cockpit opens on
 - **Role Inbox:** new roles by score, filtered by place and type
-- **To do:** your moves, each with why now, your angle and a draft, plus funnel numbers
+- **Pipeline:** conversations and applications, and the page the cockpit opens on
+- **To do:** this week's outreach moves, each with why now, your angle and a draft, plus funnel numbers
 - **Companies:** target companies by tier, with their signals and people
 - **Usage:** what AI runs use, by day and task
 - **Settings:** AI provider, matching, schedule, job sources and their limits, email, keys and your profile
@@ -50,7 +51,7 @@ For a role you want to pursue, ask Claude Code to prep it: it saves the job desc
 
 ## Quick start
 
-Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code).
+Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code) or an Anthropic API key. An OpenAI-compatible provider can score roles, but can't run the agents.
 
 ```bash
 git clone https://github.com/<you>/gus && cd gus
@@ -80,7 +81,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 - **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of six job board systems it uses.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
-- **Add a source:** paste any newsletter link under Settings → Newsletters.
+- **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources.
 
 ## Checking it still works
 
@@ -98,20 +99,33 @@ python3 -m radar.evals run      # scores them 3 times, and fails on any good rol
 
 Run it after changing `prompts/triage.md`, the scoring model or your profile. It saves nothing to your roles, sends no alerts, and keeps your labels in `data/evals/`.
 
-## Privacy: the repo holds code only
+## Privacy
 
-Your CV, watchlist, settings, keys, drafts and everything Gus finds are git-ignored. Hooks refuse any commit or push containing those files, keys, or your contact details, and every pull request must pass a code scan and a full-history secret scan before it can merge.
+**The repo holds code only.** Your CV, watchlist, settings, keys, drafts and everything Gus finds are git-ignored. With the hooks turned on, a commit or push is refused if it contains those files, a key, or the email address or phone number in your profile. On this repo, every pull request must also pass a code scan and a full-history secret scan before it can merge. That rule is a GitHub setting, so a fork has to add its own.
 
-Your data stays on your machine. What goes out: requests to public job boards and feeds, your scoring and research prompts to your AI provider, and notifications to your ntfy topic.
+**Your data is stored where Gus runs, and some of it leaves.** That's your own machine or Pi. Keys sit in a plain text file that only your user can read. Gus sends this out:
+
+| Goes to | What's sent |
+|---|---|
+| Your AI provider | Your profile and CV, roles, company research and anything an agent reads, including emails if connected |
+| Web search and the pages agents open | Search terms based on your target roles and locations |
+| Public job boards and feeds | Plain requests, with nothing about you |
+| Adzuna and JSearch, if turned on | Your role searches and location |
+| X, Bluesky, Mastodon and Reddit, if turned on | Your search terms |
+| Companies House, if you add a key | Company names |
+| ntfy, if turned on | Your alerts, including role and company names. The topic name is the only protection on the public server |
+| Google Fonts | Your browser's request for the cockpit's fonts |
+
+`radar.evals sample` also copies roles from your Pi to the machine you run it on.
 
 ## Security
 
 Gus reads untrusted text from the web and email, so it limits what that text can do.
 
-- **Web agents** can read this repo and search the web, but can only write to `data/`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
-- **Email** is read-only and filtered before opening. A separate agent with no internet access processes it, so a crafted email can't send your data out.
-- **The cockpit** listens on this machine only by default, and won't listen on a network without an access token. Keep it behind a private network such as Tailscale, never on the public internet.
-- **Known limit:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way.
+- **Web agents** can read this repo and search the web, but can only write to `data/` and `watchlist.csv`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
+- **Email** is off until you connect it. It's then read-only and filtered before opening, and a separate agent with no internet access processes it, so a crafted email can't send your data out.
+- **The cockpit** has no login unless you set an access token. It listens on this machine only by default, and won't listen on a network without a token. Keep it behind a private network such as Tailscale, never on the public internet. The Pi install publishes it to your Tailscale devices, so anything on your tailnet can open it.
+- **Known limits:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way. A Claude login can also bring that account's connectors to the machine, such as mail, files and calendar, so check what your account has connected.
 
 ## Principles
 
