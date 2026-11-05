@@ -406,8 +406,10 @@ function sourceLimits(list) {
 }
 function linkGoes(j) {
   if (j.link_kind === "company") return "Company site";
+  if (SOURCE_LABEL[j.source] && j.via === undefined && /adzuna/.test(String(j.url))) return "Via Adzuna";
   try { return "Via " + (j.via || new URL(j.url).hostname.replace(/^www\./, "")); } catch (e) { return "Via job site"; }
 }
+const titleLink = j => SOURCE_LABEL[j.source] && j.link_kind !== "company" ? companySearch(j) : j.url;  // never a job site's login first
 const companySearch = j => "https://www.google.com/search?q=" + encodeURIComponent(`${j.company} ${j.title} careers`);
 async function watchCompany(id) {
   const d = await post("/api/watch", { id });
@@ -418,11 +420,11 @@ function roleCard(j, actions) {
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
       <div class="co">${esc(j.company)}</div>
-      <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
+      <div class="title"><a href="${link(titleLink(j))}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
-      <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(companySearch(j))}" target="_blank" rel="noopener">Find on company site</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
+      <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
     </div></article>`;
 }
 

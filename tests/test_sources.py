@@ -232,6 +232,11 @@ class Reading(unittest.TestCase):
         self.assertEqual(set(a) - {"salary_max"}, set(j))
         self.assertEqual((a["location"], j["location"]), ("London, UK", "Remote, UK"))
 
+    def test_adzuna_links_dont_carry_the_app_id(self):
+        reply = {"results": [{"id": 1, "redirect_url": "https://www.adzuna.co.uk/jobs/details/1?utm_medium=api&utm_source=abc123"}]}
+        with mock.patch.object(sources, "call", return_value=reply):
+            self.assertNotIn("abc123", sources.adzuna("pm", 1, CFG, 14)[0]["url"])
+
     def test_the_location_comes_from_settings(self):
         with mock.patch.object(sources, "call", return_value={}) as call:
             sources.adzuna("pm", 1, {**CFG, "sources_location": "Leeds", "sources_country": "gb"}, 14)

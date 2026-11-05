@@ -231,7 +231,7 @@ def adzuna(term, page, cfg, age):
         loc = r.get("location") or {}
         country = (loc.get("area") or [""])[0]
         out.append({"id": f"adzuna:{r['id']}", "company": ((r.get("company") or {}).get("display_name") or "").strip(),
-                    "title": (r.get("title") or "").strip(), "url": r.get("redirect_url"), "via": "Adzuna", "posted": r.get("created"),
+                    "title": (r.get("title") or "").strip(), "url": re.sub(r"[?&]utm_source=[^&]*", "", r.get("redirect_url") or ""), "via": "Adzuna", "posted": r.get("created"),
                     "location": ", ".join(filter(None, [loc.get("display_name"), country])),
                     "salary_max": None if str(r.get("salary_is_predicted")) != "0" else r.get("salary_max"),  # Adzuna's guesses don't count
                     "description": strip_html(r.get("description") or "")})

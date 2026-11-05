@@ -41,7 +41,7 @@ class Finding(unittest.TestCase):
 
 class Choosing(unittest.TestCase):
     def test_only_strong_open_unchecked_source_roles(self):
-        store = {"a": role(), "b": role(score=6), "c": role(source="board"), "d": role(stage="skipped"), "e": role(ad_closed="x"), "f": role(link_checked="x")}
+        store = {"a": role(), "b": role(score=4), "c": role(source="board"), "d": role(stage="skipped"), "e": role(ad_closed="x"), "f": role(link_checked="x")}
         self.assertEqual(links.waiting(store), [store["a"]])
 
 

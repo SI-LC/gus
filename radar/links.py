@@ -1,6 +1,6 @@
-"""Point strong roles from job search sources at the employer's own ad, so you don't land on a job site's login.
+"""Point roles from job search sources at the employer's own ad, so you don't land on a job site's login.
 
-    python3 -m radar.links     # check roles scoring 7+ that haven't been checked yet (run after each sources job)
+    python3 -m radar.links     # check roles in your inbox that haven't been checked yet (run after each sources job)
 
 Public job boards are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes
 when the same title is found on the company's board. Otherwise the role keeps its link and the cockpit offers a web search.
@@ -16,8 +16,8 @@ from radar.scan import JOBS, SOURCES, watchlist_path
 from radar.sources import LABEL, same_company, same_title
 from radar.store import locked
 
-MIN_SCORE = 7
-PER_RUN = 25  # each company tries several boards and names, so keep a run polite
+MIN_SCORE = 5  # the same line as the Role Inbox: anything you might open
+PER_RUN = 40  # each company tries several boards and names, so keep a run polite
 
 
 def find(company, title, boards):
