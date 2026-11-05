@@ -12,21 +12,21 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's, Exponential View),
    funding news (Sifted, TechCrunch, EU-Startups, UKTN), HN job posts, Reddit, X and Bluesky. For each one,
    work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company` and `job_id` if known.
-b. **Board sweep** (web search, every run): find PM roles in London on *any* company's board, not
-   just watched ones, with searches like `site:jobs.ashbyhq.com "product manager" London`,
-   `site:job-boards.greenhouse.io "product manager" London`, `site:jobs.lever.co "product manager" London`,
-   `site:apply.workable.com "product manager" London`, and the same for "forward deployed" and "product engineer". Every unwatched company you find is a candidate company.
+b. **Board sweep** (web search, every run): find target roles in the candidate's locations on *any* company's board, not
+   just watched ones, with searches like `site:jobs.ashbyhq.com "<target role>" <location>`,
+   `site:job-boards.greenhouse.io "<target role>" <location>`, `site:jobs.lever.co "<target role>" <location>`,
+   `site:apply.workable.com "<target role>" <location>`, for each role type and location in the profile. Every unwatched company you find is a candidate company.
 c. **Emails** are handled by a separate offline run. You can't read them, on purpose.
 d. **Market signals** (web search, last 7 days): UK and European AI/devtools/fintech funding
-   rounds (Series A+), "opening London office", new product launches with hiring,
+   rounds (Series A+), a new office in a target location, new product launches with hiring,
    Sifted and TechCrunch Europe, and VC portfolio job boards (Accel, Index, Balderton,
    Atomico, LocalGlobe, Seedcamp, MMC, a16z, Sequoia, and the `jobs` column in `vcs.csv`) and topstartups.io for
-   PM roles in London.
+   target roles in the candidate's locations.
 e. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 similar companies
-   with a London presence that aren't watched yet.
+   with a presence in a target location that aren't watched yet.
 
 ## 1b. Events
-When a signal concerns an account in `data/companies.json` (funding, London office, new product leader,
+When a signal concerns an account in `data/companies.json` (funding, a new local office, a new leader in the candidate's area,
 a launch in the candidate's area, or someone posting about hiring), add it to that account's `events`:
 `{"type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url", "date": "YYYY-MM-DD"}`.
 Only with a link and a real date. These events are what weekly moves are built on.
@@ -34,7 +34,7 @@ Only with a link and a real date. These events are what weekly moves are built o
 ## 2. Companies
 Company research and fit assessment belong to the watchlist loop (`prompts/watchlist.md`).
 Here, add any new company you came across to `data/companies.json` as
-`{"status": "candidate", "source", "signal"}`. **Fast path**: if it has a live London PM role that
+`{"status": "candidate", "source", "signal"}`. **Fast path**: if it has a live target role in a target location that
 looks like a 7+, run `python3 -m radar.resolve --add "<Company>"` now so the role isn't missed, and
 mark the record `status: "candidate", "fast_tracked": true`. The loop assesses it properly later.
 
