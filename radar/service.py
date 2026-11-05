@@ -59,6 +59,7 @@ def _sources():
     out = subprocess.run([sys.executable, "-m", "radar.sources"], capture_output=True, text=True, timeout=3600, cwd=ROOT)
     if _counts()["roles"] > before:  # nothing new means nothing to score
         _command("triage", "dashboard")
+    _command("links")  # strong roles: swap job-site links for the employer's own ad
     lines = [line for line in out.stdout.splitlines() if line.strip() and not line.endswith("turned off")]
     return out.returncode == 0, ". ".join(lines)[-300:] or "Nothing to do"
 

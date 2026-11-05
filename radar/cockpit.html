@@ -404,16 +404,25 @@ function sourceLimits(list) {
     on.map(s => `<div class="sub" style="margin-top:6px"><b>${esc(s.label)}:</b> ${s.has_key ? "" : "key missing. "}${s.last_run ? `last run ${esc(s.last_run)}, next due ${esc(s.next_run)}${s.last_result ? `. ${esc(s.last_result)}` : ""}` : "not run yet"}</div><div class="sub">${esc(s.plan)}</div>`).join("") +
     warned.map(w => `<div style="margin-top:8px"><span class="flag">${esc(w)}</span></div>`).join("");
 }
+function linkGoes(j) {
+  if (j.link_kind === "company") return "Company site";
+  try { return "Via " + (j.via || new URL(j.url).hostname.replace(/^www\./, "")); } catch (e) { return "Via job site"; }
+}
+const companySearch = j => "https://www.google.com/search?q=" + encodeURIComponent(`${j.company} ${j.title} careers`);
+async function watchCompany(id) {
+  const d = await post("/api/watch", { id });
+  if (d) { toast(d.ok ? "Added to your watchlist" : "Already on your watchlist"); load(); }
+}
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
-      <div class="actions">${actions}</div>
+      <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(companySearch(j))}" target="_blank" rel="noopener">Find on company site</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
     </div></article>`;
 }
 

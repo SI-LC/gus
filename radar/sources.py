@@ -231,7 +231,7 @@ def adzuna(term, page, cfg, age):
         loc = r.get("location") or {}
         country = (loc.get("area") or [""])[0]
         out.append({"id": f"adzuna:{r['id']}", "company": ((r.get("company") or {}).get("display_name") or "").strip(),
-                    "title": (r.get("title") or "").strip(), "url": r.get("redirect_url"), "posted": r.get("created"),
+                    "title": (r.get("title") or "").strip(), "url": r.get("redirect_url"), "via": "Adzuna", "posted": r.get("created"),
                     "location": ", ".join(filter(None, [loc.get("display_name"), country])),
                     "salary_max": None if str(r.get("salary_is_predicted")) != "0" else r.get("salary_max"),  # Adzuna's guesses don't count
                     "description": strip_html(r.get("description") or "")})
@@ -251,7 +251,7 @@ def jsearch(term, page, cfg, age):
         place_name = re.sub(r"\s+", " ", r.get("job_location") or "").strip()
         place_name = "Remote" if r.get("job_is_remote") or place_name == "Anywhere" else place_name
         out.append({"id": f"jsearch:{r['job_id']}", "company": (r.get("employer_name") or "").strip(), "title": (r.get("job_title") or "").strip(),
-                    "url": r.get("job_apply_link"), "posted": r.get("job_posted_at_datetime_utc"),
+                    "url": r.get("job_apply_link"), "via": r.get("job_publisher"), "posted": r.get("job_posted_at_datetime_utc"),
                     "location": ", ".join(filter(None, [place_name, country])), "description": r.get("job_description") or ""})
     return out
 
