@@ -41,7 +41,6 @@
   "adzuna_every_days": 2,
   "adzuna_allow_month": 800,
   "adzuna_pages_per_search": 6,
-  "adzuna_limits_confirmed": false,
   "adzuna_limit_day": 250,
   "adzuna_limit_week": 1000,
   "adzuna_limit_month": 2500,

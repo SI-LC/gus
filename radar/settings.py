@@ -77,10 +77,9 @@ SCHEMA = [
     ("sources_run_time", "Daily check time", "times", "Source limits", "24h, e.g. 09:00."),
     ("adzuna_every_days", "Adzuna: run every (days)", "int:1-30", "Source limits", "However often Gus runs, Adzuna is only asked this often."),
     ("adzuna_allow_month", "Adzuna: requests to allow a month", "int:1-100000", "Source limits", "Shared evenly across runs. Gus never goes over this or your limits below."),
-    ("adzuna_limits_confirmed", "Adzuna: I've checked these limits", "bool", "Source limits", "Tick once the three limits below match your Adzuna account."),
-    ("adzuna_limit_day", "Adzuna: daily limit", "int:0-100000", "Source limits", "Copy from your Adzuna account. Gus stops at this number."),
-    ("adzuna_limit_week", "Adzuna: weekly limit", "int:0-100000", "Source limits", "Copy from your Adzuna account."),
-    ("adzuna_limit_month", "Adzuna: monthly limit", "int:0-100000", "Source limits", "Copy from your Adzuna account."),
+    ("adzuna_limit_day", "Adzuna: daily limit", "int:0-100000", "Source limits", "Gus stops at this number. Change it if your Adzuna account differs."),
+    ("adzuna_limit_week", "Adzuna: weekly limit", "int:0-100000", "Source limits", "Change it if your Adzuna account differs."),
+    ("adzuna_limit_month", "Adzuna: monthly limit", "int:0-100000", "Source limits", "Change it if your Adzuna account differs."),
     ("jsearch_every_days", "JSearch: run every (days)", "int:1-30", "Source limits", "However often Gus runs, JSearch is only asked this often."),
     ("jsearch_allow_month", "JSearch: requests to allow a month", "int:1-100000", "Source limits", "Shared evenly across runs. Your plan's limit comes from JSearch itself, and Gus never goes over either."),
 
