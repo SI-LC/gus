@@ -1,5 +1,4 @@
 """Job sources must clean every role the same way and can never go over a limit. No network: fetching is faked."""
-import json
 import re
 import tempfile
 import unittest

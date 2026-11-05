@@ -165,7 +165,7 @@ def validate(key: str, value):
         try:
             re.compile(value)
         except re.error as e:
-            raise ValueError(f"{row[1]}: not a valid pattern ({e})")
+            raise ValueError(f"{row[1]}: not a valid pattern ({e})") from e
         return str(value)
     if kind == "lines":
         return "\n".join(x.strip() for x in re.split(r"[\n,]", str(value)) if x.strip()) if "tags" in key or "subs" in key or "senders" in key \

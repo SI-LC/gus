@@ -33,7 +33,7 @@ def fetch(url: str):
     root = parse_xml(fetch_bytes(url))
     items = root.findall(".//item") or root.findall(f".//{ATOM}entry")
     for it in items:
-        get = lambda tag: (it.findtext(tag) or it.findtext(ATOM + tag) or "").strip()
+        get = lambda tag, it=it: (it.findtext(tag) or it.findtext(ATOM + tag) or "").strip()
         link = get("link")
         if not link:
             el = it.find(ATOM + "link")

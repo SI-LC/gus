@@ -10,13 +10,12 @@ account events and people to contact.
 from __future__ import annotations
 
 import json
-import os
 import urllib.parse
 import urllib.request
 from datetime import date
 
 from radar import usage
-from radar.scan import DATA, ROOT, load_config
+from radar.scan import DATA, load_config
 
 SIGNALS = DATA / "signals.json"
 STATE = DATA / "x_state.json"

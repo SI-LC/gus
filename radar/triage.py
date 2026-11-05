@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 from radar import ai, salary
 from radar.notify import notify
@@ -38,11 +37,11 @@ def ask(profile_path, todo):
     try:
         text = ai.run(prompt, task="scoring", timeout=600)
     except Exception as e:
-        raise ScoringFailed(f"scoring failed: {e}")
+        raise ScoringFailed(f"scoring failed: {e}") from e
     try:
         results = json.loads(text[text.index("["): text.rindex("]") + 1])
-    except ValueError:
-        raise ScoringFailed(f"scoring failed: unexpected reply {text.strip()[:200]}")
+    except ValueError as e:
+        raise ScoringFailed(f"scoring failed: unexpected reply {text.strip()[:200]}") from e
     ids = {b["id"] for b in batch}
     return [r for r in results if usable(r, ids)]
 
