@@ -2,7 +2,7 @@
 # The code scan. Runs before every push (.githooks/pre-push), on every pull request (.github/workflows/scan.yml)
 # and every deploy. Any failure stops it.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 fail=0
 bad() { echo "  ✗ $1"; fail=1; }
 good() { echo "  ✓ $1"; }
@@ -60,7 +60,16 @@ else
   bad "couldn't install bandit"
 fi
 
-# 6. It still works
+# 6. Likely mistakes in the code (rules in ruff.toml, pinned so a new release can't block a deploy by surprise)
+"$venv/bin/pip" -q install "ruff==0.17.4" "shellcheck-py==0.11.0.1" >/dev/null 2>&1
+if [ -x "$venv/bin/ruff" ] && [ -x "$venv/bin/shellcheck" ]; then
+  "$venv/bin/ruff" check -q --no-cache radar tests evals deploy >/dev/null 2>&1 && good "ruff: no likely mistakes" || bad "ruff found likely mistakes (run: $venv/bin/ruff check radar tests evals deploy)"
+  "$venv/bin/shellcheck" -S warning run.sh deploy/*.sh >/dev/null 2>&1 && good "shellcheck: no problems in shell scripts" || bad "shellcheck found problems (run: $venv/bin/shellcheck -S warning run.sh deploy/*.sh)"
+else
+  bad "couldn't install ruff and shellcheck"
+fi
+
+# 7. It still works
 python3 -m compileall -q radar tests && good "Python compiles" || bad "Python doesn't compile"
 if out=$(python3 -m unittest discover -s tests 2>&1); then good "tests pass"; else bad "tests fail (python3 -m unittest discover -s tests)"; echo "$out" | grep -v ResourceWarning | tail -30; fi
 if command -v node >/dev/null; then

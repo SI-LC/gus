@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One scan, run by the scheduler or the Scan now button. Claude is only used when something is new.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 mkdir -p data
 python3 -m radar.x >>data/x.log 2>&1

@@ -18,7 +18,7 @@ import re
 import sys
 from datetime import date, timedelta
 
-from radar.scan import DATA, ROOT, WATCHLIST, watchlist_path
+from radar.scan import DATA, WATCHLIST, watchlist_path
 
 COMPANIES = DATA / "companies.json"
 SIGNALS = DATA / "signals.json"
@@ -58,7 +58,7 @@ def mentions():
     # case-sensitive whole word, so "Wise" the company doesn't match "otherwise"
     pats = {n: re.compile(rf"(?<![\w-]){re.escape(n)}(?![\w-])") for n in watched}
     flagged = 0
-    for key, lead in signals.items():
+    for lead in signals.values():
         if lead.get("mention_checked"):
             continue
         text = f"{lead.get('title', '')} {lead.get('text', '')}"

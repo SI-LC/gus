@@ -13,7 +13,7 @@ import sys
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
-from radar.scan import ROOT, get_json, watchlist_path
+from radar.scan import get_json, watchlist_path
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {

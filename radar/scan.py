@@ -338,7 +338,7 @@ def main():
     new = []
     live = {j["id"] for j in jobs} | _listed
     with locked(JOBS) as store:
-      closed = mark_closed(store, _boards_answered, live, now)
+      mark_closed(store, _boards_answered, live, now)
       for j in jobs:
         hn = j.pop("_hn", False)
         if not matches(j, cfg, hn):
