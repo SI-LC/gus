@@ -51,6 +51,13 @@ def _scan():
     return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
 
 
+def _sources():
+    """Job sources on their own: fetch whatever is due, then score it. Separate from scans and the daily run."""
+    out = subprocess.run([sys.executable, "-m", "radar.sources"], capture_output=True, text=True, timeout=3600, cwd=ROOT)
+    _command("triage", "dashboard")
+    return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Nothing to do"
+
+
 def _command(*modules):
     for m in modules:
         subprocess.run([sys.executable, "-m", f"radar.{m}"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
@@ -89,6 +96,7 @@ def steps():
     every = cfg.get("watchlist_every_days", 3)
     return [
         ("Scan and score", _scan, lambda: None),
+        ("Job sources", _sources, lambda: None if cfg.get("source_adzuna") or cfg.get("source_jsearch") else "Turned off"),
         ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
         ("Discover", _agent_step("discover"), lambda: None),
         ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
@@ -131,7 +139,7 @@ def full_run():
 
 
 def _do(job):
-    return full_run() if job == "run" else _scan()
+    return {"run": full_run, "scan": _scan, "sources": _sources}[job]()
 
 
 def start(job: str) -> bool:
@@ -177,14 +185,23 @@ def due(now: datetime, cfg: dict, s: dict) -> bool:
     return bool(t and now.strftime("%H:%M") >= t and s.get("run") != str(now.date()))
 
 
+def sources_due(now: datetime, cfg: dict, s: dict) -> bool:
+    """Once a day, whether or not the daily run is on. Each source then decides if it's due, so an extra check costs nothing."""
+    t = (_times(cfg.get("sources_run_time")) or [None])[0]
+    return bool(cfg.get("sources_auto") and t and now.strftime("%H:%M") >= t and s.get("sources") != str(now.date()))
+
+
 def scheduler():
     first = True
     while True:
         try:
             cfg = load_config()
+            now = datetime.now()
+            s = _state()
+            if sources_due(now, cfg, s) and start("sources"):
+                s["sources"] = str(now.date())
+                _save(s)
             if cfg.get("scheduler_enabled"):
-                now = datetime.now()
-                s = _state()
                 if first and due(now, cfg, s):  # started after today's time: don't fire straight away
                     s["run"] = str(now.date())
                     _save(s)

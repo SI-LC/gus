@@ -7,7 +7,7 @@ import re
 
 from radar import agent, ai, calendar_invites as cal, inbox
 from radar.network import distance, paths_for
-from radar.service import due
+from radar.service import due, sources_due
 
 def at(day, h, m=0):
     return datetime(2026, 11, day, h, m)
@@ -29,6 +29,14 @@ class AppIcon(unittest.TestCase):
 
 class Schedule(unittest.TestCase):
     CFG = {"run_time": "08:00"}
+
+    def test_job_sources_check_daily_with_the_daily_run_off(self):
+        cfg = {"scheduler_enabled": False, "sources_auto": True, "sources_run_time": "09:00"}
+        self.assertFalse(sources_due(at(4, 8, 59), cfg, {}))
+        self.assertTrue(sources_due(at(4, 9), cfg, {}))
+        self.assertFalse(sources_due(at(4, 10), cfg, {"sources": str(at(4, 10).date())}))
+        self.assertFalse(sources_due(at(4, 9), {**cfg, "sources_auto": False}, {}))
+
 
     def test_nothing_before_the_daily_time(self):
         self.assertFalse(due(at(4, 7, 59), self.CFG, {}))

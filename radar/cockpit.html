@@ -393,13 +393,21 @@ function chipRow(label, options, value, name) {
     return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};render(true)">${l} <span class="sub">${n}</span></a>`;
   }).join("")}</div>`;
 }
+const SOURCE_LABEL = { adzuna: "Adzuna", jsearch: "JSearch" };
+const limitLine = (s, r) => `<tr><td><b>${esc(s.label)}</b> ${esc(r.period)}${r.left <= 0 ? ' <span class="flag">At limit</span>' : ""}</td><td>${r.used} of ${r.limit} used</td><td>${r.left} left</td><td class="sub">Resets ${esc(r.resets)}${r.exact ? "" : " (estimate)"}</td></tr>`;
+function sourceLimits(list) {
+  const on = (list || []).filter(s => s.on || s.limits.some(r => r.used));
+  if (!on.length) return `<div class="sub">No job sources turned on yet.</div>`;
+  return `<table>${on.flatMap(s => s.limits.length ? s.limits.map(r => limitLine(s, r)) : [`<tr><td><b>${esc(s.label)}</b></td><td colspan="3" class="sub">Limit not checked yet: it appears after the next run.</td></tr>`]).join("")}</table>` +
+    on.map(s => `<div class="sub" style="margin-top:6px"><b>${esc(s.label)}:</b> ${s.has_key ? "" : "key missing. "}${s.last_run ? `last run ${esc(s.last_run)}, next due ${esc(s.next_run)}${s.last_result ? `. ${esc(s.last_result)}` : ""}` : "not run yet"}</div>`).join("");
+}
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}</div>
@@ -517,6 +525,7 @@ const V = {
         <div class="stat"><div class="v">${h.signals_waiting}</div><div class="l">Signals waiting</div></div>
         <div class="stat"><div class="v">${h.x && h.x.day ? (h.x.used || 0) : "off"}</div><div class="l">X posts today</div></div>
       </div>
+      <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       <div class="section">Board errors</div>
       ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">All boards answered on the last scan.</div>`}`;
   },
@@ -543,9 +552,14 @@ const SETTINGS_TABS = [
       return `<div class="field"><label>${l}</label><div class="row"><button onclick="startRun('${j}')">${r.running[j] ? "Running…" : "Run now"}</button>
         <span class="sub">${x ? `${x.ok ? "Last run" : "Had a problem"} ${ago(x.at)}: ${esc(String(x.summary).slice(-120))}` : "Not run yet"}</span></div></div>`;
     }).join("");
-    return `<section class="group"><h2>The daily run</h2><p class="sub">One job, in a fixed order: scan and score, read emails, discover, refresh companies, score what's new, then plan moves.</p>${runs}</section>
+    return `<section class="group"><h2>The daily run</h2><p class="sub">One job, in a fixed order: scan and score, job sources, read emails, discover, refresh companies, score what's new, then plan moves.</p>${runs}</section>
       <section class="group"><h2>When it runs</h2>${fieldsOf("Schedule")}</section>`;
   }],
+  ["sources", "Job sources", () => `<section class="group"><h2>Job sources</h2><p class="sub">Adzuna and JSearch add roles from outside your company list. Every role gets the same clean-up, then Gus scores it. Keys go in the Keys tab.</p>${fieldsOf("Job sources")}</section>
+    <section class="group"><h2>Limits and timing</h2><p class="sub">This doesn't need the daily run, which can stay off. Gus checks once a day, and a Full run checks too, but a source only makes requests when it's due and has allowance left. Check roles doesn't touch these sources.</p>
+      <div class="field"><label>Job sources</label><div class="row"><button onclick="startRun('sources')">${SET.run.running.sources ? "Running…" : "Run what's due"}</button>
+      <span class="sub">${SET.run.last.sources ? `${SET.run.last.sources.ok ? "Last run" : "Had a problem"} ${ago(SET.run.last.sources.at)}: ${esc(String(SET.run.last.sources.summary).slice(-160))}` : "Not run yet"}</span></div></div>
+      ${sourceLimits(S.health.sources)}${fieldsOf("Source limits")}</section>`],
   ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Posts that mention a product role and one of your locations become signals for the agent. LinkedIn and Threads don't allow keyword search by other apps.</p>${fieldsOf("Social")}</section>`],
   ["feeds", "Newsletters", () => {
     const yours = SET.feeds.filter(f => !f.builtin), built = SET.feeds.filter(f => f.builtin);

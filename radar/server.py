@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from radar.companies import COMPANIES, veto
 from radar.scan import DATA, JOBS, ROOT, role_type, where
-from radar import service, settings, usage
+from radar import service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked
 
@@ -102,6 +102,7 @@ def state():
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
             "board_errors": read(DATA / "board_errors.json", {}),
             "x": read(DATA / "x_state.json", {}),
+            "sources": sources.status(),
             "last_agent_run": runs[-1] if runs else None,
         },
     }
@@ -401,7 +402,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, ai.test())
             if path == "/api/run":
                 job = body.get("job")
-                if job not in ("run", "scan"):
+                if job not in ("run", "scan", "sources"):
                     return self.send(400, {"error": "Unknown job"})
                 return self.send(200, {"ok": True, "started": service.start(job)})
         except ValueError as e:
