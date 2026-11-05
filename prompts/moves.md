@@ -14,15 +14,15 @@ Skip cooling-down accounts unless a signal is newer than the last contact.
 
 ## 2. Choose
 Rank candidate moves by:
-1. **Signal strength**: someone posted about hiring > live role (7+) > new product leader > funding or
-   London office > launch in the candidate's area.
+1. **Signal strength**: someone posted about hiring > live role (7+) > new leader in the candidate's area > funding or
+   local office > launch in the candidate's area.
 2. **Network distance**: each person has a `distance` with `paths`. Closer beats colder. If the best
    route to a hiring manager runs through someone (`via`), the move is usually to ask **that** person
    for an intro or a quick view of the team: map them at this account and aim the move at them, and say
    so in the angle. Routes marked `~` are inferred, not proven, so word the draft accordingly: never
    claim to know someone or to share a connection unless `certain` is true.
 3. **Tier and fit**: A before B.
-4. **Person fit to signal**: the hiring manager for a role, the product leader for a launch, a peer PM
+4. **Person fit to signal**: the hiring manager for a role, the team leader for a launch, a peer
    for an intro. Never a random employee.
 
 If an account has a strong signal but **nobody mapped**, map 1–2 people first (see `prompts/people.md`),

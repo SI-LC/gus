@@ -1,6 +1,6 @@
 # Gus
 
-**An agentic, account-based job search for product managers.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
+**An agentic, account-based job search.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 
 ```
  SIGNALS     job boards · newsletters · funding news · social · email
@@ -26,8 +26,8 @@ Gus does one full run a day, or whenever you press **Full run**. It's one job, i
 
 1. **Scan and score:** read every watched job board, feed and social source, and email, then score anything new against your CV
 2. **Read emails:** an offline agent picks out replies and roles
-3. **Discover:** turn signals into companies, roles and dated events, and search the web for London PM roles
-4. **Refresh accounts:** find companies through VCs, funding news and London openings, then research, score and tier them. The heaviest step, so it runs every few days
+3. **Discover:** turn signals into companies, roles and dated events, and search the web for your target roles
+4. **Refresh accounts:** find companies through VCs, funding news and new local openings, then research, score and tier them. The heaviest step, so it runs every few days
 5. **Score what's new**, and map the people at strong accounts
 6. **Plan moves:** pick this week's moves, once a week
 

@@ -88,7 +88,7 @@ SCHEMA = [
     ("x_daily_post_cap", "X posts per day", "int:0-2000", "Social", "Hard cap on posts fetched, and paid for, each day."),
     ("x_cost_per_post", "X price per post (USD)", "money", "Social", "Used to estimate X costs. Check your X developer console for the real rate."),
     ("source_bluesky", "Bluesky", "bool", "Social", "Free, open search. Also used when finding people."),
-    ("social_queries", "Bluesky searches", "lines", "Social", "One search per line. Posts must also mention a product role and one of your locations."),
+    ("social_queries", "Bluesky searches", "lines", "Social", "One search per line. Posts must also mention a target role and one of your locations."),
     ("source_mastodon", "Mastodon", "bool", "Social", "Free, open hashtag timelines."),
     ("social_mastodon_tags", "Mastodon hashtags", "lines", "Social", "Comma or line separated, without #."),
     ("mastodon_instance", "Mastodon server", "text", "Social", "e.g. mastodon.social or hachyderm.io"),
