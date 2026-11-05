@@ -1,0 +1,9 @@
+id: job-source-limits
+requirement: I can turn job sources on, set their limits, and see when each limit resets.
+given: empty
+check:
+  - open Settings
+  - click "Job sources"
+  - see "Check job sources each day"
+  - see "Limits and timing"
+judge: Is it clear how often each source runs and how much allowance is left?

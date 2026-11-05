@@ -44,7 +44,7 @@ A small web app, and the place you work:
 - **To do:** your moves, each with why now, your angle and a draft, plus funnel numbers
 - **Companies:** target companies by tier, with their signals and people
 - **Usage:** what AI runs use, by day and task
-- **Settings:** AI provider, matching, schedule, sources, email, keys and your profile
+- **Settings:** AI provider, matching, schedule, job sources and their limits, email, keys and your profile
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
 

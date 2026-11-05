@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from radar.companies import COMPANIES, veto
 from radar.scan import DATA, JOBS, ROOT, role_type, where
-from radar import service, settings, usage
+from radar import links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked
 
@@ -51,8 +51,9 @@ def read(path, default):
 
 
 def state():
-    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location")),
-             "role_type": role_type(j.get("title"))} for j in read(JOBS, {}).values()]
+    watched = links.watched()
+    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location")), "role_type": role_type(j.get("title")),
+             "can_watch": bool(j.get("board")) and sources.same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
     signals = read(DATA / "signals.json", {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
     runs = sorted(p.name for p in (DATA / "runs").glob("*.md")) if (DATA / "runs").exists() else []
@@ -102,6 +103,7 @@ def state():
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
             "board_errors": read(DATA / "board_errors.json", {}),
             "x": read(DATA / "x_state.json", {}),
+            "sources": sources.status(),
             "last_agent_run": runs[-1] if runs else None,
         },
     }
@@ -119,6 +121,7 @@ def settings_payload():
         "feeds": [{k: f[k] for k in ("name", "url", "kind", "enabled", "builtin")} for f in all_feeds()],
         "suggested": [{"name": n, "url": u, "kind": k} for n, u, k in SUGGESTED],
         "run": service.status(),
+        "sources": sources.status(),
     }
 
 
@@ -310,6 +313,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/job":
             return self.send(200, update_job(body))
+        if path == "/api/watch":
+            job = read(JOBS, {}).get(body.get("id"))
+            return self.send(200, {"ok": bool(job) and links.watch(job)})
         if path == "/api/role-contact":
             return self.send(200, role_contact(body))
         if path == "/api/company/veto":
@@ -401,7 +407,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, ai.test())
             if path == "/api/run":
                 job = body.get("job")
-                if job not in ("run", "scan"):
+                if job not in ("run", "scan", "sources"):
                     return self.send(400, {"error": "Unknown job"})
                 return self.send(200, {"ok": True, "started": service.start(job)})
         except ValueError as e:
