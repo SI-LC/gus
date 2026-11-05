@@ -184,8 +184,6 @@ def warnings(name, cfg, st) -> list:
         out.append("You've allowed more each month than your Adzuna monthly limit, so the limit applies.")
     if name == "jsearch" and quota and allowed(name, cfg) > quota["limit"]:
         out.append(f"You've allowed {allowed(name, cfg)} a month, but your JSearch plan gives {quota['limit']}.")
-    if name == "adzuna" and cfg.get("source_adzuna") and not cfg.get("adzuna_limits_confirmed"):
-        out.append("Adzuna limits aren't confirmed: copy them from your account, then tick the box.")
     rows = limits(name, cfg, st)
     low = next((r for r in rows if 0 < r["left"] < p["per_run"]), None)
     full = next((r for r in rows if r["left"] <= 0), None)

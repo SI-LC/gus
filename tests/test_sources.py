@@ -186,15 +186,11 @@ class Limits(unittest.TestCase):
         with mock.patch.object(sources, "secret", return_value=""):
             self.assertIn("key is missing", " ".join(sources.warnings("jsearch", CFG, {})))
 
-    def test_warns_until_adzuna_limits_are_confirmed(self):
-        self.assertIn("aren't confirmed", self.warn(name="adzuna"))
-        self.assertNotIn("aren't confirmed", self.warn(name="adzuna", adzuna_limits_confirmed=True))
-
     def test_warns_when_a_search_was_cut_short(self):
         self.assertIn("older ones were missed", self.warn({"adzuna": {"cut": 1}}, name="adzuna"))
 
     def test_the_default_settings_raise_no_warning(self):
-        d = {**settings.load(), "source_adzuna": True, "adzuna_limits_confirmed": True}
+        d = {**settings.load(), "source_adzuna": True}
         with mock.patch.object(sources, "secret", return_value="x"):
             self.assertEqual(sources.warnings("adzuna", d, {}), [])
             self.assertEqual(sources.warnings("jsearch", d, {}), [])

@@ -41,7 +41,7 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 - **Adzuna and JSearch trial.** A 14-day quality trial has been run, and nothing from it is in live Gus. Adzuna passed the proposed bar. JSearch isn't proven, because five searches gave no results or didn't run, but both are now built in and off until keys are set. Still to decide:
   - Rerun the five missing JSearch searches, using up to 20 free requests?
   - Is the proposed bar right: at least five new 7+ roles, at least three good new companies, and under one in ten junk? Should "new 7+ roles" count only roles the candidate would also consider?
-  - Confirm Adzuna's limits for this account, and tick the box in Settings. The defaults are unconfirmed.
+  - Adzuna's limits in Settings are unconfirmed defaults: change them if the account differs.
   - Should the company check rank roles lower rather than remove them?
   - Adzuna only gives short job extracts, so are its scores reliable enough?
 - Big companies run their own careers sites, which this can't scan and whose rules may forbid it. Options are job alert emails, which depend on the email decision, or adding roles by hand.
