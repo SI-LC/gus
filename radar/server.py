@@ -27,9 +27,9 @@ CLI_HOSTS: set = set()
 PAGE = ROOT / "radar" / "cockpit.html"
 PROFILE = ROOT / "profile" / "profile.md"
 MAX_BODY = 5_000_000
-STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-180.png": ("icon-180.png", "image/png"),
+STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-32.png": ("icon-32.png", "image/png"), "/icon-180.png": ("icon-180.png", "image/png"),
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
-          "/favicon.ico": ("icon-180.png", "image/png")}
+          "/favicon.ico": ("icon-32.png", "image/png")}
 MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "display": "standalone",
                        "background_color": "#0b0b0a", "theme_color": "#0b0b0a",
                        "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
