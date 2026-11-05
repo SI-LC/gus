@@ -117,7 +117,7 @@ def greenhouse(company: str, slug: str):
     for j in get_json(base).get("jobs", []):
         title = j["title"]
         _listed.add(f"gh:{slug}:{j['id']}")  # every live job, even titles the filter drops, so nothing looks closed by mistake
-        if not cfg["title_include"].search(title) or cfg["title_exclude"].search(title):
+        if not wanted_title(title, cfg):
             continue
         jid = f"gh:{slug}:{j['id']}"
         row = {"id": jid, "company": company, "title": title, "url": j["absolute_url"],
@@ -254,8 +254,18 @@ def watchlist_path() -> Path:
 
 
 def load_config():
-    from radar.settings import load
-    return {k: re.compile(v, re.I) if k.endswith(("include", "exclude")) else v for k, v in load().items()}
+    from radar.settings import PATTERN_ENDINGS, load, to_pattern
+    return {k: re.compile(to_pattern(v), re.I) if k.endswith(PATTERN_ENDINGS) else v for k, v in load().items()}
+
+
+def left_out(text, cfg, key) -> bool:
+    """On the leave-out list, once its exceptions are ignored: "engineer" mustn't catch "product engineer"."""
+    keep = cfg.get("title_exclude_except" if key == "title_exclude" else "source_company_except")
+    return bool(cfg[key].search(keep.sub(" ", text) if keep else text))
+
+
+def wanted_title(title, cfg) -> bool:
+    return bool(cfg["title_include"].search(title)) and not left_out(title, cfg, "title_exclude")
 
 
 def matches(job, cfg, hn=False) -> bool:
@@ -263,9 +273,7 @@ def matches(job, cfg, hn=False) -> bool:
     if hn:  # HN posts are free text, so test the whole comment
         return bool(re.search(r"product manager", title + job["description"], re.I)) and bool(
             cfg["location_include"].search(job["description"]))
-    return (bool(cfg["title_include"].search(title))
-            and not cfg["title_exclude"].search(title)
-            and bool(cfg["location_include"].search(job["location"])))
+    return wanted_title(title, cfg) and bool(cfg["location_include"].search(job["location"]))
 
 
 _boards_answered: set = set()

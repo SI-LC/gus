@@ -21,6 +21,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 
 from radar.calendar_invites import is_invite, keep
 from radar.scan import DATA, load_config, strip_html
+from radar.settings import to_pattern
 from radar.settings import secret
 from radar.store import locked
 
@@ -74,7 +75,7 @@ def invites_in(msg) -> list[dict]:
 def rules(cfg):
     senders = [s.strip().lower() for s in re.split(r"[\n,]", cfg.get("inbox_senders") or "") if s.strip()]
     pattern = cfg.get("inbox_subjects") or ""
-    return senders, re.compile(pattern, re.I) if pattern else None
+    return senders, re.compile(to_pattern(pattern), re.I) if pattern else None
 
 
 def connect(cfg):
