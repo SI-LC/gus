@@ -342,10 +342,9 @@ class Targeting(unittest.TestCase):
             self.assertEqual(where(loc), want)
 
     def test_titles(self):
-        import json
-        from radar.scan import ROOT, role_type
-        c = json.loads((ROOT / "config.json").read_text())
-        keep = lambda t: bool(re.search(c["title_include"], t, re.I)) and not re.search(c["title_exclude"], t, re.I)
+        from radar.scan import load_config, role_type, wanted_title
+        c = load_config()
+        keep = lambda t: wanted_title(t, c)
         for t in ("Senior Product Manager", "Forward Deployed Engineer", "Forward-Deployed PM", "Product Engineer", "Founding Product Engineer", "Applied AI Engineer", "Member of Deployed Staff"):
             self.assertTrue(keep(t), t)
         for t in ("Software Engineer", "Product Designer", "Product Marketing Manager", "Engineering Manager", "Product Operations Lead"):
@@ -357,13 +356,40 @@ class Targeting(unittest.TestCase):
         self.assertEqual(role_type("Forward Deployed Product Manager"), "Forward deployed")
 
     def test_remote_locations(self):
-        import json
-        from radar.scan import ROOT
-        loc = json.loads((ROOT / "config.json").read_text())["location_include"]
+        from radar.scan import load_config
+        loc = load_config()["location_include"]
         for l in ("Remote", "London", "Remote - Worldwide", "Remote, United Kingdom", "Remote (EMEA)"):
-            self.assertTrue(re.search(loc, l, re.I), l)
+            self.assertTrue(loc.search(l), l)
         for l in ("Remote - US", "San Francisco", "Remote, Canada"):
-            self.assertFalse(re.search(loc, l, re.I), l)
+            self.assertFalse(loc.search(l), l)
+
+    def test_plain_lists_are_read_as_people_expect(self):
+        from radar.settings import to_pattern
+        hit = lambda items, text: bool(re.search(to_pattern(items), text, re.I))
+        self.assertTrue(hit("recruit*", "Recruitment Ltd"))
+        self.assertFalse(hit("recruit", "Recruitment Ltd"))
+        self.assertTrue(hit("*recruit*", "Prorecruiters"))
+        self.assertFalse(hit("uk", "Dukes"))
+        self.assertTrue(hit("forward deployed", "Forward-Deployed Engineer"))
+        self.assertTrue(hit("few&far", "Few&Far"))
+        self.assertTrue(hit("remote (exactly)", " Remote "))
+        self.assertFalse(hit("remote (exactly)", "Remote, US"))
+        self.assertFalse(hit("", "anything"))
+
+    def test_older_settings_written_as_patterns_still_work(self):
+        from radar.settings import to_pattern
+        self.assertTrue(re.search(to_pattern(r"\b(pm|product)\b"), "Senior PM", re.I))
+
+    def test_a_line_that_cant_be_read_is_refused(self):
+        from radar import settings
+        with self.assertRaises(ValueError):
+            settings.validate("title_include", "(broken")
+
+    def test_exceptions_stop_a_leave_out_word_catching_a_wanted_title(self):
+        from radar.scan import load_config, wanted_title
+        c = load_config()
+        self.assertTrue(wanted_title("Forward-Deployed Engineer", c))
+        self.assertFalse(wanted_title("Staff Engineer, Product", c))
 
 
 class Distance(unittest.TestCase):

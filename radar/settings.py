@@ -40,9 +40,10 @@ SCHEMA = [
     ("ai_daily_budget_usd", "Daily AI limit (USD)", "money", "AI",
      "Runs pause for the day at this much, in the equivalent API prices shown on Usage. 0 turns AI runs off: scans still find roles, but nothing is scored."),
 
-    ("title_include", "Titles to include", "regex", "Matching", "Regular expression, case-insensitive."),
-    ("title_exclude", "Titles to exclude", "regex", "Matching", "Regular expression, case-insensitive."),
-    ("location_include", "Locations to include", "regex", "Matching", "Regular expression, case-insensitive."),
+    ("title_include", "Titles to include", "lines", "Matching", "Keep a role if its title contains any of these. One per line. Capitals don't matter."),
+    ("title_exclude", "Titles to leave out", "lines", "Matching", "Drop a role if its title contains any of these, even if it's also in the list above."),
+    ("title_exclude_except", "Exceptions to leave out", "lines", "Matching", "Phrases the list above ignores, so \"engineer\" there doesn't drop a product engineer."),
+    ("location_include", "Locations to include", "lines", "Matching", "One per line. Add (exactly) to match only that word, so \"remote (exactly)\" won't match \"Remote, US\"."),
     ("notify_min_score", "Notify at score", "int:1-10", "Matching", "Push a notification for roles at or above this."),
     ("salary_floor", "Lowest salary you want", "int:0-1000000", "Matching", "A yearly figure. Roles that state less lose a point per 10% under it, up to 5. Roles with no stated salary aren't changed. 0 turns this off."),
     ("salary_symbol", "Salary currency symbol", "text", "Matching", "Used to read salaries from job ads, e.g. £."),
@@ -66,8 +67,9 @@ SCHEMA = [
     ("sources_close_after_days", "Close untouched ads after (days)", "int:14-180", "Source details", "These sources can't say when an ad has gone, so roles you haven't acted on are closed at this age."),
     ("adzuna_pages_per_search", "Adzuna: pages per search", "int:1-14", "Source details", "Up to 50 roles a page. More pages find more roles but use more requests."),
     ("jsearch_pages_per_search", "JSearch: pages per search", "int:1-10", "Source details", "About 10 roles a page. More pages find more roles but use more requests."),
-    ("source_company_exclude", "Companies to leave out", "regex", "Source details", "Recruiters, agencies and job sites listed as the employer. Regular expression, case-insensitive."),
-    ("source_text_exclude", "Wording to leave out", "regex", "Source details", "Phrases in an ad that show it comes from an agency. Regular expression, case-insensitive."),
+    ("source_company_exclude", "Companies to leave out", "lines", "Source details", "Recruiters, agencies and job sites listed as the employer. One per line. Capitals don't matter. Use * for any ending, like headhunt*."),
+    ("source_company_except", "Companies to keep", "lines", "Source details", "Real employers the list above would otherwise catch, like talent systems."),
+    ("source_text_exclude", "Wording to leave out", "lines", "Source details", "Phrases in an ad that show it comes from an agency. One per line. Capitals don't matter."),
     ("links_ai_search", "Find employer pages with AI", "bool", "Job sources", "For strong roles with no employer link, Claude searches the web for the employer's own page. Uses your Claude allowance for each role."),
     ("links_ai_min_score", "AI search: lowest score", "int:5-10", "Job sources", "Only roles at or above this score get an AI search."),
     ("links_ai_per_run", "AI search: most roles per run", "int:1-30", "Job sources", "Others wait for the next run. Searches also stop at your daily AI limit."),
@@ -102,7 +104,7 @@ SCHEMA = [
     ("gmail_address", "Gmail address", "text", "Email", "The account that receives your recruiter and LinkedIn emails."),
     ("inbox_days", "Look back (days)", "int:1-30", "Email", "How far back each check goes."),
     ("inbox_senders", "Senders to read", "lines", "Email", "Any part of an email address, one per line. Other emails stay unopened."),
-    ("inbox_subjects", "Subjects to read", "regex", "Email", "Emails with a subject matching this are read too. Regular expression, case-insensitive."),
+    ("inbox_subjects", "Subjects to read", "lines", "Email", "Emails with any of these in the subject are read too. One per line. Use * for any ending, like interview*."),
 
     ("my_employers", "Your employers", "lines", "Network",
      "One per line. Used to spot people who worked where you did."),
@@ -111,6 +113,28 @@ SCHEMA = [
     ("quiet_hours", "Quiet hours", "text", "Notifications", "e.g. 22:00-07:00. Notifications are held until it ends. Empty for none."),
     ("cockpit_url", "Cockpit address", "text", "Notifications", "Where notifications link to, e.g. http://raspberrypi:8484 or your Tailscale name."),
 ]
+
+PATTERN_ENDINGS = ("include", "exclude", "except")
+ADVANCED = re.compile(r"[|\\()\[\]^$?+{}]")  # older settings written as patterns keep working
+JOIN = r"[\s,(/&-]+"
+
+
+def to_pattern(value) -> str:
+    """Turn a plain list into one case-insensitive pattern. An empty list matches nothing."""
+    parts = []
+    for line in str(value or "").splitlines():
+        item = line.strip()
+        exact = item.lower().endswith(" (exactly)")
+        item = item[:-len(" (exactly)")].strip() if exact else item
+        if not item:
+            continue
+        if ADVANCED.search(item):
+            parts.append(item)
+            continue
+        body = re.sub(r"(\\ |\\-)+", lambda _: JOIN, re.escape(item)).replace(r"\*", r"\w*")
+        parts.append(rf"^\s*{body}\s*$" if exact else rf"(?<!\w){body}(?!\w)")
+    return "|".join(parts) or "(?!)"
+
 
 SECRET_KEYS = {
     "anthropic_api_key": ("Anthropic API key", "Only for the Anthropic API provider."),
@@ -169,7 +193,7 @@ def validate(key: str, value):
         return str(value)
     if kind == "lines":
         return "\n".join(x.strip() for x in re.split(r"[\n,]", str(value)) if x.strip()) if "tags" in key or "subs" in key or "senders" in key \
-            else "\n".join(x.strip() for x in str(value).splitlines() if x.strip())
+            else _checked(key, row, "\n".join(x.strip() for x in str(value).splitlines() if x.strip()))
     if kind == "times":
         times = [t.strip() for t in str(value).split(",") if t.strip()]
         for t in times:
@@ -181,6 +205,15 @@ def validate(key: str, value):
     if kind == "select:claude_model" and value not in CLAUDE_MODELS:
         raise ValueError("Unknown model")
     return str(value).strip()
+
+
+def _checked(key, row, value):
+    if key.endswith(PATTERN_ENDINGS) or key == "inbox_subjects":
+        try:
+            re.compile(to_pattern(value))
+        except re.error:
+            raise ValueError(f"{row[1]}: one of these lines can't be read. Remove any brackets or symbols.")
+    return value
 
 
 def save(changes: dict) -> dict:

@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
-from radar.scan import DATA, JOBS, UA, load_config, matches, strip_html
+from radar.scan import DATA, JOBS, UA, left_out, load_config, matches, strip_html
 from radar.settings import secret
 from radar.store import locked
 
@@ -298,7 +298,7 @@ def clean(rows, store, cfg, today=None):
             why = "old"
         elif not key[0]:
             why = "no employer"
-        elif hits(cfg.get("source_company_exclude"), j["company"]) or hits(cfg.get("source_text_exclude"), j["description"][:6000]):
+        elif left_out(j["company"], cfg, "source_company_exclude") or hits(cfg.get("source_text_exclude"), j["description"][:6000]):
             why = "agency"
         elif key in seen or ad_text(j) in texts:
             why = "repeat"
