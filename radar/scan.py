@@ -273,7 +273,8 @@ def matches(job, cfg, hn=False) -> bool:
     if hn:  # HN posts are free text, so test the whole comment
         return bool(re.search(r"product manager", title + job["description"], re.I)) and bool(
             cfg["location_include"].search(job["description"]))
-    return wanted_title(title, cfg) and bool(cfg["location_include"].search(job["location"]))
+    place = " / ".join(dict.fromkeys(p.strip() for p in job["location"].split("/")))  # "Remote / Remote" is just remote
+    return wanted_title(title, cfg) and bool(cfg["location_include"].search(place))
 
 
 _boards_answered: set = set()

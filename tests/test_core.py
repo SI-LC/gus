@@ -13,6 +13,22 @@ def at(day, h, m=0):
     return datetime(2026, 11, day, h, m)
 
 
+class RemoteRoles(unittest.TestCase):
+    def job(self, location):
+        return {"title": "Product Manager", "location": location, "description": ""}
+
+    def test_a_repeated_remote_location_counts_as_remote(self):
+        from radar import scan
+        cfg = scan.load_config()
+        self.assertTrue(scan.matches(self.job("Remote / Remote "), cfg))
+        self.assertTrue(scan.matches(self.job("Remote"), cfg))
+
+    def test_remote_in_one_country_still_does_not_count(self):
+        from radar import scan
+        cfg = scan.load_config()
+        self.assertFalse(scan.matches(self.job("Remote / United States"), cfg))
+
+
 class AppIcon(unittest.TestCase):
     def test_browser_icon_has_light_and_dark_versions(self):
         from radar.scan import ROOT
