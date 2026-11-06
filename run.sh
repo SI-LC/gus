@@ -14,6 +14,7 @@ if [[ -n "$new" ]]; then
 fi
 python3 -m radar.triage >>data/triage.log 2>&1  # always: scores anything waiting, costs nothing if there's none
 python3 -m radar.people >>data/people.log 2>&1
+python3 -m radar.companies sync >>data/companies.log 2>&1  # new boards reach the Companies screen straight away
 python3 -m radar.companies mentions >>data/companies.log 2>&1
 python3 -m radar.companies health >>data/companies.log 2>&1
 python3 -c "from radar.notify import release_held; release_held()"

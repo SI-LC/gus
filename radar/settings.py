@@ -20,16 +20,16 @@ USER = ROOT / "settings.json"
 SECRETS = ROOT / ".secrets.json"
 
 PROVIDERS = {
-    "claude_subscription": "Claude subscription (Claude Code login)",
-    "anthropic_api": "Anthropic API key (via Claude Code)",
+    "claude_subscription": "My Claude plan (sign in, no API key)",
+    "anthropic_api": "Anthropic API key (pay per use)",
     "openai_compatible": "OpenAI-compatible API (scoring only)",
 }
 CLAUDE_MODELS = ["haiku", "sonnet", "opus"]
 
 # key, label, type, group, help. Types: text, regex, int, bool, select:<options>, times
 SCHEMA = [
-    ("ai_provider", "Provider", "select:provider", "AI",
-     "Claude providers can do everything. OpenAI-compatible can score roles, but can't search the web for people or run the agent."),
+    ("ai_provider", "How Gus connects to AI", "select:provider", "AI",
+     "A Claude plan or an Anthropic API key can do everything. An OpenAI-compatible API can score roles, but can't search the web for people or run the agent."),
     ("model_scoring", "Model for scoring roles", "select:claude_model", "AI", "Runs on every new role. Sonnet is a good balance."),
     ("model_people", "Model for finding people", "select:claude_model", "AI", "Uses web search, for roles above the people threshold."),
     ("model_agent", "Model for agent runs", "select:claude_model", "AI", "Discovery and watchlist loops. The most judgement-heavy work."),
@@ -162,8 +162,8 @@ def group_of(text, rows) -> str:
 
 
 SECRET_KEYS = {
-    "anthropic_api_key": ("Anthropic API key", "Only for the Anthropic API provider."),
-    "openai_api_key": ("OpenAI-compatible API key", "Only for the OpenAI-compatible provider. Leave empty for local Ollama."),
+    "anthropic_api_key": ("Anthropic API key", "From console.anthropic.com. Billed per use by Anthropic, separately from any Claude plan."),
+    "openai_api_key": ("OpenAI-compatible API key", "Leave empty for local Ollama."),
     "gmail_app_password": ("Gmail app password", "A 16-letter password from your Google account, not your normal one."),
     "x_bearer_token": ("X API bearer token", "From developer.x.com."),
     "ntfy_topic": ("ntfy topic", "A long random name. Anyone who knows it can read your notifications."),

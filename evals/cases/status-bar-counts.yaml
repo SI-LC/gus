@@ -1,0 +1,9 @@
+id: status-bar-counts
+requirement: The status bar shows how many boards Gus really scans, and doesn't present plan usage as money spent.
+given: scanned
+check:
+  - status bar says "board"
+  - status bar says "API value"
+  - status bar doesn't say "1 boards"
+  - status bar doesn't say "this month"
+judge: Would I read the cost as what the usage is worth, not as a bill?

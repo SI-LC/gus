@@ -1,0 +1,12 @@
+id: settings-ai-connection
+requirement: On a Claude plan, Settings shows me how to sign in and doesn't ask for an API key.
+given: scanned
+check:
+  - open Settings
+  - see "How Gus connects to AI"
+  - see "Sign in with Claude"
+  - not see "From console.anthropic.com"
+  - click "Keys"
+  - see "Gmail app password"
+  - not see "From console.anthropic.com"
+judge: Is it obvious that I don't need an API key to use my Claude plan?

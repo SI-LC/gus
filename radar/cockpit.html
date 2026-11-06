@@ -682,12 +682,11 @@ const V = {
   },
   health() {
     const h = S.health, errs = Object.entries(h.board_errors || {});
-    const C = Object.values(S.companies);
     return costs() + `<div class="section">Health</div>
       <div class="stats">
         <div class="stat"><div class="v">${ago(h.last_scan)}</div><div class="l">Last scan</div></div>
-        <div class="stat"><div class="v">${h.last_agent_run ? esc(h.last_agent_run.replace(/\.md$/, "").replace(/-(\d\d)-(\d\d)Z$/, ":$1")).slice(-16) : "never"}</div><div class="l">Last agent run</div></div>
-        <div class="stat"><div class="v">${C.filter(c => c.status === "watched").length}</div><div class="l">Companies watched</div></div>
+        <div class="stat"><div class="v">${h.last_agent_run ? ago(h.last_agent_run) : "never"}</div><div class="l">Last agent run</div></div>
+        <div class="stat"><div class="v">${h.boards}</div><div class="l">Boards scanned</div></div>
         <div class="stat"><div class="v">${S.jobs.length}</div><div class="l">Roles tracked</div></div>
         <div class="stat"><div class="v">${h.signals_waiting}</div><div class="l">Signals waiting</div></div>
         <div class="stat"><div class="v">${h.x && h.x.day ? (h.x.used || 0) : "off"}</div><div class="l">X posts today</div></div>
@@ -701,16 +700,24 @@ const V = {
 let SET = null;
 const fieldRow = f => `<div class="field"><label for="f_${f.key}">${esc(f.label)}</label>
   <div>${input(f, SET.values[f.key])}</div>${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
+const AI_KEYS = { anthropic_api: "anthropic_api_key", openai_compatible: "openai_api_key" };
+const secretField = ([k, s]) => `<div class="field"><label for="s_${k}">${esc(s.label)}</label>
+      <div class="row"><input type="password" id="s_${k}" placeholder="${SET.secrets[k] ? esc(SET.secrets[k]) : "Not set"}" autocomplete="off" style="flex:1;min-width:160px">
+      <button onclick="saveSecret('${k}')">Save</button>${SET.secrets[k] ? `<button onclick="$('s_${k}').value='';saveSecret('${k}')">Clear</button>` : ""}</div>
+      ${s.help ? `<div class="help">${esc(s.help)}</div>` : ""}</div>`;
 const fieldsOf = (group, skip = []) => SET.schema.filter(f => f.group === group && !skip.includes(f.key)).map(fieldRow).join("");
 const SETTINGS_TABS = [
   ["ai", "AI", () => {
     const skip = SET.values.ai_provider === "openai_compatible" ? [] : ["openai_base_url", "openai_model"];
-    const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude login on the computer Gus runs on. If it has expired, sign in again here."
-      : SET.values.ai_provider === "anthropic_api" ? "Uses your Anthropic API key (set it under Keys). Billed per use by Anthropic."
+    const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude plan you're signed in to on the computer Gus runs on, so you don't need an API key. If it has expired, sign in again here."
+      : SET.values.ai_provider === "anthropic_api" ? "Gus uses this key, not a Claude login."
       : "Scoring only. Finding people and agent runs need a Claude provider.";
-    return `<section class="group"><h2>Provider and models</h2>${fieldsOf("AI", skip)}
+    const key = AI_KEYS[SET.values.ai_provider];
+    return `<section class="group"><h2>AI connection</h2>${fieldRow(SET.schema.find(f => f.key === "ai_provider"))}
+      ${key ? secretField([key, SET.secret_keys[key]]) : ""}
       <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button>${SET.values.ai_provider === "claude_subscription" ? `<button onclick="signIn('ai-login')">Sign in with Claude</button>` : ""}<span id="ai-test" class="sub"></span></div>
-      <div id="ai-login"></div><div class="help">${help}</div></div></section>`;
+      <div id="ai-login"></div><div class="help">${help}</div></div></section>
+      <section class="group"><h2>Models and limits</h2>${fieldsOf("AI", [...skip, "ai_provider"])}</section>`;
   }],
   ["matching", "Matching", () => `<section class="group"><h2>What counts as a match</h2>${fieldsOf("Matching")}</section>`],
   ["schedule", "Schedule", () => {
@@ -779,11 +786,8 @@ const SETTINGS_TABS = [
       <section class="group"><h2>What gets read</h2>${SET.schema.filter(f => ["inbox_days", "inbox_senders", "inbox_subjects"].includes(f.key)).map(fieldRow).join("")}</section>`;
   }],
   ["notifications", "Notifications", () => `<section class="group"><h2>Notifications</h2><p class="sub">Install the ntfy app on your phone, subscribe to a long random topic, and set that topic under Keys.</p>${fieldsOf("Notifications")}</section>`],
-  ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git.</p>` +
-    Object.entries(SET.secret_keys).map(([k, s]) => `<div class="field"><label for="s_${k}">${esc(s.label)}</label>
-      <div class="row"><input type="password" id="s_${k}" placeholder="${SET.secrets[k] ? esc(SET.secrets[k]) : "Not set"}" autocomplete="off" style="flex:1;min-width:160px">
-      <button onclick="saveSecret('${k}')">Save</button>${SET.secrets[k] ? `<button onclick="$('s_${k}').value='';saveSecret('${k}')">Clear</button>` : ""}</div>
-      ${s.help ? `<div class="help">${esc(s.help)}</div>` : ""}</div>`).join("") + `</section>`],
+  ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git. Your AI connection is under AI.</p>` +
+    Object.entries(SET.secret_keys).filter(([k]) => !Object.values(AI_KEYS).includes(k)).map(secretField).join("") + `</section>`],
   ["profile", "Profile", () => {
     setTimeout(async () => { const p = $("profile"); if (p && !p.value) p.value = (await (await fetch("/api/profile")).json()).text; }, 0);
     return `<section class="group"><h2>Your profile</h2><p class="sub">What you want and your CV, as plain text. Scoring, the people search and the agent all read this.</p>
@@ -890,10 +894,10 @@ function drawTicker() {
     <button class="scan-now" title="Checks your job boards for new roles and scores them. Nothing else." onclick="startRun('scan')">${busy === "scan" ? "Checking…" : "Check roles"}</button>
     <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
     <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
-    <span><b>${Object.values(S.companies).filter(c => c.status === "watched").length}</b> watched</span>
+    <span><b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
     <span><b>${h.signals_waiting}</b> signals queued</span>
-    <a href="#health" style="text-decoration:none"><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> this month</a>
-    <span>Agent <b>${h.last_agent_run ? ago(h.last_agent_run.replace(/^.*?(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)Z.*$/, "$1:$2:$3Z")) : "never"}</b></span>
+    <a href="#health" style="text-decoration:none"${S.ai.on_plan ? ` title="What this month's usage would cost at API prices. Your Claude plan covers the Claude part."` : ""}><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> ${S.ai.on_plan ? "API value" : "this month"}</a>
+    <span>Agent <b>${h.last_agent_run ? ago(h.last_agent_run) : "never"}</b></span>
 `;
 }
 function navSlim() { try { return localStorage.getItem("radar-nav") !== "open"; } catch (e) { return true; } }
