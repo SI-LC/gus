@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 from radar.companies import COMPANIES, veto
 from radar.scan import DATA, JOBS, ROOT, role_type, where
-from radar import links, service, settings, sources, usage
+from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked
 
@@ -52,7 +52,9 @@ def read(path, default):
 
 def state():
     watched = links.watched()
-    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location")), "role_type": role_type(j.get("title")),
+    cfg = settings.load()
+    places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
+    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location"), places), "role_type": role_type(j.get("title"), kinds),
              "can_watch": bool(j.get("board")) and sources.same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
     signals = read(DATA / "signals.json", {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
@@ -71,7 +73,7 @@ def state():
         accts.append({"name": name, "tier": t, "tier_locked": bool(c.get("tier_locked")), "fit": c.get("fit"),
                       "why": c.get("fit_why") or c.get("why_it_fits"), "product": c.get("product"), "london": c.get("london"),
                       "stage": c.get("stage"), "board": c.get("board"), "board_broken": c.get("board_broken"),
-                      "added": c.get("added"), "previous_fit": c.get("previous_fit"),
+                      "added": c.get("added"), "previous_fit": c.get("previous_fit"), "favourite": bool(c.get("favourite")),
                       "events": ev[:6], "fresh": sum(e["fresh"] for e in ev),
                       "last_contacted": str(touched) if touched else None})
     shown = sorted(moves.values(), key=lambda m: m.get("created", ""), reverse=True)[:60]
@@ -81,6 +83,10 @@ def state():
         if live:
             m["signal"] = {**m["signal"], "date": live["date"]}
     return {
+        "setup": firstrun.setup_state(),
+        "places": list(dict.fromkeys(p[0] for p in places)),
+        "kinds": list(dict.fromkeys(k[0] for k in kinds)),
+        "kind_default": kinds[-1][0] if kinds else "",
         "jobs": jobs,
         "companies": companies,
         "accounts": accts,
@@ -287,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"text": PROFILE.read_text() if PROFILE.exists() else ""})
         if path == "/api/run":
             return self.send(200, service.status())
+        if path == "/api/first-run":
+            return self.send(200, firstrun.status())
         self.send(404, {"error": "Not found"})
 
     def do_POST(self):
@@ -385,6 +393,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"error": "No such account"})
                     if body.get("tier") in ("A", "B", "C"):
                         c["tier"], c["tier_locked"] = body["tier"], True
+                    if "favourite" in body:
+                        c["favourite"] = bool(body["favourite"])
                 return self.send(200, {"ok": True})
             if path == "/api/network/import":
                 from radar import network
@@ -399,6 +409,16 @@ class Handler(BaseHTTPRequestHandler):
                 from radar.feeds import remove_feed
                 remove_feed(str(body.get("name", "")))
                 return self.send(200, settings_payload())
+            if path == "/api/first-run":
+                return self.send(200, firstrun.update(body))
+            if path == "/api/first-run/connect":
+                return self.send(200, firstrun.connect(str(body.get("key") or "")))
+            if path == "/api/first-run/login":
+                return self.send(200, firstrun.login_code(str(body["code"])) if "code" in body else firstrun.login())
+            if path == "/api/first-run/skip":
+                return self.send(200, firstrun.skip())
+            if path == "/api/first-run/hide":
+                return self.send(200, firstrun.hide_get_started())
             if path == "/api/test-gmail":
                 from radar import inbox
                 return self.send(200, inbox.test())

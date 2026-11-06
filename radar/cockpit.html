@@ -102,6 +102,24 @@
   @media (prefers-reduced-motion: reduce) { .live::before { animation: none; } * { transition: none !important; } }
 
   main { padding: 32px 28px 96px; max-width: 1040px; width: 100%; }
+  .app.first { grid-template-columns: minmax(0, 1fr); }
+  .app.first nav, .app.first .ticker { display: none; }
+  .app.first main { max-width: 720px; margin: 0 auto; }
+  .fr-label { display: block; font-weight: 600; margin: 24px 0 6px; }
+  #fr textarea { width: 100%; }
+  .fr-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+  .fr-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); background: var(--surface); padding: 5px 9px; font-size: 13px; color: var(--text); cursor: pointer; }
+  .fr-chip.on { border-color: var(--accent); background: var(--accent-soft); }
+  .fr-chip.bad { color: var(--muted); }
+  .fr-chips input { min-width: 150px; flex: 1; }
+  .fr-go { margin-top: 28px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .fr-talk { margin-top: 8px; font-size: 13px; }
+  .fr-pending { color: var(--muted); }
+  .getting-started { border: 1px solid var(--line); background: var(--surface); padding: 12px 16px; margin: 16px 0; }
+  .getting-started li { list-style: none; padding: 3px 0; }
+  .getting-started ul { margin: 6px 0 0; padding: 0; }
+  .star { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; }
+  .star.on { color: var(--accent); }
   h1 { font: 700 44px/1 var(--sans); letter-spacing: -.045em; margin: 0 0 10px; text-transform: uppercase; }
   h1 .count { color: var(--accent); }
   .lede { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
@@ -259,7 +277,10 @@ function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add(
 async function load() {
   const r = await fetch("/api/state", { cache: "no-store" });
   if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
-  S = await r.json(); render();
+  S = await r.json(); checkRoleFilters();
+  if (S.setup.needed && location.hash !== "#welcome") location.hash = "#welcome";
+  else if (location.hash === "#welcome" && !S.setup.can_run) location.hash = "#pipeline";
+  render();
 }
 async function post(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -273,9 +294,13 @@ async function setStage(id, stage, msg) {
   Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
 }
 
-const savedFilter = (key, allowed, fallback) => { try { const v = localStorage.getItem(key); return allowed.includes(v) ? v : fallback; } catch (e) { return fallback; } };
-let roleWhere = savedFilter("gus-role-where", ["London", "UK", "Remote", "Europe", "all"], "London");
-let roleKind = savedFilter("gus-role-kind", ["all", "PM", "Forward deployed", "Product engineer"], "all");
+const savedFilter = key => { try { return localStorage.getItem(key); } catch (e) { return null; } };
+let roleWhere = savedFilter("gus-role-where");
+let roleKind = savedFilter("gus-role-kind");
+function checkRoleFilters() {  // places and types come from Settings, so a saved choice may no longer exist
+  if (roleWhere !== "all" && !S.places.includes(roleWhere)) roleWhere = S.places[0] || "all";
+  if (roleKind !== "all" && !S.kinds.includes(roleKind)) roleKind = "all";
+}
 let roleView = "new";
 function saveRoleFilters() { try { localStorage.setItem("gus-role-where", roleWhere); localStorage.setItem("gus-role-kind", roleKind); } catch (e) {} }
 const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
@@ -303,7 +328,7 @@ function routes(p) {
       <input type="text" id="via-${esc(p.id)}" placeholder="Mutual connection" value="${esc(p.via || "")}" aria-label="Mutual connection" onchange="setDegree(${jsq(p.id)})" style="flex:1;min-width:140px;max-width:240px"></div></div>`;
 }
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
-const TASKS = { scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
+const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
 function roleExtras(j) {
   const sent = p => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
   const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 4).map(p => {
@@ -425,14 +450,131 @@ function roleCard(j, actions) {
     <div>
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(titleLink(j))}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type !== "PM" ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
     </div></article>`;
 }
 
+
+let F = null, frPoll = null, frTyping = null, frAdding = "";
+const frSend = async body => { const d = await post("/api/first-run", body); if (d) { F = d; frDraw(); } return d; };
+const frChip = (text, onclick, cls = "") => `<button class="fr-chip ${cls}" onclick="${onclick}">${esc(text)}</button>`;
+const frList = key => F[key] || [];
+function frRemove(key, i) { const v = frList(key).filter((_, n) => n !== i); frSend({ [key]: v }); }
+function frAdd(key, el) { const v = el.value.trim(); if (v) frSend({ [key]: [...frList(key), v] }); el.value = ""; }
+const favNames = () => F.favourites.map(f => f.name);
+function frFav(name) { const n = favNames(); frSend({ favourites: n.includes(name) ? n.filter(x => x !== name) : [...n, name] }); }
+function frCV(el) {
+  clearTimeout(frTyping);
+  $("fr-go").disabled = el.value.trim().length < 200;
+  frTyping = setTimeout(() => { if (el.value.trim().length >= 200) frSend({ cv: el.value }); }, 300);
+}
+async function frGo() { const cv = $("fr-cv").value; await frSend({ cv, go: true }); frWatch(); }
+async function frLogin() {
+  const d = await post("/api/first-run/login", {});
+  if (!d) return;
+  $("fr-login").innerHTML = d.ok ? `<p class="sub"><a href="${link(d.url)}" target="_blank" rel="noopener"><b>Open Claude's sign-in page</b></a>, sign in, then paste the code it gives you here.</p>
+    <div class="row"><input type="text" id="fr-code" placeholder="Code from Claude" aria-label="Code from Claude" autocomplete="off" style="flex:1;min-width:180px">
+    <button class="primary" onclick="frCode()">Finish signing in</button></div>` : `<p class="bad">${esc(d.reply)}</p>`;
+}
+async function frCode() { const d = await post("/api/first-run/login", { code: $("fr-code").value }); if (d) { F = d; frDraw(); } }
+async function frConnect() { const d = await post("/api/first-run/connect", { key: $("fr-key").value }); if (d) { F = d; frDraw(); } }
+async function frSkip() { if (await post("/api/first-run/skip", {})) { $("main").innerHTML = ""; location.hash = "#pipeline"; await load(); } }
+function frAll() { roleWhere = "all"; saveRoleFilters(); location.hash = "#roles"; load(); }
+async function frShortlist(id, el) { if (await post("/api/job", { id, stage: "shortlisted" })) { el.textContent = "Shortlisted"; el.disabled = true; } }
+async function hideGetStarted() { if (await post("/api/first-run/hide", {})) { toast("Hidden"); load(); } }
+function getStarted() {
+  const list = S.setup && S.setup.get_started;
+  if (!list || list.every(i => i.done)) return "";
+  return `<div class="getting-started"><b>Get started</b> <button class="mini" onclick="hideGetStarted()">Hide</button><ul>
+    ${list.map(i => `<li>${i.done ? "✓ " + esc(i.label) : `○ <a href="#" onclick="event.preventDefault();location.hash=${jsq(i.link)}">${esc(i.label)}</a>`}</li>`).join("")}</ul></div>`;
+}
+function frCard(c) {
+  const search = "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(`${c.talk_to} ${c.company}`);
+  const people = c.people || [];
+  const talk = people.length ? `Talk to ${people.map(p => `<a href="${link(p.url)}" target="_blank" rel="noopener"><b>${esc(p.name)}</b></a>${p.role ? ", " + esc(p.role) : ""}`).join(" or ")}`
+    : c.talk_to ? `Talk to the <b>${esc(c.talk_to)}</b>. <a href="${link(search)}" target="_blank" rel="noopener">Find them on LinkedIn</a>` : "";
+  return `<article class="card role band-${band(c.score)}">
+    <div class="s-${band(c.score)}" title="Fit score"><div class="score">${c.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(c.score || 0) * 10}%"></i></div></div>
+    <div><div class="co">${esc(c.company)}</div>
+      <div class="title"><a href="${link(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a></div>
+      <div class="sub"><span class="pill">${esc(c.place)}</span></div>
+      <p class="why ${c.reason_ready ? "" : "fr-pending"}">${esc(c.why)}</p>
+      ${c.flags.slice(0, 2).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
+      ${talk ? `<div class="fr-talk">${talk}</div>` : ""}
+      ${F.saved && c.reason_ready ? `<div class="actions"><button class="primary" onclick="frShortlist(${jsq(c.id)}, this)">Shortlist</button></div>` : ""}
+    </div></article>`;
+}
+function frDrawForm() {
+  const a = F.ai;
+  const connect = !a ? "Checking your AI connection…" : a.ok ? `<span class="ok">✓ AI connected</span>` : `<b>First, connect Claude.</b> ${esc(a.reply)}
+     <div class="row" style="margin-top:8px"><button class="primary" onclick="frLogin()">Sign in with Claude</button></div>
+     <div id="fr-login"></div>
+     <div class="sub" style="margin-top:10px">Or paste an Anthropic API key:</div>
+     <div class="row" style="margin-top:6px"><input type="password" id="fr-key" placeholder="API key" aria-label="Anthropic API key" autocomplete="off" style="flex:1;min-width:180px">
+     <button onclick="frConnect()">Connect</button></div>
+     <div class="sub" style="margin-top:6px">Using another AI service? <a href="#settings/ai" onclick="frSkip()">Set it up in Settings</a>.</div>`;
+  if (frDrawForm.ai !== connect) { $("fr-ai").innerHTML = connect; frDrawForm.ai = connect; }
+  const rows = [["titles", "Looking for", "Add a role"], ["places", "Where", "Add a place"]];
+  const read = F.titles || F.places || F.read_error;
+  const html = F.reading ? `<div class="sub" style="margin-top:8px">Reading your CV…</div>` : !read ? "" :
+    `${F.read_error && !F.titles ? `<div class="sub" style="margin-top:8px">Gus couldn't read that, so add these yourself.</div>` : ""}` + rows.map(([k, l, ph]) => `<label class="fr-label" for="fr-add-${k}">${l}</label><div class="fr-chips">
+      ${frList(k).map((v, i) => frChip(v + " ×", `frRemove('${k}', ${i})`, "on")).join("")}
+      <input type="text" id="fr-add-${k}" placeholder="${ph}" onkeydown="if(event.key==='Enter'){event.preventDefault();frAdd('${k}', this)}" onblur="frAdd('${k}', this)"></div>`).join("");
+  if (frDrawForm.read !== html && !(document.activeElement && document.activeElement.id.startsWith("fr-add-"))) { $("fr-read").innerHTML = html; frDrawForm.read = html; }
+  const names = favNames();
+  $("fr-favs").innerHTML = F.favourites.map(f => frChip(f.name + (f.finding ? " …" : f.ats ? " ×" : " · no public board ×"), `frFav(${esc(JSON.stringify(f.name))})`, "on")).join("") +
+    F.suggested.filter(n => !names.includes(n)).map(n => frChip("+ " + n, `frFav(${esc(JSON.stringify(n))})`)).join("");
+  const box = $("fr-cv");
+  $("fr-go").disabled = !(a && a.ok) || box.value.trim().length < 200;
+  $("fr-msg").textContent = F.message || "";
+}
+function frDrawResults() {
+  const done = F.phase === "done", none = F.phase === "none";
+  $("fr-h").textContent = none ? "No matching roles yet" : done ? `Your top ${F.top.length === 1 ? "role" : F.top.length}` : "Finding your roles…";
+  const companies = F.answered === 1 ? "1 company" : `${F.answered} companies`;
+  $("fr-line").innerHTML = none
+    ? `Gus checked ${F.roles.toLocaleString()} live roles at ${companies} and none fit well enough to show you. The starter companies are mostly technology firms, so other kinds of work need a wider search. <a href="#settings/sources">Add a job source</a> or change your answers.`
+    : `${F.roles.toLocaleString()} live roles at ${companies}${F.matched ? ` · ${F.matched} match` : ""}${F.phase === "reasons" ? " · reading the best ads for you" : ""}`;
+  $("fr-target").innerHTML = `Looking for <b>${esc(frList("titles").join(", "))}</b> in <b>${esc(frList("places").join(", "))}</b>. <a href="#welcome" onclick="event.preventDefault();frSend({ change: true })">Change</a>`;
+  $("fr-top").innerHTML = F.top.map(frCard).join("");
+  $("fr-after").innerHTML = done ? `<p class="sub">Gus is checking the rest of your companies in the background, and new roles will land in your inbox.</p>
+    <div class="actions"><button class="primary" onclick="frAll()">See all my roles</button></div>` : none ? `<div class="actions"><button onclick="frAll()">Go to Role Inbox</button></div>` : "";
+}
+function frDraw() {
+  if (!$("fr") || !F) return;
+  const form = ["idle", "form"].includes(F.phase);
+  $("fr-form").hidden = !form; $("fr-results").hidden = form;
+  form ? frDrawForm() : frDrawResults();
+}
+function frWatch() {
+  clearInterval(frPoll);
+  frPoll = setInterval(async () => {
+    if (!$("fr")) return clearInterval(frPoll);
+    F = await (await fetch("/api/first-run", { cache: "no-store" })).json(); frDraw();
+    const settled = F.saved && F.people_done;
+    if (settled || F.phase === "form") clearInterval(frPoll);
+  }, 500);
+}
+async function frOpen() { await frSend({}); if (F) frWatch(); }
+
 const V = {
+  welcome() {
+    setTimeout(frOpen, 0);
+    return `<div id="fr"><div id="fr-form" hidden><h1>Find your next role</h1>
+      <p class="lede">Paste your CV and tap a few companies you love. Gus checks live roles and shows you the best ones, with why they suit you.</p>
+      <div id="fr-ai" class="sub"></div>
+      <label class="fr-label" for="fr-cv">Your CV</label>
+      <textarea id="fr-cv" rows="9" placeholder="Paste your CV as plain text" oninput="frCV(this)"></textarea>
+      <div id="fr-read"></div>
+      <label class="fr-label" for="fr-fav-add">Companies you love</label>
+      <div class="fr-chips"><input type="text" id="fr-fav-add" placeholder="Type a company and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();frFav(this.value.trim());this.value=''}"></div>
+      <div class="fr-chips" id="fr-favs"></div>
+      <div class="fr-go"><button class="primary" id="fr-go" disabled onclick="frGo()">Find my roles</button><a href="#" onclick="event.preventDefault();frSkip()">Skip for now</a><span id="fr-msg" class="sub"></span></div></div>
+      <div id="fr-results" hidden><h1 id="fr-h"></h1><p class="lede" id="fr-line"></p><p class="sub" id="fr-target"></p><div id="fr-top"></div><div id="fr-after"></div></div></div>`;
+  },
   week() {
     const f = S.funnel, wk = S.week;
     const mine = S.moves.filter(m => m.week === wk);
@@ -463,6 +605,7 @@ const V = {
       return `<article class="card acct">
         <div class="acct-head">
           <div><span class="tier t${a.tier}">${a.tier}</span> <b class="acct-name">${esc(a.name)}</b>
+            <button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
             ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
@@ -510,9 +653,10 @@ const V = {
   roles() {
     const rows = newRoles();
     return `<h1>Role Inbox <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. A role scoring 7+ is a signal on its company and can trigger a move. Shortlist what you'd apply to; skip the rest.</p>
+      ${getStarted()}
       ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView")}
-      ${chipRow("Where", [["London", "London"], ["UK", "Rest of UK"], ["Remote", "Remote"], ["Europe", "Europe"], ["all", "All"]], roleWhere, "roleWhere")}
-      ${chipRow("Type", [["all", "All"], ["PM", "PM"], ["Forward deployed", "Forward deployed"], ["Product engineer", "Product engineer"]], roleKind, "roleKind")}
+      ${chipRow("Where", [...S.places.map(p => [p, esc(p)]), ["all", "All"]], roleWhere, "roleWhere")}
+      ${S.kinds.length ? chipRow("Type", [["all", "All"], ...S.kinds.map(k => [k, esc(k)])], roleKind, "roleKind") : ""}
       <p class="hint" ${roleView === "new" ? "" : "hidden"}><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
       (rows.length ? rows.map(j => roleCard(j, roleView === "new" ? `
         <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>
@@ -759,6 +903,8 @@ drawNav();
 let lastView = null, sel = 0;
 function render(force) {
   const v = (location.hash || "#pipeline").slice(1).split("/")[0];
+  document.querySelector(".app").classList.toggle("first", v === "welcome");
+  if (v === "welcome" && $("fr")) return;  // it keeps itself up to date, and redrawing would wipe what you're typing
   drawTicker();
   if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
@@ -833,6 +979,7 @@ async function startRun(job) {
   await load(); watchRun();
 }
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
+async function setFavourite(name, favourite) { if (await post("/api/account", { name, favourite })) { toast(favourite ? `${name} is a favourite` : "Removed from favourites"); load(); } }
 async function vetoCo(name) {
   if (!confirm(`Stop watching ${name}? It won't be re-added.`)) return;
   if (await post("/api/company/veto", { name })) { toast(`Removed ${name}`); load(); }

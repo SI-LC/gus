@@ -1,0 +1,18 @@
+id: first-run-finds-roles
+requirement: On a brand new install I paste my CV and tap a company I love, and Gus shows me live roles, why each suits me and who to talk to, without my setting anything up.
+given: empty
+check:
+  - see "AI connected"
+  - type "Made-up CV. Senior product manager with ten years of roadmap work at Made-up Ltd in London, leading a team across a marketplace, a payments product and a mobile app, and shipping each of them from first idea to a wide launch." into "Your CV"
+  - see "product manager ×"
+  - click "+ Harborlight"
+  - click "Find my roles"
+  - see "Made-up reason for Senior Product Manager."
+  - see "Talk to the"
+  - see "Your top 2"
+  - click "See all my roles"
+  - see "Senior Product Manager"
+  - see "Get started"
+  - reload
+  - not see "Paste your CV"
+judge: Would a new user feel Gus had already found them something worth reading?

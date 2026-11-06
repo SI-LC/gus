@@ -30,12 +30,12 @@ class ScoringFailed(Exception):
     pass
 
 
-def ask(profile_path, todo):
-    """Score up to 15 roles and return the usable results. Saves nothing, so radar.evals can use it too."""
-    batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": (j.get("description") or "")[:6000]} for j in todo[:15]]
-    prompt = PROMPT.replace("{{PROFILE}}", profile_path.read_text()).replace("{{JOBS}}", json.dumps(batch, ensure_ascii=False))
+def ask(profile_path, todo, task="scoring", chars=6000, also="", timeout=600):
+    """Score up to 15 roles and return the usable results. Saves nothing, so radar.evals and first run can use it too."""
+    batch = [{k: j[k] for k in ("id", "company", "title", "location", "url")} | {"description": (j.get("description") or "")[:chars]} for j in todo[:15]]
+    prompt = PROMPT.replace("{{PROFILE}}", profile_path.read_text()).replace("{{JOBS}}", json.dumps(batch, ensure_ascii=False)) + also
     try:
-        text = ai.run(prompt, task="scoring", timeout=600)
+        text = ai.run(prompt, task=task, timeout=timeout)
     except Exception as e:
         raise ScoringFailed(f"scoring failed: {e}") from e
     try:

@@ -16,7 +16,7 @@ from evals.world import World
 
 CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
-GIVENS = ("empty", "scanned")
+GIVENS = ("empty", "signed out", "scanned")
 
 
 def step(page, text):
@@ -36,6 +36,8 @@ def step(page, text):
         page.locator("#main .chips-row a", has_text=m[1]).first.click()
     elif m := re.fullmatch(r'"(.+)" is picked', text):
         page.locator("#main .chips-row a.on", has_text=m[1]).first.wait_for(timeout=WAIT_MS)
+    elif m := re.fullmatch(r'type "(.+)" into "(.+)"', text):
+        page.get_by_label(m[2], exact=True).fill(m[1])
     elif text == "reload":
         page.reload()
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)
@@ -45,7 +47,7 @@ def step(page, text):
 
 def run_case(browser, case) -> str:
     """The reason it failed, or an empty string if it passed."""
-    world = World()
+    world = World(new=case["given"] in ("empty", "signed out"), signed_out=case["given"] == "signed out")
     try:
         if case["given"] == "scanned":
             world.scan()

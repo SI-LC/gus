@@ -56,12 +56,12 @@ Python 3.9+, standard library only. Scoring and the agents need [Claude Code](ht
 ```bash
 git clone https://github.com/<you>/gus && cd gus
 git config core.hooksPath .githooks                 # the code-only commit guard
-cp profile/profile.example.md profile/profile.md    # your CV and what you want (never committed)
-python3 -m radar.scan                               # first scan; creates watchlist.csv from the example
 python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
 
-Then, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the daily run.
+Open the cockpit, paste your CV and tap a few companies you love. Gus works out what you're looking for, checks live roles at the starter companies in `starter-boards.csv`, and shows your top three with why each suits you and who to talk to. Those companies are mostly technology firms, so for other kinds of work add a job source in Settings.
+
+After that, under **Settings**, you can add keys, connect Gmail, set up [ntfy](https://ntfy.sh) phone notifications and turn on the daily run.
 
 ## Run it on a Raspberry Pi
 

@@ -6,6 +6,7 @@ import email
 import re
 
 from radar import agent, ai, calendar_invites as cal, inbox
+from sample_search import use_sample
 from radar.network import distance, paths_for
 from radar.service import due, sources_due
 
@@ -14,6 +15,9 @@ def at(day, h, m=0):
 
 
 class RemoteRoles(unittest.TestCase):
+    def setUp(self):
+        use_sample(self)
+
     def job(self, location):
         return {"title": "Product Manager", "location": location, "description": ""}
 
@@ -352,6 +356,9 @@ runpy.run_module("radar.service", run_name="__main__")
 
 
 class Targeting(unittest.TestCase):
+    def setUp(self):
+        use_sample(self)
+
     def test_where(self):
         from radar.scan import where
         for loc, want in (("Berlin / London", "London"), ("Remote, United Kingdom", "Remote"), ("Manchester, UK", "UK"), ("Paris, Europe", "Europe")):

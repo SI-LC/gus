@@ -33,6 +33,7 @@ SCHEMA = [
     ("model_scoring", "Model for scoring roles", "select:claude_model", "AI", "Runs on every new role. Sonnet is a good balance."),
     ("model_people", "Model for finding people", "select:claude_model", "AI", "Uses web search, for roles above the people threshold."),
     ("model_agent", "Model for agent runs", "select:claude_model", "AI", "Discovery and watchlist loops. The most judgement-heavy work."),
+    ("model_quick", "Model for your first look", "select:claude_model", "AI", "Only for the first set of roles, where speed matters most."),
     ("openai_base_url", "OpenAI-compatible base URL", "text", "AI",
      "e.g. https://api.openai.com/v1, https://openrouter.ai/api/v1, or http://localhost:11434/v1 for Ollama."),
     ("openai_model", "OpenAI-compatible model", "text", "AI", "Only used when that provider is selected."),
@@ -44,6 +45,8 @@ SCHEMA = [
     ("title_exclude", "Titles to leave out", "lines", "Matching", "Drop a role if its title contains any of these, even if it's also in the list above."),
     ("title_exclude_except", "Exceptions to leave out", "lines", "Matching", "Phrases the list above ignores, so \"engineer\" there doesn't drop a product engineer."),
     ("location_include", "Locations to include", "lines", "Matching", "One per line. Add (exactly) to match only that word, so \"remote (exactly)\" won't match \"Remote, US\"."),
+    ("where_groups", "Places in Role Inbox", "lines", "Matching", "How Role Inbox groups roles. One per line, Label: words to look for. The first that fits wins, and * means anything else."),
+    ("role_kinds", "Role types in Role Inbox", "lines", "Matching", "Optional, in the same form, like Engineering: engineer, developer. Leave empty for no role types."),
     ("notify_min_score", "Notify at score", "int:1-10", "Matching", "Push a notification for roles at or above this."),
     ("salary_floor", "Lowest salary you want", "int:0-1000000", "Matching", "A yearly figure. Roles that state less lose a point per 10% under it, up to 5. Roles with no stated salary aren't changed. 0 turns this off."),
     ("salary_symbol", "Salary currency symbol", "text", "Matching", "Used to read salaries from job ads, e.g. £."),
@@ -56,6 +59,7 @@ SCHEMA = [
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
 
     ("source_hn", "HN Who is hiring", "bool", "Feeds", "Monthly thread, scanned with the job boards."),
+    ("hn_title_include", "HN: words to look for", "lines", "Feeds", "A post must mention one of these. Leave empty to use your titles to include."),
 
     ("source_adzuna", "Adzuna", "bool", "Job sources", "Job search across many sites, with short extracts of each ad. Needs the Adzuna keys (Keys tab)."),
     ("source_jsearch", "JSearch", "bool", "Job sources", "Google for Jobs results with full descriptions, including some LinkedIn roles. Needs the JSearch key (Keys tab)."),
@@ -91,6 +95,8 @@ SCHEMA = [
     ("source_mastodon", "Mastodon", "bool", "Social", "Free, open hashtag timelines."),
     ("social_mastodon_tags", "Mastodon hashtags", "lines", "Social", "Comma or line separated, without #."),
     ("mastodon_instance", "Mastodon server", "text", "Social", "e.g. mastodon.social or hachyderm.io"),
+    ("social_role_include", "Posts must mention", "lines", "Social", "Leave empty to use your titles to include."),
+    ("x_query", "X search", "text", "Social", "Leave empty to build one from your titles and locations."),
     ("social_include_bots", "Keep job-bot posts", "bool", "Social", "Bots repost listings. Off keeps only posts from people; on also uses bots to discover companies."),
     ("source_reddit", "Reddit", "bool", "Social", "Needs a free Reddit 'script' app: client id and secret in Keys."),
     ("social_reddit_subs", "Subreddits", "lines", "Social", "Without r/."),
@@ -133,6 +139,26 @@ def to_pattern(value) -> str:
         body = re.sub(r"(\\ |\\-)+", lambda _: JOIN, re.escape(item)).replace(r"\*", r"\w*")
         parts.append(rf"^\s*{body}\s*$" if exact else rf"(?<!\w){body}(?!\w)")
     return "|".join(parts) or "(?!)"
+
+
+def groups(text) -> list:
+    """Lines of `Label: words, more words` as (label, words), in order. A word of * matches anything."""
+    out = []
+    for line in str(text or "").splitlines():
+        label, _, words = line.partition(":")
+        if label.strip() and words.strip():
+            out.append((label.strip(), [w.strip().lower() for w in words.split(",") if w.strip()]))
+    return out
+
+
+def group_of(text, rows) -> str:
+    """The first group that fits. Short words like uk must stand alone; longer ones can sit inside a word."""
+    text = (text or "").lower()
+    for label, words in rows:
+        for w in words:
+            if w == "*" or (re.search(rf"\b{re.escape(w)}\b", text) if len(w) < 3 else w in text):
+                return label
+    return ""
 
 
 SECRET_KEYS = {
@@ -226,6 +252,15 @@ def save(changes: dict) -> dict:
             user[k] = v
     USER.write_text(json.dumps(user, indent=2, ensure_ascii=False))
     return load()
+
+
+def remember(key: str, value) -> None:
+    """Gus's own notes, like first run being finished. Kept with your settings so a deploy can't lose them, but not on the form."""
+    user = _read(USER)
+    user[key] = value
+    tmp = USER.with_suffix(".tmp")
+    tmp.write_text(json.dumps(user, indent=2, ensure_ascii=False))
+    tmp.replace(USER)
 
 
 def secret(key: str) -> str:

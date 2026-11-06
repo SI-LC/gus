@@ -6,11 +6,13 @@ from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 
-from radar import settings, sources
+from radar import sources
 from radar.scan import left_out, load_config
 from radar.settings import to_pattern
+from sample_search import loaded
 
-CFG = {**load_config(), "source_adzuna": True, "source_jsearch": True, "sources_searches": "product manager\nproduct lead", "adzuna_pages_per_search": 3}
+with mock.patch("radar.scan.load", loaded):
+    CFG = {**load_config(), "source_adzuna": True, "source_jsearch": True, "adzuna_pages_per_search": 3}
 TODAY = date.today()
 
 
@@ -190,7 +192,7 @@ class Limits(unittest.TestCase):
         self.assertIn("older ones were missed", self.warn({"adzuna": {"cut": 1}}, name="adzuna"))
 
     def test_the_default_settings_raise_no_warning(self):
-        d = {**settings.load(), "source_adzuna": True}
+        d = {**loaded(), "source_adzuna": True}
         with mock.patch.object(sources, "secret", return_value="x"):
             self.assertEqual(sources.warnings("adzuna", d, {}), [])
             self.assertEqual(sources.warnings("jsearch", d, {}), [])

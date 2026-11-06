@@ -38,7 +38,9 @@ def drop(top: int | None, floor: int) -> int:
 
 def apply(job: dict, score: int, cfg: dict) -> tuple[int, str]:
     """The score after the salary check, and a flag explaining any change."""
-    symbol = cfg.get("salary_symbol") or "£"
+    symbol = cfg.get("salary_symbol")
+    if not symbol:  # without a currency, a figure in an ad can't be compared with your line
+        return score, ""
     top = stated(job, symbol)
     points = drop(top, int(cfg.get("salary_floor") or 0))
     if not points:

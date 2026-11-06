@@ -1,4 +1,4 @@
-"""Poll public job-board APIs for the watchlist, keep PM roles in the target
+"""Poll public job-board APIs for the watchlist, keep target roles in the target
 locations, and record anything not seen before.
 
 Usage:
@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+from radar.settings import group_of, groups, load
 from radar.store import locked
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,11 +36,36 @@ UA = {"User-Agent": "gus/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
 MAX_RESPONSE = 50_000_000
 
 
+_limit = threading.local()
+
+
+def time_limit(deadline) -> None:
+    """Fetches on this thread give up at this moment (time.monotonic), with no retries. None goes back to normal."""
+    _limit.deadline = deadline
+
+
+def _fetch_by(req, deadline) -> bytes:
+    """One try that stops at the deadline even if a server keeps trickling data, which a socket timeout alone wouldn't."""
+    with urllib.request.urlopen(req, timeout=max(0.5, deadline - time.monotonic())) as r:
+        parts, size = [], 0
+        while chunk := r.read(65536):
+            size += len(chunk)
+            if time.monotonic() > deadline or size > MAX_RESPONSE:
+                raise TimeoutError("Ran out of time")
+            parts.append(chunk)
+        data = b"".join(parts)
+        if r.headers.get("Content-Encoding") == "gzip":
+            data = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data, MAX_RESPONSE + 1)
+    return data
+
+
 def fetch_bytes(url: str, timeout: int = 30) -> bytes:
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory."""
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
     req = urllib.request.Request(url, headers=UA)
+    if getattr(_limit, "deadline", None) is not None:
+        return _fetch_by(req, _limit.deadline)
     for attempt in range(3):  # wifi connections drop now and then; a 4xx won't change, so don't retry those
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -82,34 +109,20 @@ def strip_html(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-# --- labels: London stays the focus; other places and role types stay visible, not mixed in ---------
+# --- labels: how Role Inbox groups roles, from Settings -----------------------------------------------
 
-def where(location: str) -> str:
-    loc = (location or "").lower()
-    if "london" in loc:
-        return "London"
-    if re.search(r"remote|anywhere", loc):
-        return "Remote"
-    if re.search(r"united kingdom|\buk\b|england|scotland|wales", loc):
-        return "UK"
-    return "Europe"
+def where(location: str, rows=None) -> str:
+    return group_of(location, groups(load()["where_groups"]) if rows is None else rows)
 
 
-def role_type(title: str) -> str:
-    t = (title or "").lower()
-    if "product manager" in t and "forward" not in t:
-        return "PM"
-    if re.search(r"forward.deployed|deployed (staff|engineer|pm)", t):
-        return "Forward deployed"
-    if re.search(r"product (engineer|builder)|founding product|applied ai", t):
-        return "Product engineer"
-    return "PM"
+def role_type(title: str, rows=None) -> str:
+    return group_of(title, groups(load()["role_kinds"]) if rows is None else rows)
 
 
 # --- sources: each returns a list of normalised job dicts --------------------
 
 def greenhouse(company: str, slug: str):
-    """Big boards list hundreds of jobs. Get titles first, then full details only for new PM roles."""
+    """Big boards list hundreds of jobs. Get titles first, then full details only for new target roles."""
     cfg = load_config()
     base = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
     known = known_jobs()
@@ -219,7 +232,7 @@ def recruitee(company: str, slug: str):
 
 
 def hn_who_is_hiring():
-    """Latest 'Ask HN: Who is hiring?' thread: top-level comments mentioning PM + UK."""
+    """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
     story = next(h for h in s["hits"] if h["title"].lower().startswith("ask hn: who is hiring"))
     thread = get_json(f"https://hn.algolia.com/api/v1/items/{story['objectID']}")
@@ -254,7 +267,7 @@ def watchlist_path() -> Path:
 
 
 def load_config():
-    from radar.settings import PATTERN_ENDINGS, load, to_pattern
+    from radar.settings import PATTERN_ENDINGS, to_pattern
     return {k: re.compile(to_pattern(v), re.I) if k.endswith(PATTERN_ENDINGS) else v for k, v in load().items()}
 
 
@@ -271,8 +284,8 @@ def wanted_title(title, cfg) -> bool:
 def matches(job, cfg, hn=False) -> bool:
     title = job["title"]
     if hn:  # HN posts are free text, so test the whole comment
-        return bool(re.search(r"product manager", title + job["description"], re.I)) and bool(
-            cfg["location_include"].search(job["description"]))
+        words = cfg["hn_title_include"] if cfg["hn_title_include"].pattern != "(?!)" else cfg["title_include"]
+        return bool(words.search(title + job["description"])) and bool(cfg["location_include"].search(job["description"]))
     place = " / ".join(dict.fromkeys(p.strip() for p in job["location"].split("/")))  # "Remote / Remote" is just remote
     return wanted_title(title, cfg) and bool(cfg["location_include"].search(place))
 

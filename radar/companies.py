@@ -24,6 +24,7 @@ COMPANIES = DATA / "companies.json"
 SIGNALS = DATA / "signals.json"
 BOARD_ERRORS = DATA / "board_errors.json"
 STALE_DAYS = 30
+NEIGHBOUR_DAYS = 28
 
 
 def load():
@@ -92,7 +93,9 @@ def due():
     c = load()
     cutoff = str(date.today() - timedelta(days=STALE_DAYS))
     today = str(date.today())
-    out = {"candidates": [], "reassess": [], "stale": [], "broken_boards": [], "recheck_rejected": []}
+    out = {"candidates": [], "reassess": [], "stale": [], "broken_boards": [], "recheck_rejected": [],
+           "favourites": [n for n, r in c.items() if r.get("favourite") and not r.get("vetoed")
+                          and (r.get("neighbours_checked") or "") < str(date.today() - timedelta(days=NEIGHBOUR_DAYS))]}
     for n, r in c.items():
         s = r.get("status", "candidate")
         if s == "candidate":

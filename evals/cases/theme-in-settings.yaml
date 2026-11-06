@@ -2,6 +2,7 @@ id: theme-in-settings
 requirement: I choose light, dark or system in Settings, and the choice sticks.
 given: empty
 check:
+  - click "Skip for now"
   - open Settings
   - click "Appearance"
   - see "System follows your device"

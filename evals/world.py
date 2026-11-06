@@ -1,4 +1,5 @@
-"""A fresh install in a temporary folder: the repo's own files and nothing private, running for real.
+"""An install in a temporary folder: the repo's own files and nothing private, running for real. new=True is brand new:
+no profile, settings or watchlist, as on the day someone installs it. Otherwise it's already set up for made-up searches.
 
 Only two things are faked, both in evals/fake: job boards and the claude command. HOME is temporary too.
 """
@@ -18,6 +19,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FAKE = ROOT / "evals" / "fake"
 WATCHLIST = "company,ats,slug,sector\nHarborlight,greenhouse,harborlight,ai-lab\n"
+STARTER = "company,ats,slug,sector\nHarborlight,greenhouse,harborlight,software\n"
+PROFILE = "# Candidate profile\n\n## What I want\n- Made-up target roles\n"
+SETTINGS = {"title_include": "product manager\nproduct owner", "location_include": "london\nremote (exactly)",
+            "where_groups": "London: london\nRemote: remote, anywhere\nElsewhere: *",
+            "role_kinds": "Forward deployed: forward deployed\nProduct: *"}
 BOOT = "from radar import service; service.main()"
 
 
@@ -28,7 +34,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self):
+    def __init__(self, new=False, signed_out=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -38,8 +44,11 @@ class World:
                 target = self.app / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / name, target)
-        shutil.copy(self.app / "profile" / "profile.example.md", self.app / "profile" / "profile.md")
-        (self.app / "watchlist.csv").write_text(WATCHLIST)
+        (self.app / "starter-boards.csv").write_text(STARTER)
+        if not new:
+            (self.app / "profile" / "profile.md").write_text(PROFILE)
+            (self.app / "watchlist.csv").write_text(WATCHLIST)
+            (self.app / "settings.json").write_text(json.dumps(SETTINGS))
         tools = self.home / ".local" / "bin"
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):
@@ -48,6 +57,8 @@ class World:
         self.env = {**kept, "HOME": str(self.home), "PYTHONPATH": str(FAKE), "PATH": f"{tools}:{os.environ['PATH']}"}
         for key in ("ANTHROPIC_API_KEY", "NTFY_TOPIC", "X_BEARER_TOKEN"):
             self.env.pop(key, None)
+        if signed_out:
+            (self.home / "signed-out").touch()
         self.server = None
         self.url = ""
 
