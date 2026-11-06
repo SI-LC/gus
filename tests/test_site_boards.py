@@ -433,9 +433,12 @@ class Resolving(Base):
             self.assertEqual(resolve.resolve("Acme", "https://acme.com/careers"), ("workday", WD, 100))
         tried.assert_not_called()
 
-    def test_a_name_alone_also_tries_enterprise_boards(self):
-        self.assertIn(("successfactors", "careers.acme.com"), resolve.guesses("Acme"))
-        self.assertIn(("workday", "acme.wd5"), resolve.guesses("Acme"))
+    def test_a_name_alone_never_guesses_at_enterprise_boards(self):
+        tried = []
+        with mock.patch.object(resolve, "try_board", lambda ats, slug: tried.append(ats)):
+            resolve.resolve("Acme")
+        self.assertTrue(tried)
+        self.assertFalse(set(tried) & set(scan.SITE_BOARDS))
 
     def test_missing_lists_active_companies_with_no_board(self):
         (self.dir / "companies.json").write_text(json.dumps({

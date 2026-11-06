@@ -40,7 +40,6 @@ BOARD_LINKS = {
     "recruitee": re.compile(r"([\w-]+)\.recruitee\.com", re.I),
 }
 WORKDAY_LINK = re.compile(r"([\w-]+\.wd\d+)\.myworkdayjobs\.com(?:/[a-z]{2}-[A-Z]{2})?(?:/([\w-]+))?")
-WORKDAY_SERVERS = ("wd1", "wd3", "wd5", "wd12", "wd103", "wd105", "wd501")
 CAREERS_HOSTS = re.compile(r"https://((?:careers|jobs)\.[a-z0-9.-]+)", re.I)
 
 
@@ -102,18 +101,12 @@ def from_careers(url: str):
     return None
 
 
-def guesses(name: str) -> list:
-    """Enterprise boards to try from a name alone. Their addresses aren't fixed, so these are guesses, kept to the first few spellings."""
-    names = slugs(name)[:3]
-    return ([("successfactors", f"{sub}.{s}.com") for s in names for sub in ("careers", "jobs")]
-            + [("workday", f"{s}.{server}") for s in names for server in WORKDAY_SERVERS])
-
-
 def resolve(name: str, careers: str = None):
-    """Return (ats, slug, open_jobs) for the board with the most jobs, or None. A careers address beats any guess from the name."""
+    """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors and Workday boards have no
+    address to work out from a name, so they're only found from a careers address: Gus never guesses at them."""
     if careers and (hit := from_careers(careers)):
         return hit
-    tries = [(a, s) for s in slugs(name) for a in PROBES] + guesses(name)
+    tries = [(a, s) for s in slugs(name) for a in PROBES]
     with ThreadPoolExecutor(max_workers=8) as pool:
         hits = list(filter(None, pool.map(lambda t: try_board(*t), tries)))
     return max(hits, key=lambda h: h[2]) if hits else None
