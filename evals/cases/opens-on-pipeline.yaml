@@ -6,5 +6,5 @@ check:
   - see "Nothing in your pipeline yet"
   - see "Conversations"
   - see "Applications"
-  - not see "No moves planned yet this week"
+  - not see "No one to contact yet this week"
 judge: Is it obvious this is the pipeline, and what to do first?
