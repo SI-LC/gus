@@ -1,0 +1,11 @@
+id: first-run-connects-ai
+requirement: If AI isn't connected, connecting it is the first thing Gus asks, and I can sign in with Claude from the page without a terminal.
+given: signed out
+check:
+  - see "First, connect Claude."
+  - click "Sign in with Claude"
+  - see "Open Claude's sign-in page"
+  - type "made-up-code" into "Code from Claude"
+  - click "Finish signing in"
+  - see "AI connected"
+judge: Could someone who has never used a terminal get through this?

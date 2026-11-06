@@ -1,0 +1,9 @@
+id: existing-install-skips-first-run
+requirement: An install already in use never sees first run, even if it's brand new to this version.
+given: scanned
+check:
+  - see "Pipeline"
+  - not see "Find your next role"
+  - reload
+  - not see "Find your next role"
+judge: Would someone mid-search notice anything had changed?

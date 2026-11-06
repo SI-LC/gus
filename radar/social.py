@@ -1,10 +1,10 @@
-"""Social sources: posts from people announcing PM roles become signals.
+"""Social sources: posts from people announcing target roles become signals.
 
 Bluesky and Mastodon have open public search (no key). Reddit needs a free
 "script" app (client id + secret in Settings). X lives in radar/x.py (paid API).
 LinkedIn and Threads don't offer keyword search to third parties.
 
-Only posts that mention a product role AND one of your locations are kept, so
+Only posts that mention a target role AND one of your locations are kept, so
 the agent reads signal rather than the whole firehose.
 """
 from __future__ import annotations
@@ -22,7 +22,6 @@ from radar.store import locked
 SIGNALS = DATA / "signals.json"
 BOT = re.compile(r"jobs?\b|alert|careers|hiring\.|recruit|vacanc|\.app$|board", re.I)
 TEMPLATE = re.compile(r"new (remote )?job alert|position:|apply (now|here)|#jobsearch", re.I)
-ROLE = re.compile(r"product (manager|lead|owner)|head of product|\bPMs?\b|group product|director of product", re.I)
 
 
 def lines(v):
@@ -78,6 +77,7 @@ def reddit(subs):
 def main():
     cfg = load_config()
     loc = cfg["location_include"]
+    role = cfg["social_role_include"] if cfg["social_role_include"].pattern != "(?!)" else cfg["title_include"]
     runs = []
     if cfg.get("source_bluesky", True):
         runs.append(("Bluesky", lambda: bluesky(lines(cfg.get("social_queries")))))
@@ -89,7 +89,7 @@ def main():
     found, errors = [], []
     for name, fn in runs:
         try:
-            found += [p for p in fn() if ROLE.search(p["text"]) and loc.search(p["text"])]
+            found += [p for p in fn() if role.search(p["text"]) and loc.search(p["text"])]
         except Exception as e:
             errors.append(f"{name}: {e}")
 

@@ -1,4 +1,4 @@
-"""Search X for people announcing PM roles in London/UK, via the official X API.
+"""Search X for people announcing target roles in your locations, via the official X API.
 
 Needs your own bearer token from developer.x.com, set in the cockpit's Settings
 (stored in .secrets.json, git-ignored) or the X_BEARER_TOKEN env var. X bills per post returned, so this
@@ -16,13 +16,22 @@ from datetime import date
 
 from radar import usage
 from radar.scan import DATA, load_config
+from radar.settings import load as settings_load
 
 SIGNALS = DATA / "signals.json"
 STATE = DATA / "x_state.json"
 
-QUERY = ('("hiring" OR "we\'re hiring" OR "my team is hiring" OR "join my team") '
-         '("product manager" OR "product lead" OR "head of product" OR "PM role") '
-         '(London OR UK OR "United Kingdom") -is:retweet -is:reply lang:en')
+HIRING = '("hiring" OR "we\'re hiring" OR "my team is hiring" OR "join my team")'
+
+
+def query(cfg) -> str:
+    """Your own search if you've set one, otherwise built from your titles and locations. Empty if there's nothing to go on."""
+    if cfg.get("x_query"):
+        return cfg["x_query"]
+    def words(key):
+        return " OR ".join(f'"{w.strip()}"' for w in str(cfg.get(key) or "").splitlines()[:6] if w.strip() and "(" not in w)
+    titles, places = words("title_include"), words("location_include")
+    return f"{HIRING} ({titles}) ({places}) -is:retweet -is:reply lang:en" if titles and places else ""
 
 
 def token():
@@ -38,6 +47,10 @@ def main():
     if not t:
         print("X: no token set (Settings → Keys); skipping")
         return
+    q = query(settings_load())
+    if not q:
+        print("X: no titles or locations set yet; skipping")
+        return
     cap = load_config().get("x_daily_post_cap", 150)
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     if state.get("day") != str(date.today()):
@@ -47,7 +60,7 @@ def main():
         return
 
     params = {
-        "query": QUERY,
+        "query": q,
         "max_results": str(max(10, min(100, cap - state["used"]))),
         "tweet.fields": "created_at,author_id,entities",
         "expansions": "author_id",

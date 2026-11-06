@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import subprocess
+import tempfile
 import urllib.request
 from datetime import date
 
@@ -34,6 +37,11 @@ def _check_budget(cfg):
         raise BudgetReached("AI runs are off: the daily limit is $0" if not limit else f"Daily AI limit of ${limit:g} reached")
 
 
+# Small answers only: no tools, project files, session history or extended thinking. Thinking alone was 3 of the 10 seconds.
+QUICK = ["--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--tools", "", "--effort", "low",
+         "--system-prompt", "You answer with JSON only."]
+
+
 class NeedsTools(Exception):
     """The chosen provider can't search the web or edit files."""
 
@@ -52,7 +60,7 @@ def _claude_env(provider):
 
 def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, timeout: int = 900,
         deny: list[str] | None = None, budget: bool = True) -> str:
-    """task picks the model (scoring | people | agent). tools are Claude Code tool rules."""
+    """task picks the model (scoring | people | agent | quick). tools are Claude Code tool rules."""
     cfg = load_config()
     if budget:
         _check_budget(cfg)
@@ -67,8 +75,11 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         args += ["--allowedTools", ",".join(tools)]
     if deny:
         args += ["--disallowedTools", ",".join(deny)]
+    if task == "quick":
+        args += QUICK
     out = subprocess.run(args, input=prompt, capture_output=True, text=True, timeout=timeout,
-                         cwd=ROOT, env=_claude_env(provider))
+                         cwd=tempfile.gettempdir() if task == "quick" else ROOT,
+                         env={**_claude_env(provider), "MAX_THINKING_TOKENS": "0"} if task == "quick" else _claude_env(provider))
     try:
         d = json.loads(out.stdout)
     except ValueError:
@@ -98,6 +109,54 @@ def _openai(prompt, cfg):
     usage.record(kind="ai", task="scoring", provider="openai_compatible", model=cfg.get("openai_model"), cost_usd=None,
                  input_tokens=u.get("prompt_tokens"), output_tokens=u.get("completion_tokens"), ok=True)
     return d["choices"][0]["message"]["content"]
+
+
+def status() -> dict:
+    """Is AI ready? For a Claude login this answers in a blink, with no AI used. Anything less clear gets a real test."""
+    provider = load_config().get("ai_provider", "claude_subscription")
+    if provider == "openai_compatible":
+        return test()
+    if not shutil.which("claude"):
+        return {"ok": False, "reply": "Claude Code isn't installed on this machine."}
+    if provider == "anthropic_api":
+        return test() if secret("anthropic_api_key") else {"ok": False, "reply": "No API key yet."}
+    try:
+        out = subprocess.run(["claude", "auth", "status"], capture_output=True, text=True, timeout=8, env=_claude_env(provider))
+        return {"ok": bool(json.loads(out.stdout).get("loggedIn")), "reply": "Not logged in to Claude yet."}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return test()
+
+
+_login = None
+
+
+def login_start() -> dict:
+    """Start Claude's own sign-in. With no terminal it gives a link, and the sign-in page gives back a code to paste, so this
+    works from the cockpit even on a machine with no browser. Gus never sees your password."""
+    global _login
+    if not shutil.which("claude"):
+        return {"ok": False, "reply": "Claude Code isn't installed on this machine."}
+    if _login and _login.poll() is None:
+        _login.kill()
+    _login = subprocess.Popen(["claude", "auth", "login"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in _login.stdout:
+        found = re.search(r"https://\S+", line)
+        if found:
+            return {"ok": True, "url": found[0]}
+    return {"ok": False, "reply": "Claude's sign-in didn't start. Try again."}
+
+
+def login_finish(code: str) -> dict:
+    if not (_login and _login.poll() is None):
+        return {"ok": False, "reply": "Start the sign-in again."}
+    try:
+        _login.stdin.write(code.strip() + "\n")
+        _login.stdin.flush()
+        _login.wait(timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        _login.kill()
+        return {"ok": False, "reply": "That didn't work. Start the sign-in again and paste the new code."}
+    return status()
 
 
 def test() -> dict:

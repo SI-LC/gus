@@ -6,12 +6,26 @@ import sys
 
 SCORES = {"Senior Product Manager": 9, "Product Manager, Growth": 6, "Product Owner": 3}
 
+SIGNED_OUT = os.path.join(os.environ["HOME"], "signed-out")
+if sys.argv[1:3] == ["auth", "status"]:
+    print(json.dumps({"loggedIn": not os.path.exists(SIGNED_OUT)}))
+    sys.exit()
+if sys.argv[1:3] == ["auth", "login"]:
+    print("If the browser didn't open, visit: https://example.com/made-up-sign-in", flush=True)
+    if sys.stdin.readline().strip() == "made-up-code":
+        os.remove(SIGNED_OUT)
+    sys.exit()
+
 prompt = sys.stdin.read()
 with open(os.path.join(os.environ["HOME"], "claude-calls.log"), "a") as log:
     log.write("call\n")
 result = "[]"
+if "## CV\n" in prompt:
+    result = json.dumps({"titles": ["product manager", "product owner"], "places": ["London", "United Kingdom", "Remote"], "city": "London",
+                         "country_code": "gb", "currency": "£", "level": "senior", "keywords": ["roadmap"], "employers": ["Made-up Ltd"],
+                         "edge": ["A made-up strength"]})
 if "## Roles (JSON)" in prompt:
     roles = json.loads(prompt[prompt.index("## Roles (JSON)\n") + 16:prompt.index("\n\nFor each role")])
     result = json.dumps([{"id": r["id"], "score": SCORES.get(r["title"], 5), "why": f"Made-up reason for {r['title']}.",
-                          "flags": []} for r in roles])
+                          "flags": [], "talk_to": "Head of Product"} for r in roles])
 print(json.dumps({"result": result, "total_cost_usd": 0, "usage": {}}))

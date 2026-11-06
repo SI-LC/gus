@@ -1,17 +1,17 @@
 """Does the whole app still work? A fresh install, the real scan script and the real cockpit, with a made-up job board
 and a fake claude command (evals/world.py). Runs in the code scan, so it needs no network and costs nothing."""
+import json
+import time
 import unittest
 import urllib.error
 
 from evals.world import World
 
 
-class FirstRun(unittest.TestCase):
-    """Before any scan has run."""
-
+class BeforeAnyScan(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.world = World()
+        cls.world = World(new=True)
         cls.addClassCleanup(cls.world.close)
         cls.world.start()
 
@@ -30,6 +30,85 @@ class FirstRun(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as refused:
             self.world.post("/api/job", {"id": "x", "stage": "skipped"}, {"Origin": "https://example.com"})
         self.assertEqual(refused.exception.code, 403)
+
+
+CV = "Made-up CV of a senior product manager in London, with years of roadmap work. " * 4
+
+
+class BrandNew(unittest.TestCase):
+    """A new install: paste a CV, get roles, and never see first run again."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.world = World(new=True)
+        cls.addClassCleanup(cls.world.close)
+        cls.world.start()
+        cls.needed_at_start = cls.world.get("/api/state")["setup"]["needed"]
+        cls.world.post("/api/first-run", {"cv": CV, "favourites": ["Harborlight"]})
+        cls.world.post("/api/first-run", {"go": True})
+        for _ in range(100):
+            cls.done = cls.world.get("/api/first-run")
+            if cls.done["saved"] and cls.done["top"]:
+                break
+            time.sleep(.1)
+        cls.calls_for_the_roles = cls.world.ai_calls()
+
+    def test_1_it_opens_on_first_run(self):
+        self.assertTrue(self.needed_at_start)
+
+    def test_2_the_best_role_comes_first_with_a_reason_and_who_to_talk_to(self):
+        best = self.done["top"][0]
+        self.assertEqual((best["title"], best["score"]), ("Senior Product Manager", 9))
+        self.assertEqual((best["why"], best["talk_to"]), ("Made-up reason for Senior Product Manager.", "Head of Product"))
+
+    def test_3_ai_is_called_once_for_the_cv_and_once_per_small_batch(self):
+        self.assertLessEqual(self.calls_for_the_roles, 3)
+
+    def test_4_your_answers_become_settings_and_a_profile(self):
+        values = self.world.get("/api/settings")["values"]
+        self.assertEqual((values["sources_location"], values["salary_symbol"]), ("London", "£"))
+        self.assertIn("product manager", values["title_include"])
+        self.assertIn("## CV", self.world.get("/api/profile")["text"])
+        watched = (self.world.app / "watchlist.csv").read_text()
+        self.assertIn("Harborlight", watched)
+        self.assertNotIn("Anthropic", watched)  # the example list isn't yours
+
+    def test_5_a_company_you_love_is_kept_as_a_favourite(self):
+        self.assertTrue(json.loads((self.world.app / "data" / "companies.json").read_text())["Harborlight"]["favourite"])
+
+    def test_6_a_restart_doesnt_bring_it_back_or_let_it_overwrite_you(self):
+        self.world.stop()
+        self.world.start()
+        self.assertFalse(self.world.get("/api/state")["setup"]["needed"])
+        self.assertIn("error", self.world.post("/api/first-run", {"cv": "x" * 300, "go": True}))
+
+
+class SigningIn(unittest.TestCase):
+    def test_sign_in_with_claude_from_the_page(self):
+        world = World(new=True, signed_out=True)
+        self.addCleanup(world.close)
+        world.start()
+        world.post("/api/first-run", {})
+        for _ in range(50):
+            ai = world.get("/api/first-run")["ai"]
+            if ai:
+                break
+            time.sleep(.1)
+        self.assertFalse(ai["ok"])
+        self.assertIn("made-up-sign-in", world.post("/api/first-run/login", {})["url"])
+        self.assertTrue(world.post("/api/first-run/login", {"code": "made-up-code"})["ai"]["ok"])
+
+
+class SkippedOnce(unittest.TestCase):
+    def test_skipping_is_remembered_after_a_restart(self):
+        world = World(new=True)
+        self.addCleanup(world.close)
+        world.start()
+        world.post("/api/first-run/skip", {})
+        world.stop()
+        world.start()
+        self.assertFalse(world.get("/api/state")["setup"]["needed"])
+        self.assertTrue(world.get("/api/state")["setup"]["can_run"])
 
 
 class FullRun(unittest.TestCase):
