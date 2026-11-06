@@ -17,7 +17,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, get_json, listed_jobs, polite_fetch, site_rules, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, board_size, get_json, polite_fetch, site_rules, watchlist_path
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {
@@ -55,7 +55,7 @@ def slugs(name: str):
 def probe(ats: str, slug: str):
     try:
         if ats in SITE_BOARDS:
-            n = len(listed_jobs(ats, slug))
+            n = board_size(ats, slug)
         else:
             url, count = PROBES[ats]
             n = count(get_json(url.format(s=slug)))

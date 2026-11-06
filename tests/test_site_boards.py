@@ -28,10 +28,11 @@ class Site:
     """Stands in for the web and notes every address asked for. A reply can be bytes, an exception, or a function of the address."""
 
     def __init__(self, replies):
-        self.replies, self.asked = replies, []
+        self.replies, self.asked, self.bodies = replies, [], []
 
-    def __call__(self, url, timeout=30):
+    def __call__(self, url, timeout=30, body=None, headers=None):
         self.asked.append(url)
+        self.bodies.append(body)
         for part, reply in self.replies.items():
             if part in url:
                 reply = reply(url) if callable(reply) else reply
@@ -43,6 +44,9 @@ class Site:
     def pages(self):
         return [u for u in self.asked if "/job/" in u]
 
+    def lists(self):
+        return [u for u in self.asked if u.endswith("/jobs")]
+
 
 def successfactors_site(**more):
     return Site({f"{SF}/robots.txt": sample("successfactors_robots.txt"), f"{SF}/sitemap.xml": sample("successfactors_sitemap.xml"),
@@ -50,8 +54,8 @@ def successfactors_site(**more):
 
 
 def workday_site(**more):
-    return Site({f"{WD_HOST}/robots.txt": sample("workday_robots.txt"), f"{WD_HOST}/External_Career_Site/siteMap.xml": sample("workday_sitemap.xml"),
-                 f"{WD_HOST}/External_Career_Site/job/": sample("workday_job.html"), **more})
+    return Site({f"{WD_HOST}/robots.txt": sample("workday_robots.txt"), "External_Career_Site/jobs": sample("workday_list.json"),
+                 "External_Career_Site/job/": sample("workday_job.json"), **more})
 
 
 class Base(unittest.TestCase):
@@ -198,17 +202,20 @@ class Pages(unittest.TestCase):
         text = sample("successfactors_job.html").decode().replace("Dhaka, BD, 1212 BD", "Bristol, GB, BS1 4QA")
         self.assertEqual(scan.successfactors_page(text)["location"], "Bristol, United Kingdom, BS1 4QA")
 
-    def test_workday_page(self):
-        row = scan.workday_page(sample("workday_job.html").decode())
-        self.assertEqual((row["title"], row["location"], row["posted"]), ("Regional Vice President, Sales Enterprise", "South Africa - Johannesburg", "2026-11-06"))
+    def test_workday_page_gives_every_place(self):
+        row = scan.workday_page(sample("workday_job.json").decode())
+        self.assertEqual((row["title"], row["posted"]), ("Senior Product Manager", "2026-11-06"))
+        self.assertEqual(row["location"], "California - San Francisco / United Kingdom - London")
         self.assertEqual(row["description"], "Own the roadmap for Agentforce.")
-
-    def test_a_workday_ad_marked_remote_stays_where_it_says_it_is(self):
-        self.assertNotIn("Remote", scan.workday_page(sample("workday_job.html").decode())["location"])
 
     def test_expired_ads_hold_no_job(self):
         self.assertIsNone(scan.successfactors_page(sample("successfactors_gone.html").decode()))
-        self.assertIsNone(scan.workday_page(sample("workday_gone.html").decode()))
+        self.assertIsNone(scan.workday_page('{"jobPostingInfo": {"posted": false}}'))
+        self.assertIsNone(scan.workday_page('{"errorCode": "S21"}'))
+
+    def test_a_job_address_points_at_its_data(self):
+        self.assertEqual(scan.workday_job_data(f"https://{WD_HOST}/External_Career_Site/job/UK---London/PM_JR1"),
+                         f"https://{WD_HOST}/wday/cxs/salesforce/External_Career_Site/job/UK---London/PM_JR1")
 
 
 class Optimizely(Base):
@@ -356,9 +363,15 @@ class Closing(Base):
         site_for = lambda: successfactors_site(**{f"{SF}/sitemap.xml": refused(SF)})
         self.assertEqual(self.scan_twice(f"sf:{SF}:1", site_for).get("missed"), None)
 
-    def test_workday_stops_at_100_so_a_missing_role_stays_open(self):
+    def test_a_missing_workday_role_closes(self):
         self.watch(["Salesforce", "workday", WD, "x"])
-        role = self.scan_twice(f"wd:{WD}:JR1", workday_site)
+        self.assertEqual(self.scan_twice(f"wd:{WD}:JR1", workday_site).get("ad_closed"), "now")
+
+    def test_a_list_cut_short_closes_nothing(self):
+        self.watch(["Salesforce", "workday", WD, "x"])
+        full = json.dumps({"total": 5000, "jobPostings": json.loads(sample("workday_list.json"))["jobPostings"]}).encode()
+        with mock.patch.object(scan, "WORKDAY_LIST_PAGES", 1):
+            role = self.scan_twice(f"wd:{WD}:JR1", lambda: workday_site(**{"External_Career_Site/jobs": full}))
         self.assertIsNone(role.get("ad_closed"))
         self.assertIsNone(role.get("missed"))
 
@@ -368,21 +381,47 @@ class Salesforce(Base):
         super().setUp()
         self.watch(["Salesforce", "workday", WD, "x"])
 
-    def test_reads_the_published_sitemap_and_only_wanted_titles(self):
-        site = workday_site()
-        jobs, errors = self.run_scan(site)
+    def test_keeps_a_role_whose_second_place_is_london(self):
+        jobs, errors = self.run_scan(workday_site())
         self.assertEqual(errors, {})
-        self.assertEqual([u.rsplit("/", 1)[1] for u in site.pages()], ["Senior-Forward-Deployed-Engineer_JR367438"])
-        self.assertEqual(jobs[0]["id"], f"wd:{WD}:JR367438")
+        self.assertEqual(jobs[0]["id"], f"wd:{WD}:JR360001")
+        self.assertTrue(scan.matches(jobs[0], scan.load_config()))
+        self.assertEqual(jobs[0]["url"], f"https://{WD_HOST}/External_Career_Site/job/United-Kingdom---London/Senior-Product-Manager_JR360001")
 
-    def test_never_uses_the_json_behind_the_site(self):
+    def test_reads_details_only_for_wanted_titles(self):
         site = workday_site()
         self.run_scan(site)
-        self.assertFalse([u for u in site.asked if "/wday/" in u])
+        self.assertEqual([u.rsplit("/", 1)[1] for u in site.pages()], ["Senior-Product-Manager_JR360001"])
+
+    def test_goes_through_the_whole_list(self):
+        rows = json.loads(sample("workday_list.json"))["jobPostings"]
+        pages = iter([json.dumps({"total": 21, "jobPostings": rows * 5}).encode(), json.dumps({"total": 0, "jobPostings": rows[:1]}).encode()])
+        site = workday_site(**{"External_Career_Site/jobs": lambda _: next(pages)})
+        self.run_scan(site)
+        self.assertEqual(len(site.lists()), 2)
+        self.assertEqual([json.loads(b)["offset"] for b in site.bodies if b], [0, 20])
 
     def test_an_expired_ad_is_skipped(self):
-        jobs, _ = self.run_scan(workday_site(**{f"{WD_HOST}/External_Career_Site/job/": sample("workday_gone.html")}))
+        jobs, _ = self.run_scan(workday_site(**{"External_Career_Site/job/": refused("x", 404)}))
         self.assertEqual(jobs, [])
+
+    def test_robots_ruling_out_the_data_stops_the_board(self):
+        site = workday_site(**{f"{WD_HOST}/robots.txt": b"User-agent: *\nDisallow: /wday/\n"})
+        _, errors = self.run_scan(site)
+        self.assertEqual(len(site.asked), 1)
+        self.assertIn("robots.txt disallows", errors["Salesforce"])
+
+    def test_a_refusal_stops_the_list_at_once(self):
+        site = workday_site(**{"External_Career_Site/jobs": refused("x")})
+        _, errors = self.run_scan(site)
+        self.assertEqual(len(site.lists()), 1)
+        self.assertIn("403", errors["Salesforce"])
+
+    def test_a_bot_check_instead_of_data_stops_the_board(self):
+        site = workday_site(**{"External_Career_Site/jobs": b"<html>Just a moment...</html>"})
+        _, errors = self.run_scan(site)
+        self.assertEqual(site.pages(), [])
+        self.assertIn("Salesforce", errors)
 
 
 class Resolving(Base):
@@ -395,8 +434,7 @@ class Resolving(Base):
             self.assertEqual(resolve.from_careers(f"https://{WD_HOST}/en-US/External_Career_Site/job/x"), ("workday", WD, 4))
 
     def test_a_workday_address_with_no_site_uses_the_first_robots_lists(self):
-        site = workday_site(**{"siteMap.xml": sample("workday_sitemap.xml")})
-        with self.fetch(site):
+        with self.fetch(workday_site()):
             self.assertEqual(resolve.from_careers(f"https://{WD_HOST}/"), ("workday", WD, 4))
 
     def test_a_careers_page_that_links_to_a_board(self):
