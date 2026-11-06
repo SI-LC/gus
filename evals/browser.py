@@ -27,6 +27,10 @@ def step(page, text):
         page.locator("#main").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'not see "(.+)"', text):
         assert m[1] not in page.locator("#main").inner_text(), f'"{m[1]}" is on the page'
+    elif m := re.fullmatch(r'status bar says "(.+)"', text):
+        page.locator("#ticker").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
+    elif m := re.fullmatch(r'status bar doesn\'t say "(.+)"', text):
+        assert m[1] not in page.locator("#ticker").inner_text().lower(), f'"{m[1]}" is in the status bar'
     elif m := re.fullmatch(r'"(.+)" appears before "(.+)"', text):
         shown = page.locator("#main").inner_text()
         assert m[1] in shown and m[2] in shown and shown.index(m[1]) < shown.index(m[2]), f"{m[1]!r} isn't before {m[2]!r}"

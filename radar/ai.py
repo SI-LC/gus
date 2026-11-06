@@ -52,7 +52,7 @@ def _claude_env(provider):
     if provider == "anthropic_api":
         key = secret("anthropic_api_key")
         if not key:
-            raise RuntimeError("Anthropic API key not set (Settings → Keys)")
+            raise RuntimeError("Anthropic API key not set (Settings → AI)")
         env["ANTHROPIC_API_KEY"] = key
     else:
         env.pop("ANTHROPIC_API_KEY", None)  # use the subscription login, not a stray key

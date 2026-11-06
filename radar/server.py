@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
 import socket
 import sys
 from datetime import datetime, timezone
@@ -36,6 +37,7 @@ MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "di
                                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}).encode()
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+RUN_TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ")
 STAGES = {"new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"}
 
 
@@ -50,6 +52,15 @@ def read(path, default):
         return default
 
 
+def last_agent_run():
+    """The newest time in the run file names. Names start with different words, so sorting them gives the wrong one."""
+    times = [m.group() for p in (DATA / "runs").glob("*.md") if (m := RUN_TIME.search(p.name))]
+    if not times:
+        return None
+    day, clock = max(times).split("T")
+    return f"{day}T{clock.replace('-', ':')}"
+
+
 def state():
     watched = links.watched()
     cfg = settings.load()
@@ -58,7 +69,6 @@ def state():
              "can_watch": bool(j.get("board")) and sources.same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
     signals = read(DATA / "signals.json", {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
-    runs = sorted(p.name for p in (DATA / "runs").glob("*.md")) if (DATA / "runs").exists() else []
     from radar import accounts as A
     from radar.network import distances, summary as net_summary
     companies, people, moves, raw_jobs = read(COMPANIES, {}), read(A.PEOPLE, {}), read(A.MOVES, {}), read(JOBS, {})
@@ -110,7 +120,8 @@ def state():
             "board_errors": read(DATA / "board_errors.json", {}),
             "x": read(DATA / "x_state.json", {}),
             "sources": sources.status(),
-            "last_agent_run": runs[-1] if runs else None,
+            "last_agent_run": last_agent_run(),
+            "boards": len(watched),
         },
     }
 
@@ -181,7 +192,8 @@ def ai_state():
     """Whether AI runs can happen right now, so the cockpit can say so instead of looking broken."""
     limit, spent = float(settings.load().get("ai_daily_budget_usd") or 0), usage.today_cost()
     reason = "off" if not limit else "limit" if spent >= limit else None
-    return {"limit": limit, "spent": round(spent, 2), "paused": reason}
+    return {"limit": limit, "spent": round(spent, 2), "paused": reason,
+            "on_plan": settings.load().get("ai_provider", "claude_subscription") == "claude_subscription"}
 
 
 def role_contact(body):
