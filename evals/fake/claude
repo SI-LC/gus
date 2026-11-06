@@ -12,8 +12,9 @@ if sys.argv[1:3] == ["auth", "status"]:
     sys.exit()
 if sys.argv[1:3] == ["auth", "login"]:
     print("If the browser didn't open, visit: https://example.com/made-up-sign-in", flush=True)
-    if sys.stdin.readline().strip() == "made-up-code":
-        os.remove(SIGNED_OUT)
+    if sys.stdin.readline().strip() != "made-up-code":
+        sys.exit("Login failed")
+    os.remove(SIGNED_OUT)
     sys.exit()
 
 prompt = sys.stdin.read()

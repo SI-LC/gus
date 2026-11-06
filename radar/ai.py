@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import urllib.request
 from datetime import date
 
@@ -128,6 +129,7 @@ def status() -> dict:
 
 
 _login = None
+LOGIN_MINUTES = 10
 
 
 def login_start() -> dict:
@@ -138,7 +140,11 @@ def login_start() -> dict:
         return {"ok": False, "reply": "Claude Code isn't installed on this machine."}
     if _login and _login.poll() is None:
         _login.kill()
-    _login = subprocess.Popen(["claude", "auth", "login"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    _login = subprocess.Popen(["claude", "auth", "login"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, env=_claude_env("claude_subscription"))
+    timer = threading.Timer(LOGIN_MINUTES * 60, _login.kill)  # a sign-in you walked away from doesn't wait for ever
+    timer.daemon = True
+    timer.start()
     for line in _login.stdout:
         found = re.search(r"https://\S+", line)
         if found:
@@ -148,15 +154,15 @@ def login_start() -> dict:
 
 def login_finish(code: str) -> dict:
     if not (_login and _login.poll() is None):
-        return {"ok": False, "reply": "Start the sign-in again."}
+        return {"ok": False, "reply": "That sign-in has ended. Start again."}
     try:
         _login.stdin.write(code.strip() + "\n")
         _login.stdin.flush()
         _login.wait(timeout=20)
     except (OSError, subprocess.TimeoutExpired):
         _login.kill()
-        return {"ok": False, "reply": "That didn't work. Start the sign-in again and paste the new code."}
-    return status()
+        return {"ok": False, "reply": "That didn't work. Start again and paste the new code."}
+    return status() if _login.returncode == 0 else {"ok": False, "reply": "Claude didn't accept that code. Start again to get a new one."}
 
 
 def test() -> dict:

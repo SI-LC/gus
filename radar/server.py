@@ -413,8 +413,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, firstrun.update(body))
             if path == "/api/first-run/connect":
                 return self.send(200, firstrun.connect(str(body.get("key") or "")))
-            if path == "/api/first-run/login":
-                return self.send(200, firstrun.login_code(str(body["code"])) if "code" in body else firstrun.login())
+            if path == "/api/ai-login":
+                from radar import ai
+                if settings.load().get("ai_provider", "claude_subscription") != "claude_subscription" and firstrun.set_up():
+                    return self.send(200, {"error": "This install doesn't use a Claude login."})
+                return self.send(200, ai.login_finish(str(body["code"])) if "code" in body else ai.login_start())
             if path == "/api/first-run/skip":
                 return self.send(200, firstrun.skip())
             if path == "/api/first-run/hide":

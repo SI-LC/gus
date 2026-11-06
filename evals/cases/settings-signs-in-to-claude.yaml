@@ -1,0 +1,15 @@
+id: settings-signs-in-to-claude
+requirement: If my Claude login expires, I can sign in again from Settings without a terminal.
+given: scanned, signed out
+check:
+  - open Settings
+  - click "Sign in with Claude"
+  - see "Open Claude's sign-in page"
+  - type "wrong-code" into "Code from Claude"
+  - click "Finish signing in"
+  - see "Claude didn't accept that code"
+  - click "Sign in with Claude"
+  - type "made-up-code" into "Code from Claude"
+  - click "Finish signing in"
+  - see "Signed in to Claude"
+judge: Could I do this from my phone, with no terminal?
