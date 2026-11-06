@@ -332,6 +332,53 @@ class Refusals(Base):
         _, errors = self.run_scan(successfactors_site(**{f"{SF}/job/": b"<html>a new design</html>"}))
         self.assertIn("could be read", errors["Optimizely"])
 
+    def test_unreadable_pages_keep_the_board_flagged_on_later_scans(self):
+        """Once tried, the pages aren't asked for again for a week, but the board must not look healthy and empty meanwhile."""
+        bad = {f"{SF}/job/": b"<html>a new design</html>"}
+        self.run_scan(successfactors_site(**bad))
+        site = successfactors_site(**bad)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(site.pages(), [])
+        self.assertIn("could be read", errors["Optimizely"])
+
+    def test_an_unreadable_page_is_tried_again_after_a_week(self):
+        pages = iter([b"<html>a one-off glitch</html>", sample("successfactors_job.html"), sample("successfactors_job.html")])
+        self.run_scan(successfactors_site(**{f"{SF}/job/": lambda _: next(pages)}))
+        soon = successfactors_site()
+        self.run_scan(soon)
+        self.assertEqual(soon.pages(), [])
+        seen = json.loads(scan.LOOKED_UP.read_text())
+        for entry in seen.values():
+            if entry.get("unread"):
+                entry["unread"] = "2020-01-01"
+        scan.LOOKED_UP.write_text(json.dumps(seen))
+        page = sample("successfactors_job.html").replace(b"Dhaka, BD, 1212 BD", b"London, GB, WC2N 4JS")
+        later = successfactors_site(**{f"{SF}/job/": page})
+        jobs, errors = self.run_scan(later)
+        self.assertEqual((len(later.pages()), len(jobs), errors), (1, 1, {}))
+
+    def test_one_expired_ad_alone_is_no_alarm(self):
+        """The only new page this scan is an ad that has just closed: the board is fine."""
+        for gone in (refused(SF, 404), refused(SF, 410), sample("successfactors_gone.html")):
+            self.clear()
+            scan.LOOKED_UP.unlink(missing_ok=True)
+            one = b"<urlset><url><loc>https://careers.optimizely.com/job/London-Product-Manager/1/</loc></url></urlset>"
+            jobs, errors = self.run_scan(successfactors_site(**{f"{SF}/sitemap.xml": one, f"{SF}/job/": gone}))
+            self.assertEqual((jobs, errors), ([], {}))
+
+    def test_ads_the_site_says_are_gone_never_count_against_the_board(self):
+        site = successfactors_site(**{f"{SF}/job/": refused(SF, 404)})
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((len(site.pages()), jobs, errors), (3, [], {}))
+        again = successfactors_site(**{f"{SF}/job/": refused(SF, 404)})
+        self.assertEqual(self.run_scan(again)[1], {})
+        self.assertEqual(again.pages(), [])
+
+    def test_unreadable_pages_beside_readable_ones_are_no_alarm(self):
+        pages = iter([b"<html>odd</html>", b"<html>odd</html>", sample("successfactors_job.html")])
+        jobs, errors = self.run_scan(successfactors_site(**{f"{SF}/job/": lambda _: next(pages)}))
+        self.assertEqual((len(jobs), errors), (1, {}))
+
     def test_a_sitemap_with_no_jobs_is_an_error_not_an_empty_board(self):
         _, errors = self.run_scan(successfactors_site(**{f"{SF}/sitemap.xml": b"<urlset></urlset>"}))
         self.assertIn("no jobs", errors["Optimizely"])

@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 import zlib
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -262,6 +262,9 @@ class Refused(ValueError):
 
 PAGE_PAUSE = 1.5  # seconds between job pages on one board
 PAGES_PER_SCAN = 25  # job pages read per board; the rest wait for the next scan
+RETRY_UNREAD_DAYS = 7  # a job page that made no sense is tried again after this long
+UNREAD_TO_FLAG = 3  # this many unreadable pages, and none readable, means the board itself is the problem
+GONE = "gone"  # the site said the ad no longer exists
 WORKDAY_LIST_PAGES = 150  # of 20 jobs each, so 3,000 jobs; a longer list is cut short and closes nothing
 WORKDAY_JSON = {"Accept": "application/json", "Content-Type": "application/json"}
 ROBOTS_KEEP = 3600  # seconds to trust a robots.txt
@@ -464,12 +467,12 @@ def board_size(ats: str, slug: str) -> int:
 
 
 def job_page(url: str, read_page):
-    """What a job page says, or None if the ad has gone."""
+    """What a job page says, GONE if the site says the ad no longer exists, or None if the page made no sense."""
     try:
         text = polite_fetch(url)
     except urllib.error.HTTPError as e:
         if e.code in (404, 410):
-            return None
+            return GONE
         raise
     row = read_page(text)
     if not row and BOT_CHECK.search(text):
@@ -478,29 +481,46 @@ def job_page(url: str, read_page):
 
 
 def read_site(company: str, ats: str, slug: str) -> list:
-    """Titles come from the board's list. A job's details are read only for wanted titles, once per address, so a big board stays cheap."""
+    """Titles come from the board's list. A job's details are read only for wanted titles, once per address, so a big board stays cheap.
+    An ad the site says has gone is never asked for again. A page that made no sense is tried again after a week, as it may be a
+    one-off, and while several are unreadable and none readable the board is reported as broken on every scan."""
     cfg, known, out = load_config(), known_jobs(), []
-    read = gone = 0
+    read = readable = unread = 0
+    today = date.today()
     listed = listed_jobs(ats, slug)
     _listed.update(listed)
     for jid, (url, words) in listed.items():
         if not wanted_title(words, cfg):
             continue
         looked = looked_up().get(jid)
+        if looked and looked["updated"] != url:
+            looked = None
         if jid in known:  # already saved: only needs to count as still live
             out.append(dict(known[jid]))
-        elif (looked and looked["updated"] == url and not matches(looked, cfg)) or read >= PAGES_PER_SCAN:
             continue
+        if looked and looked.get("unread"):
+            if date.fromisoformat(looked["unread"]) + timedelta(days=RETRY_UNREAD_DAYS) > today:
+                unread += 1
+                continue
+        elif looked and (looked.get("gone") or not matches(looked, cfg)):
+            readable += not looked.get("gone")
+            continue
+        if read >= PAGES_PER_SCAN:
+            continue
+        time.sleep(PAGE_PAUSE if read else 0)
+        read += 1
+        row = job_page(SITE_BOARDS[ats][2](url), SITE_BOARDS[ats][3])
+        if row == GONE:
+            looked_up()[jid] = {"updated": url, "gone": True}
+        elif not row:
+            unread += 1
+            looked_up()[jid] = {"updated": url, "unread": str(today)}
         else:
-            time.sleep(PAGE_PAUSE if read else 0)
-            read += 1
-            row = job_page(SITE_BOARDS[ats][2](url), SITE_BOARDS[ats][3])
-            gone += not row
-            looked_up()[jid] = {"updated": url, "title": (row or {}).get("title", ""), "location": (row or {}).get("location", "")}
-            if row:
-                out.append({"id": jid, "company": company, "url": url, **row})
-    if read and gone == read:
-        raise Refused("None of its job pages could be read")
+            readable += 1
+            looked_up()[jid] = {"updated": url, "title": row["title"], "location": row["location"]}
+            out.append({"id": jid, "company": company, "url": url, **row})
+    if unread >= UNREAD_TO_FLAG and not readable:
+        raise Refused(f"None of its job pages could be read ({unread} tried)")
     return out
 
 
