@@ -45,7 +45,9 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
   - Adzuna's limits in Settings are unconfirmed defaults: change them if the account differs.
   - Should the company check rank roles lower rather than remove them?
   - Adzuna only gives short job extracts, so are its scores reliable enough?
-- Big companies run their own careers sites, which this can't scan and whose rules may forbid it. Options are job alert emails, which depend on the email decision, or adding roles by hand.
+- **Big company careers sites.** SuccessFactors and Workday boards are now read from the sitemaps each site publishes, checked against its robots.txt, at a low request rate. A site that refuses is listed in Health and left alone. Each company's terms of use still vary and haven't been reviewed one by one. Workday's own website terms ban scraping and ignoring robots.txt; they cover workday.com, Workday's APIs and pages that reference those terms, and the careers pages checked don't reference them, but this hasn't had a legal check. Other in-house sites can't be scanned, so job alert emails (which depend on the email decision) or adding roles by hand remain the options there. Still to decide:
+  - **Workday only shows 100 jobs.** Its sitemap stops at 100 on every board tried, so on a big company's board most roles are out of sight. Adzuna and JSearch cover some of the gap. Its `/wday/cxs/` data lists everything, but robots.txt has no rule either way for that address and the file's only Allow lines name the career sites, so Gus stays off it. Workday's terms also bar using its APIs without a separate agreement, which is another reason to leave it unless that's checked.
+  - **Closing Workday roles.** A role missing from a list capped at 100 may still be open, so Workday roles are never marked closed. Should Gus check the saved ad's own page instead?
 - Most VC job boards need a browser, so they're left to agents. Some sites block automated access entirely.
 - Optional keys: X, Reddit, Companies House. ntfy for phone notifications isn't set up.
 

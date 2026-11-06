@@ -46,8 +46,8 @@ Score against the candidate profile:
 
 Write `fit`, `fit_why` (one specific line), `assessed` (today), `previous_fit` if it changed.
 Then by score:
-- **7+ → watched.** Run `python3 -m radar.resolve --add "<Company>"` and check the board really is theirs.
-  If there's no public board, keep it watched with `board: null` and its `careers_url`.
+- **7+ → watched.** Run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` (leave out `--careers` if there's no
+  `careers_url`) and check the board really is theirs. If there's no public board, keep it watched with `board: null` and its `careers_url`.
   Set `added` to today.
 - **5–6 → maybe.** Recheck in 30 days (`recheck_after`).
 - **under 5 → rejected**, with `fit_why`. Recheck in 90 days.
