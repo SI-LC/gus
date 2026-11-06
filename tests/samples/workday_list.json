@@ -1,0 +1,89 @@
+{
+ "total": 4,
+ "jobPostings": [
+  {
+   "title": "Product Accessibility Engineer",
+   "externalPath": "/job/India---Bangalore/Product-Accessibility-Engineer_JR367595",
+   "locationsText": "2 Locations",
+   "postedOn": "Posted Today"
+  },
+  {
+   "title": "User Interface/User Experience Designer",
+   "externalPath": "/job/India---Bangalore/User-Interface-User-Experience-Designer_JR363777",
+   "locationsText": "India - Bangalore",
+   "postedOn": "Posted Today"
+  },
+  {
+   "title": "Public Sector Account Executive",
+   "externalPath": "/job/Australia---Sydney/Public-Sector-Account-Executive_JR364993",
+   "locationsText": "2 Locations",
+   "postedOn": "Posted Today"
+  },
+  {
+   "title": "Senior Product Manager",
+   "externalPath": "/job/United-Kingdom---London/Senior-Product-Manager_JR360001",
+   "locationsText": "2 Locations",
+   "postedOn": "Posted Today"
+  }
+ ],
+ "facets": [
+  {
+   "facetParameter": "CF_-_REC_-_LRV_-_Job_Posting_Anchor_-_Country_from_Job_Posting_Location_Extended",
+   "descriptor": "Country",
+   "values": [
+    {
+     "descriptor": "United Kingdom",
+     "id": "29247e57dbaf46fb855b224e03170bc7",
+     "count": 100
+    },
+    {
+     "descriptor": "India",
+     "id": "c4f78be1a8f14da0ab49ce1162348a5e",
+     "count": 94
+    }
+   ]
+  },
+  {
+   "facetParameter": "jobFamilyGroup",
+   "descriptor": "Job Category",
+   "values": [
+    {
+     "descriptor": "Product",
+     "id": "14fa3452ec7c1011f90cf2c552640000",
+     "count": 44
+    }
+   ]
+  },
+  {
+   "facetParameter": "locationMainGroup",
+   "values": [
+    {
+     "facetParameter": "locations",
+     "descriptor": "Locations",
+     "values": [
+      {
+       "descriptor": "California - Remote",
+       "id": "1038e944b1101012453ae52d34d90000",
+       "count": 31
+      },
+      {
+       "descriptor": "India - Bangalore",
+       "id": "1038e944b1101012453f5b10dc370000",
+       "count": 69
+      },
+      {
+       "descriptor": "United Kingdom - England - Remote",
+       "id": "1038e944b1101012453aa714c1510000",
+       "count": 5
+      },
+      {
+       "descriptor": "United Kingdom - London",
+       "id": "26e99ef44f7b1005bacbf00731000000",
+       "count": 98
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/External_Career_Site/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Futureforce_NewGradRoles/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Mulesoft_Careersite/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Futureforce_Internships/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Salesforce_Research/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Tableau/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Datorama/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Heroku/siteMap.xml
+Sitemap: https://salesforce.wd12.myworkdayjobs.com/Slack/siteMap.xml
+
+User-agent: *
+Allow: /External_Career_Site/
+Allow: /Futureforce_NewGradRoles/
+Allow: /Mulesoft_Careersite/
+Allow: /Futureforce_Internships/
+Allow: /Salesforce_Research/
+Allow: /Tableau/
+Allow: /Datorama/
+Allow: /Heroku/
+Allow: /Slack/
+Disallow: /refreshFacet/

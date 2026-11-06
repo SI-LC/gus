@@ -78,7 +78,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Make it yours
 
-- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of six job board systems it uses.
+- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of eight job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors or Workday need it: Gus never guesses their address.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources.
@@ -109,7 +109,7 @@ Run it after changing `prompts/triage.md`, the scoring model or your profile. It
 |---|---|
 | Your AI provider | Your profile and CV, roles, company research and anything an agent reads, including emails if connected |
 | Web search and the pages agents open | Search terms based on your target roles and locations |
-| Public job boards and feeds | Plain requests, with nothing about you |
+| Public job boards, company careers sites and feeds | Plain requests, with nothing about you |
 | Adzuna and JSearch, if turned on | Your role searches and location |
 | X, Bluesky, Mastodon and Reddit, if turned on | Your search terms |
 | Companies House, if you add a key | Company names |

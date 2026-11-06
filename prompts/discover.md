@@ -17,14 +17,20 @@ a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's
 b. **Board sweep** (web search, every run): find target roles in the candidate's locations on *any* company's board, not
    just watched ones, with searches like `site:jobs.ashbyhq.com "<target role>" <location>`,
    `site:job-boards.greenhouse.io "<target role>" <location>`, `site:jobs.lever.co "<target role>" <location>`,
-   `site:apply.workable.com "<target role>" <location>`, for each role type and location in the profile. Every unwatched company you find is a candidate company.
+   `site:apply.workable.com "<target role>" <location>`, `site:myworkdayjobs.com "<target role>" <location>`, for each role type and location in the profile. Every unwatched company you find is a candidate company.
 c. **Emails** are handled by a separate offline run. You can't read them, on purpose.
 d. **Market signals** (web search, last 7 days): UK and European AI/devtools/fintech funding
    rounds (Series A+), a new office in a target location, new product launches with hiring,
    Sifted and TechCrunch Europe, and VC portfolio job boards (Accel, Index, Balderton,
    Atomico, LocalGlobe, Seedcamp, MMC, a16z, Sequoia, and the `jobs` column in `vcs.csv`) and topstartups.io for
    target roles in the candidate's locations.
-e. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 similar companies
+e. **Established companies**: funding news only finds young companies, so also look for older ones. Each run, name up to 5
+   later-stage or public B2B SaaS, developer and enterprise software companies with a real office in a target location, in the
+   domains the profile wants, that aren't in `data/companies.json`. Good ways in: market-leader and analyst lists for those domains,
+   who the candidate's watched companies compete with, who recently bought or sold a company in those domains, and listed software
+   companies. Open each one's careers page and record its `careers_url`. Big companies often run their own careers site, so these
+   won't turn up in the board sweep.
+f. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 similar companies
    with a presence in a target location that aren't watched yet.
 
 ## 1b. Events
@@ -36,8 +42,9 @@ Only with a link and a real date. These events are what weekly moves are built o
 ## 2. Companies
 Company research and fit assessment belong to the watchlist loop (`prompts/watchlist.md`).
 Here, add any new company you came across to `data/companies.json` as
-`{"status": "candidate", "source", "signal"}`. **Fast path**: if it has a live target role in a target location that
-looks like a 7+, run `python3 -m radar.resolve --add "<Company>"` now so the role isn't missed, and
+`{"status": "candidate", "source", "signal", "careers_url"}`, with `careers_url` whenever you can find one: it's how a board gets resolved
+for a company with its own careers site. **Fast path**: if it has a live target role in a target location that
+looks like a 7+, run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` now so the role isn't missed, and
 mark the record `status: "candidate", "fast_tracked": true`. The loop assesses it properly later.
 
 ## 3. Score and seek

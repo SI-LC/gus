@@ -20,8 +20,10 @@ import urllib.error
 import urllib.request
 import zlib
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from radar.settings import group_of, groups, load
 from radar.store import locked
@@ -60,11 +62,11 @@ def _fetch_by(req, deadline) -> bytes:
     return data
 
 
-def fetch_bytes(url: str, timeout: int = 30) -> bytes:
+def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict = None) -> bytes:
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory."""
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(url, data=body, headers={**UA, **(headers or {})})
     if getattr(_limit, "deadline", None) is not None:
         return _fetch_by(req, _limit.deadline)
     for attempt in range(3):  # wifi connections drop now and then; a 4xx won't change, so don't retry those
@@ -90,7 +92,8 @@ _known = None
 _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
-PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee"}
+PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
+          "successfactors": "sf", "workday": "wd"}
 MISSES_TO_CLOSE = 2
 
 
@@ -251,6 +254,319 @@ def recruitee(company: str, slug: str):
     ]
 
 
+# --- company careers sites: what each site publishes, within its robots.txt ------------------------------
+
+class Refused(ValueError):
+    """A site said no: a robots.txt rule, a refused request or a bot check. Reported for the board, never worked around."""
+
+
+PAGE_PAUSE = 1.5  # seconds between job pages on one board
+PAGES_PER_SCAN = 25  # job pages read per board; the rest wait for the next scan
+RETRY_UNREAD_DAYS = 7  # a job page that made no sense is tried again after this long
+UNREAD_TO_FLAG = 3  # this many unreadable pages, and none readable, means the board itself is the problem
+GONE = "gone"  # the site said the ad no longer exists
+WORKDAY_LIST_PAGES = 50  # of 20 jobs each, so 1,000 jobs in your locations; a longer list is cut short
+SAVED_CHECKS = 10  # saved roles missing from a Workday list whose own page is checked each scan
+WORKDAY_JSON = {"Accept": "application/json", "Content-Type": "application/json"}
+ROBOTS_KEEP = 3600  # seconds to trust a robots.txt
+BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access denied", re.I)
+PUBLIC_HOST = re.compile(r"(?:[a-z0-9-]+\.)+(?!local$|internal$|lan$|home$)[a-z]{2,}", re.I)  # no IP addresses, ports or home network names
+_robots: dict = {}
+_cut_short: set = set()  # boards whose list didn't finish, so a missing role proves nothing
+
+
+def parse_robots(text: str) -> tuple:
+    """The rules that apply to Gus and the sitemaps listed: the group naming "gus", otherwise the "*" group (RFC 9309)."""
+    found, sitemaps, agents, in_rules = {}, [], [], False
+    for line in text.splitlines():
+        field, _, value = line.split("#")[0].partition(":")
+        field, value = field.strip().lower(), value.strip()
+        if field == "sitemap":
+            sitemaps.append(value)
+        elif field == "user-agent":
+            if in_rules:
+                agents, in_rules = [], False
+            agents.append(value.lower())
+        elif field in ("allow", "disallow"):
+            in_rules = True
+            for agent in agents if value else ():
+                found.setdefault(agent, []).append((field == "allow", value))
+    return found.get("gus", found.get("*", [])), sitemaps
+
+
+def robots_allow(rules: list, path: str) -> bool:
+    """The longest matching rule decides and Allow wins a tie, which is why this isn't urllib.robotparser (first match wins)."""
+    def hit(rule):
+        ends = rule.endswith("$")
+        pattern = re.escape(rule[:-1] if ends else rule).replace(r"\*", ".*")
+        return re.match(pattern + ("$" if ends else ""), path)
+    return max(((len(rule), allow) for allow, rule in rules if hit(rule)), default=(0, True))[1]
+
+
+def site_rules(host: str) -> tuple:
+    """A site's robots.txt, as (rules, sitemaps). A missing file means no rules. If it can't be read, nothing is fetched."""
+    kept = _robots.get(host)
+    if kept and kept[0] > time.monotonic():
+        return kept[1]
+    try:
+        rules = parse_robots(fetch_bytes(f"https://{host}/robots.txt").decode("utf-8-sig", "ignore"))
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 429) or e.code >= 500:
+            raise Refused(f"robots.txt answered {e.code}") from e
+        rules = ([], [])
+    _robots[host] = (time.monotonic() + ROBOTS_KEEP, rules)
+    return rules
+
+
+def polite_fetch(url: str, body: bytes = None) -> str:
+    """A page from a public site whose robots.txt doesn't rule it out. Workday's job data is the one thing that needs its own headers."""
+    parts = urlparse(url)
+    if parts.scheme != "https" or not PUBLIC_HOST.fullmatch(parts.netloc):
+        raise Refused(f"Not a public https address: {url[:60]}")
+    if not robots_allow(site_rules(parts.netloc)[0], parts.path + (f"?{parts.query}" if parts.query else "")):
+        raise Refused(f"robots.txt disallows {parts.path[:60]}")
+    return fetch_bytes(url, body=body, headers=WORKDAY_JSON if "/wday/cxs/" in parts.path else None).decode("utf-8", "ignore")
+
+
+def sitemap_urls(url: str, follow: bool = True) -> list:
+    """Every address in a sitemap. Parsed by pattern, not as XML, so a hostile file can't expand itself."""
+    text = polite_fetch(url)
+    locs = [html.unescape(u) for u in re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", text)]
+    if "<sitemapindex" in text and follow:
+        host = urlparse(url).netloc
+        return [u for child in locs if urlparse(child).netloc == host for u in sitemap_urls(child, False)]
+    if "<urlset" not in text:
+        raise Refused("No sitemap came back: it may be blocked or behind a bot check")
+    return locs
+
+
+def successfactors_job(url: str):
+    """(job id, words to test) from an address like /job/London-Product-Manager-WC2N-4JS/1368804655/. The words include the place."""
+    m = re.search(r"/job/([^/]+)/(\d+)/?$", urlparse(url).path)
+    return (m[2], re.sub(r"[-_]+", " ", unquote(m[1]))) if m else None
+
+
+def workday_job(url: str):
+    """(job id, words to test) from an address like /Site/job/United-Kingdom---London/Product-Manager_JR1234."""
+    m = re.search(r"/job/(?:[^/]+/)?([^/]+)_([^/_]+)/?$", urlparse(url).path)
+    return (m[2], re.sub(r"[-_]+", " ", unquote(m[1]))) if m else None
+
+
+class _Tagged(HTMLParser):
+    """The text inside the element carrying itemprop="description". Only that tag is counted, as job ads often leave <p> open."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tag, self.depth, self.text = None, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        if self.depth and tag == self.tag:
+            self.depth += 1
+        elif not self.tag and dict(attrs).get("itemprop") == "description":
+            self.tag, self.depth = tag, 1
+
+    def handle_endtag(self, tag):
+        if self.depth and tag == self.tag:
+            self.depth -= 1
+
+    def handle_data(self, data):
+        if self.depth:
+            self.text.append(data)
+
+
+def successfactors_page(text: str):
+    """Title, place, date and description from a job page, or None if it holds no job (an expired one shows an error page)."""
+    title = re.search(r'itemprop="title"[^>]*>([^<]+)<', text)
+    place = re.search(r'itemprop="streetAddress"\s+content="([^"]*)"', text)
+    if not title or not place:
+        return None
+    posted = re.search(r'itemprop="datePosted"\s+content="([^"]*)"', text)
+    try:
+        posted = datetime.strptime(posted[1], "%a %b %d %H:%M:%S %Z %Y").date().isoformat() if posted else None
+    except ValueError:
+        posted = None
+    body = _Tagged()
+    body.feed(text)
+    return {"title": html.unescape(title[1]).strip(), "posted": posted, "description": re.sub(r"\s+", " ", " ".join(body.text)).strip(),
+            "location": re.sub(r",\s*GB\b", ", United Kingdom", html.unescape(place[1]))}
+
+
+def workday_page(text: str):
+    """Title, every place, date and description from a job's data. The public job page names only the first place."""
+    d = json.loads(text).get("jobPostingInfo")
+    if not d or d.get("posted") is False:
+        return None
+    return {"title": d.get("title", ""), "posted": d.get("startDate"), "description": strip_html(d.get("jobDescription", "")),
+            "location": " / ".join(filter(None, [d.get("location"), *(d.get("additionalLocations") or [])]))}
+
+
+def successfactors_list(slug: str) -> dict:
+    """{job id: (address, words to test)} from the sitemap. The slug is the careers host."""
+    found = {}
+    for url in sitemap_urls(f"https://{slug}/sitemap.xml"):
+        if hit := successfactors_job(url):
+            found[hit[0]] = (url, hit[1])
+    if not found:  # an empty list is an error, or every saved role would look closed
+        raise Refused("Its sitemap lists no jobs")
+    return found
+
+
+def workday_data(slug: str) -> str:
+    """Where a board's job data lives. The slug is tenant.wdN/site."""
+    host, site = slug.split("/", 1)
+    return f"https://{host}.myworkdayjobs.com/wday/cxs/{host.split('.')[0]}/{site}"
+
+
+def workday_jobs(slug: str, filters: dict = None, offset: int = 0) -> dict:
+    """One page of 20 jobs. Only the first page gives the total. With no filters it also describes the filters the board offers."""
+    ask = {"appliedFacets": filters or {}, "limit": 20, "offset": offset, "searchText": ""}
+    return json.loads(polite_fetch(f"{workday_data(slug)}/jobs", json.dumps(ask).encode()))
+
+
+def location_filters(facets: list, cfg) -> tuple:
+    """({filter: [ids of the places your location rules want]}, whether the board has a location filter at all).
+    Each company names its filters its own way, so they're found by name: anything about locations or countries."""
+    wanted, any_found = {}, False
+    for f in facets or []:
+        values = f.get("values") or []
+        if f.get("facetParameter") and re.search(r"location|country", f"{f['facetParameter']} {f.get('descriptor') or ''}", re.I):
+            any_found = any_found or any(v.get("id") for v in values)
+            if ids := [v["id"] for v in values if v.get("id") and cfg["location_include"].search(v.get("descriptor") or "")]:
+                wanted[f["facetParameter"]] = ids
+        inner, inner_found = location_filters([v for v in values if "values" in v], cfg)  # a group of filters
+        wanted.update(inner)
+        any_found = any_found or inner_found
+    return wanted, any_found
+
+
+def workday_list(slug: str) -> dict:
+    """{job id: (address, title)} for jobs in your locations only. The board says which places it has, your location rules
+    pick from them, and only those jobs are asked for: a handful of requests where the whole list could be a hundred."""
+    host, site = slug.split("/", 1)
+    filters, any_found = location_filters(workday_jobs(slug).get("facets"), load_config())
+    if not any_found:
+        raise Refused("It has no location filter Gus can use, and reading its whole list would be too many requests")
+    found, pages = {}, 0
+    _cut_short.discard(slug)
+    for name, ids in filters.items():  # one filter at a time, as two together would mean "both"
+        seen = total = 0
+        while True:
+            if pages >= WORKDAY_LIST_PAGES:
+                _cut_short.add(slug)
+                return found
+            time.sleep(PAGE_PAUSE)
+            pages += 1
+            d = workday_jobs(slug, {name: ids}, seen)
+            total, rows = total or d.get("total") or 0, d.get("jobPostings") or []
+            seen += len(rows)
+            for j in rows:
+                url = f"https://{host}.myworkdayjobs.com/{site}{j.get('externalPath', '')}"
+                if hit := workday_job(url):
+                    found[hit[0]] = (url, j.get("title") or hit[1])
+            if not rows or seen >= total:
+                break
+    return found
+
+
+def workday_job_data(url: str) -> str:
+    """The data behind a job's public address."""
+    return re.sub(r"^(https://([^.]+)\.[^/]+/)", r"\1wday/cxs/\2/", url)
+
+
+# ats -> (id prefix, list every job, where a job's details are, what they say)
+SITE_BOARDS = {
+    "successfactors": ("sf", successfactors_list, lambda url: url, successfactors_page),
+    "workday": ("wd", workday_list, workday_job_data, workday_page),
+}
+
+
+def listed_jobs(ats: str, slug: str) -> dict:
+    """{id: (address, words to test)} for a board: every job on SuccessFactors, the jobs in your locations on Workday."""
+    prefix, list_jobs = SITE_BOARDS[ats][:2]
+    return {f"{prefix}:{slug}:{i}": hit for i, hit in list_jobs(slug).items()}
+
+
+def board_size(ats: str, slug: str) -> int:
+    """Open jobs on a board, for checking it exists. One request on Workday."""
+    return workday_jobs(slug).get("total", 0) if ats == "workday" else len(listed_jobs(ats, slug))
+
+
+def job_page(url: str, read_page):
+    """What a job page says, GONE if the site says the ad no longer exists, or None if the page made no sense."""
+    try:
+        text = polite_fetch(url)
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):
+            return GONE
+        raise
+    row = read_page(text)
+    if not row and BOT_CHECK.search(text):
+        raise Refused("A job page answered with a bot check")
+    return row
+
+
+def read_site(company: str, ats: str, slug: str) -> list:
+    """Titles come from the board's list. A job's details are read only for wanted titles, once per address, so a big board stays cheap.
+    An ad the site says has gone is never asked for again. A page that made no sense is tried again after a week, as it may be a
+    one-off, and while several are unreadable and none readable the board is reported as broken on every scan."""
+    cfg, known, out = load_config(), known_jobs(), []
+    read = readable = unread = 0
+    today = date.today()
+    listed = listed_jobs(ats, slug)
+    _listed.update(listed)
+    for jid, (url, words) in listed.items():
+        if not wanted_title(words, cfg):
+            continue
+        looked = looked_up().get(jid)
+        if looked and looked["updated"] != url:
+            looked = None
+        if jid in known:  # already saved: only needs to count as still live
+            out.append(dict(known[jid]))
+            continue
+        if looked and looked.get("unread"):
+            if date.fromisoformat(looked["unread"]) + timedelta(days=RETRY_UNREAD_DAYS) > today:
+                unread += 1
+                continue
+        elif looked and (looked.get("gone") or not matches(looked, cfg)):
+            readable += not looked.get("gone")
+            continue
+        if read >= PAGES_PER_SCAN:
+            continue
+        time.sleep(PAGE_PAUSE if read else 0)
+        read += 1
+        row = job_page(SITE_BOARDS[ats][2](url), SITE_BOARDS[ats][3])
+        if row == GONE:
+            looked_up()[jid] = {"updated": url, "gone": True}
+        elif not row:
+            unread += 1
+            looked_up()[jid] = {"updated": url, "unread": str(today)}
+        else:
+            readable += 1
+            looked_up()[jid] = {"updated": url, "title": row["title"], "location": row["location"]}
+            out.append({"id": jid, "company": company, "url": url, **row})
+    if unread >= UNREAD_TO_FLAG and not readable:
+        raise Refused(f"None of its job pages could be read ({unread} tried)")
+    return out
+
+
+def successfactors(company: str, slug: str):
+    return read_site(company, "successfactors", slug)
+
+
+def workday(company: str, slug: str):
+    """The list only holds jobs in places the board's filter matched, and a saved role can sit outside it: say, saved for a
+    second location. So a saved role that's missing is checked on its own page, and only "gone" lets it close."""
+    out = read_site(company, "workday", slug)
+    missing = [j for jid, j in known_jobs().items() if jid.startswith(f"wd:{slug}:") and jid not in _listed and not j.get("ad_closed")]
+    for n, j in enumerate(missing):
+        if n < SAVED_CHECKS:
+            time.sleep(PAGE_PAUSE)
+            if job_page(workday_job_data(j["url"]), workday_page) == GONE:
+                continue
+        _listed.add(j["id"])
+    return out
+
+
 def hn_who_is_hiring():
     """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
@@ -275,7 +591,7 @@ def hn_who_is_hiring():
 
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
-           "smartrecruiters": smartrecruiters, "recruitee": recruitee}
+           "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday}
 
 
 # --- pipeline ----------------------------------------------------------------
@@ -349,7 +665,7 @@ def fetch_all():
             jobs += found
             if err:
                 errors.append(err)
-            elif ats in PREFIX:
+            elif ats in PREFIX and slug not in _cut_short:
                 answered.add(f"{PREFIX[ats]}:{slug}")
     _boards_answered.clear()
     _boards_answered.update(answered)
