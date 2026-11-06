@@ -33,6 +33,66 @@ class RemoteRoles(unittest.TestCase):
         self.assertFalse(scan.matches(self.job("Remote / United States"), cfg))
 
 
+class Feeds(unittest.TestCase):
+    RSS = b"""<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><item>
+      <title>Who is hiring</title><link>https://list.example/1</link><description>Short teaser</description>
+      <content:encoded><![CDATA[<p>Acme is hiring a <a href="https://acme.example/pm">product manager</a> in London.</p>]]></content:encoded>
+    </item></channel></rss>"""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from radar import feeds
+        self.feeds = feeds
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.data = Path(folder.name)
+        self.rows = [{"name": "Good", "url": "https://good.example", "kind": "jobs", "enabled": True},
+                     {"name": "Bad", "url": "https://bad.example", "kind": "signals", "enabled": True}]
+        for patcher in (mock.patch.object(feeds, "DATA", self.data), mock.patch.object(feeds, "SIGNALS", self.data / "signals.json"),
+                        mock.patch.object(feeds, "all_feeds", lambda: self.rows), mock.patch.object(feeds, "fetch_bytes", self.answer)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.broken = True
+
+    def answer(self, url, timeout=30):
+        if self.broken and "bad" in url:
+            raise OSError("HTTP Error 403: Forbidden")
+        return self.RSS
+
+    def errors(self):
+        import json
+        return json.loads((self.data / "feed_errors.json").read_text())
+
+    def test_a_job_feed_keeps_the_full_post_and_its_links(self):
+        item = next(self.feeds.fetch("https://good.example", full=True))
+        self.assertIn("product manager (https://acme.example/pm)", item["text"])
+
+    def test_other_feeds_keep_the_teaser(self):
+        self.assertEqual(next(self.feeds.fetch("https://good.example"))["text"], "Short teaser")
+
+    def test_a_job_feed_without_full_text_falls_back_to_the_teaser(self):
+        self.RSS = self.RSS.replace(b"content:encoded", b"content:other")
+        self.assertEqual(next(self.feeds.fetch("https://good.example", full=True))["text"], "Short teaser")
+
+    def test_a_failing_feed_is_reported_then_cleared_when_it_works_again(self):
+        import json
+        self.feeds.main()
+        self.assertEqual(self.errors(), {"Bad": "HTTP Error 403: Forbidden"})
+        self.broken = False
+        state = self.data / "feeds_state.json"
+        state.write_text(json.dumps({"Good": 0}))
+        self.feeds.main()
+        self.assertEqual(self.errors(), {})
+
+    def test_a_turned_off_feed_is_no_longer_reported(self):
+        self.feeds.main()
+        self.rows[1]["enabled"] = False
+        self.feeds.main()
+        self.assertEqual(self.errors(), {})
+
+
 class AppIcon(unittest.TestCase):
     def test_browser_icon_has_light_and_dark_versions(self):
         from radar.scan import ROOT
