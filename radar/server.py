@@ -118,6 +118,7 @@ def state():
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
             "board_errors": read(DATA / "board_errors.json", {}),
+            "feed_errors": read(DATA / "feed_errors.json", {}),
             "x": read(DATA / "x_state.json", {}),
             "sources": sources.status(),
             "last_agent_run": last_agent_run(),

@@ -681,7 +681,7 @@ const V = {
       <div class="tabs" role="tablist">${tabs}</div>${body}`;
   },
   health() {
-    const h = S.health, errs = Object.entries(h.board_errors || {});
+    const h = S.health, errs = Object.entries(h.board_errors || {}), feedErrs = Object.entries(h.feed_errors || {});
     return costs() + `<div class="section">Health</div>
       <div class="stats">
         <div class="stat"><div class="v">${ago(h.last_scan)}</div><div class="l">Last scan</div></div>
@@ -693,7 +693,9 @@ const V = {
       </div>
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       <div class="section">Board errors</div>
-      ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every job board worked on the last check.</div>`}`;
+      ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every job board worked on the last check.</div>`}
+      <div class="section">Feed errors</div>
+      ${feedErrs.length ? `<table>${feedErrs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every feed worked on its last check.</div>`}`;
   },
 };
 

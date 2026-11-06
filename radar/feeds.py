@@ -18,8 +18,10 @@ from datetime import datetime, timezone
 from radar.scan import DATA, ROOT, fetch_bytes, strip_html
 
 SIGNALS = DATA / "signals.json"
+FULL_TEXT = 15_000  # job lists name dozens of roles, so they keep far more than the teaser
 SIGNAL = re.compile(r"rais|fund|series [a-e]|seed|london|\buk\b|britain|expan|launch|hiring|acqui|ai\b|agent", re.I)
 ATOM = "{http://www.w3.org/2005/Atom}"
+CONTENT = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
 
 def parse_xml(data: bytes):
@@ -29,7 +31,12 @@ def parse_xml(data: bytes):
     return ET.fromstring(data)
 
 
-def fetch(url: str):
+def with_links(body: str) -> str:
+    """Keep where each link goes, since a job list's apply links are most of its value."""
+    return re.sub(r"""<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""", r" \2 (\1) ", body, flags=re.I | re.S)
+
+
+def fetch(url: str, full: bool = False):
     root = parse_xml(fetch_bytes(url))
     items = root.findall(".//item") or root.findall(f".//{ATOM}entry")
     for it in items:
@@ -42,7 +49,8 @@ def fetch(url: str):
             "title": get("title"),
             "url": link,
             "date": get("pubDate") or get("published") or get("updated"),
-            "text": strip_html(get("description") or get("summary") or get("content"))[:1500],
+            "text": (full and strip_html(with_links(it.findtext(CONTENT) or get("content")))[:FULL_TEXT])
+                    or strip_html(get("description") or get("summary") or get("content"))[:1500],
         }
 
 
@@ -161,11 +169,13 @@ def main():
     feeds = [f for f in all_feeds() if f["enabled"]
              and t - state.get(f["name"], 0) >= int(f.get("every_min") or 10) * 60 - 30]
     signals = json.loads(SIGNALS.read_text()) if SIGNALS.exists() else {}
+    errors_path = DATA / "feed_errors.json"
+    errors = json.loads(errors_path.read_text()) if errors_path.exists() else {}
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def run(f):
         try:
-            return f, list(fetch(f["url"])), None
+            return f, list(fetch(f["url"], full=f["kind"] == "jobs")), None
         except Exception as e:
             return f, [], e
 
@@ -174,7 +184,9 @@ def main():
         for f, items, err in pool.map(run, feeds):
             if err:
                 print(f"  ! {f['name']}: {err}")
+                errors[f["name"]] = str(err)
                 continue
+            errors.pop(f["name"], None)
             state[f["name"]] = t
             for it in items:
                 key = f"feed:{it['url']}"
@@ -186,6 +198,8 @@ def main():
                 added += 1
     SIGNALS.write_text(json.dumps(signals, indent=2, ensure_ascii=False))
     state_path.write_text(json.dumps(state))
+    on = {f["name"] for f in all_feeds() if f["enabled"]}  # a feed you removed or turned off is no longer a problem
+    errors_path.write_text(json.dumps({n: e for n, e in errors.items() if n in on}))
     print(f"feeds: {added} new signals ({sum(l['status'] == 'new' for l in signals.values())} waiting for the agent)")
 
 

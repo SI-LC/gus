@@ -12,6 +12,8 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's, Exponential View),
    funding news (Sifted, TechCrunch, EU-Startups, UKTN), HN job posts, Reddit, X and Bluesky. For each one,
    work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company` and `job_id` if known.
+   Signals of kind `jobs` can list many roles in one post, with links in brackets. Go through every listing and follow up only target
+   roles open to the candidate's locations. If a remote role doesn't state its region, check before adding it.
 b. **Board sweep** (web search, every run): find target roles in the candidate's locations on *any* company's board, not
    just watched ones, with searches like `site:jobs.ashbyhq.com "<target role>" <location>`,
    `site:job-boards.greenhouse.io "<target role>" <location>`, `site:jobs.lever.co "<target role>" <location>`,

@@ -103,7 +103,7 @@ SCHEMA = [
 
     ("feeds_disabled", "Feeds turned off", "lines", "Feeds", "Names of built-in feeds to skip, one per line."),
     ("feeds_extra", "Your feeds", "lines", "Feeds",
-     "One per line: Name | https://feed.url | kind | minutes. kind is signals (keyword-filtered), newsletter, jobs or community."),
+     "One per line: Name | https://feed.url | kind | minutes. kind is signals (keyword-filtered), newsletter, jobs (reads the full post) or community."),
 
     ("source_gmail", "Read this Gmail account", "bool", "Email", "Checked on every scan. Read-only: nothing is sent, deleted or marked as read."),
     ("gmail_address", "Gmail address", "text", "Email", "The account that receives your recruiter and LinkedIn emails."),
