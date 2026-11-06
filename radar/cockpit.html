@@ -472,14 +472,19 @@ function frCV(el) {
   frTyping = setTimeout(() => { if (el.value.trim().length >= 200) frSend({ cv: el.value }); }, 300);
 }
 async function frGo() { const cv = $("fr-cv").value; await frSend({ cv, go: true }); frWatch(); }
-async function frLogin() {
-  const d = await post("/api/first-run/login", {});
+async function signIn(box) {
+  const d = await post("/api/ai-login", {});
   if (!d) return;
-  $("fr-login").innerHTML = d.ok ? `<p class="sub"><a href="${link(d.url)}" target="_blank" rel="noopener"><b>Open Claude's sign-in page</b></a>, sign in, then paste the code it gives you here.</p>
-    <div class="row"><input type="text" id="fr-code" placeholder="Code from Claude" aria-label="Code from Claude" autocomplete="off" style="flex:1;min-width:180px">
-    <button class="primary" onclick="frCode()">Finish signing in</button></div>` : `<p class="bad">${esc(d.reply)}</p>`;
+  $(box).innerHTML = d.ok ? `<p class="sub"><a href="${link(d.url)}" target="_blank" rel="noopener"><b>Open Claude's sign-in page</b></a>, sign in, then paste the code it gives you here.</p>
+    <div class="row"><input type="text" id="${box}-code" placeholder="Code from Claude" aria-label="Code from Claude" autocomplete="off" style="flex:1;min-width:180px">
+    <button class="primary" onclick="finishSignIn('${box}')">Finish signing in</button></div>` : `<p class="bad">${esc(d.reply)}</p>`;
 }
-async function frCode() { const d = await post("/api/first-run/login", { code: $("fr-code").value }); if (d) { F = d; frDraw(); } }
+async function finishSignIn(box) {
+  const d = await post("/api/ai-login", { code: $(box + "-code").value });
+  if (!d) return;
+  $(box).innerHTML = d.ok ? '<p class="ok">Signed in to Claude</p>' : `<p class="bad">${esc(d.reply)}</p>`;
+  if (d.ok && box === "fr-login") frSend({ recheck: true });
+}
 async function frConnect() { const d = await post("/api/first-run/connect", { key: $("fr-key").value }); if (d) { F = d; frDraw(); } }
 async function frSkip() { if (await post("/api/first-run/skip", {})) { $("main").innerHTML = ""; location.hash = "#pipeline"; await load(); } }
 function frAll() { roleWhere = "all"; saveRoleFilters(); location.hash = "#roles"; load(); }
@@ -510,7 +515,7 @@ function frCard(c) {
 function frDrawForm() {
   const a = F.ai;
   const connect = !a ? "Checking your AI connection…" : a.ok ? `<span class="ok">✓ AI connected</span>` : `<b>First, connect Claude.</b> ${esc(a.reply)}
-     <div class="row" style="margin-top:8px"><button class="primary" onclick="frLogin()">Sign in with Claude</button></div>
+     <div class="row" style="margin-top:8px"><button class="primary" onclick="signIn('fr-login')">Sign in with Claude</button></div>
      <div id="fr-login"></div>
      <div class="sub" style="margin-top:10px">Or paste an Anthropic API key:</div>
      <div class="row" style="margin-top:6px"><input type="password" id="fr-key" placeholder="API key" aria-label="Anthropic API key" autocomplete="off" style="flex:1;min-width:180px">
@@ -700,12 +705,12 @@ const fieldsOf = (group, skip = []) => SET.schema.filter(f => f.group === group 
 const SETTINGS_TABS = [
   ["ai", "AI", () => {
     const skip = SET.values.ai_provider === "openai_compatible" ? [] : ["openai_base_url", "openai_model"];
-    const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude Code login on this machine. If it has expired, run <code>claude</code> then <code>/login</code> in a terminal."
+    const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude login on the computer Gus runs on. If it has expired, sign in again here."
       : SET.values.ai_provider === "anthropic_api" ? "Uses your Anthropic API key (set it under Keys). Billed per use by Anthropic."
       : "Scoring only. Finding people and agent runs need a Claude provider.";
     return `<section class="group"><h2>Provider and models</h2>${fieldsOf("AI", skip)}
-      <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button><span id="ai-test" class="sub"></span></div>
-      <div class="help">${help}</div></div></section>`;
+      <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button>${SET.values.ai_provider === "claude_subscription" ? `<button onclick="signIn('ai-login')">Sign in with Claude</button>` : ""}<span id="ai-test" class="sub"></span></div>
+      <div id="ai-login"></div><div class="help">${help}</div></div></section>`;
   }],
   ["matching", "Matching", () => `<section class="group"><h2>What counts as a match</h2>${fieldsOf("Matching")}</section>`],
   ["schedule", "Schedule", () => {

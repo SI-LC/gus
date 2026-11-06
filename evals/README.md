@@ -15,7 +15,7 @@ check:
 judge: Is it clear the role has moved, and where to find it?
 ```
 
-- `given`: `empty` is a brand new install, so it starts on first run. `signed out` is the same with AI not connected yet. `scanned` is an install in use that has run one scan of the made-up job board.
+- `given`: `empty` is a brand new install, so it starts on first run. `signed out` is the same with AI not connected yet. `scanned` is an install in use that has run one scan of the made-up job board, and `scanned, signed out` is the same after its Claude login has expired.
 - `check`: `open <screen>`, `see "text"`, `not see "text"`, `click "text"`, `pick "chip"`, `"chip" is picked`, `"text" appears before "other text"`, `type "text" into "label"`, `reload`.
 - `judge`: a question for an AI reviewer. It isn't run yet.
 

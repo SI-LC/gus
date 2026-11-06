@@ -16,7 +16,7 @@ from evals.world import World
 
 CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
-GIVENS = ("empty", "signed out", "scanned")
+GIVENS = ("empty", "signed out", "scanned", "scanned, signed out")
 
 
 def step(page, text):
@@ -47,9 +47,9 @@ def step(page, text):
 
 def run_case(browser, case) -> str:
     """The reason it failed, or an empty string if it passed."""
-    world = World(new=case["given"] in ("empty", "signed out"), signed_out=case["given"] == "signed out")
+    world = World(new=case["given"] in ("empty", "signed out"), signed_out="signed out" in case["given"])
     try:
-        if case["given"] == "scanned":
+        if case["given"].startswith("scanned"):
             world.scan()
         world.start()
         page = browser.new_page()

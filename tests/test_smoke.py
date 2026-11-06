@@ -84,19 +84,27 @@ class BrandNew(unittest.TestCase):
 
 
 class SigningIn(unittest.TestCase):
-    def test_sign_in_with_claude_from_the_page(self):
-        world = World(new=True, signed_out=True)
+    def sign_in(self, **kinds):
+        world = World(signed_out=True, **kinds)
         self.addCleanup(world.close)
         world.start()
-        world.post("/api/first-run", {})
-        for _ in range(50):
-            ai = world.get("/api/first-run")["ai"]
-            if ai:
-                break
-            time.sleep(.1)
-        self.assertFalse(ai["ok"])
-        self.assertIn("made-up-sign-in", world.post("/api/first-run/login", {})["url"])
-        self.assertTrue(world.post("/api/first-run/login", {"code": "made-up-code"})["ai"]["ok"])
+        self.assertIn("made-up-sign-in", world.post("/api/ai-login", {})["url"])
+        self.assertFalse(world.post("/api/ai-login", {"code": "wrong"})["ok"])
+        world.post("/api/ai-login", {})
+        self.assertTrue(world.post("/api/ai-login", {"code": "made-up-code"})["ok"])
+
+    def test_on_a_new_install(self):
+        self.sign_in(new=True)
+
+    def test_on_an_install_in_use_after_a_login_expires(self):
+        self.sign_in()
+
+    def test_refused_when_this_install_doesnt_use_a_claude_login(self):
+        world = World()
+        self.addCleanup(world.close)
+        world.start()
+        world.post("/api/settings", {"changes": {"ai_provider": "anthropic_api"}})
+        self.assertIn("error", world.post("/api/ai-login", {}))
 
 
 class SkippedOnce(unittest.TestCase):

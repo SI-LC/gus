@@ -610,21 +610,6 @@ def connect(key: str) -> dict:
     return status()
 
 
-def login() -> dict:
-    _guard()
-    return ai.login_start()
-
-
-def login_code(code: str) -> dict:
-    _guard()
-    if not code.strip():
-        raise ValueError("Paste the code from the sign-in page.")
-    result = ai.login_finish(code)
-    with _lock:
-        RUN["ai"] = result
-    return status()
-
-
 def timings() -> dict:
     """Seconds from each starting point. `go` is the button; `pasted` is when the CV landed."""
     clock = RUN["clock"]
