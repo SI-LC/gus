@@ -29,6 +29,7 @@ from radar.store import locked
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 JOBS = DATA / "jobs.json"
+LOOKED_UP = DATA / "board_locations.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
 UA = {"User-Agent": "gus/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
 
@@ -86,6 +87,7 @@ def fetch_bytes(url: str, timeout: int = 30) -> bytes:
 
 
 _known = None
+_looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee"}
@@ -98,6 +100,20 @@ def known_jobs() -> dict:
     if _known is None:
         _known = json.loads(JOBS.read_text()) if JOBS.exists() else {}
     return _known
+
+
+def looked_up() -> dict:
+    """Where Greenhouse roles we've already fetched are based. Read once per scan. A role edited since is fetched again."""
+    global _looked_up
+    if _looked_up is None:
+        _looked_up = json.loads(LOOKED_UP.read_text()) if LOOKED_UP.exists() else {}
+    return _looked_up
+
+
+def save_looked_up(answered: set) -> None:
+    """Forget roles that have gone from a board. Boards that didn't answer this time keep theirs."""
+    keep = {k: v for k, v in looked_up().items() if ":".join(k.split(":")[:2]) not in answered or k in _listed}
+    LOOKED_UP.write_text(json.dumps(keep))
 
 
 def get_json(url: str):
@@ -136,13 +152,17 @@ def greenhouse(company: str, slug: str):
         row = {"id": jid, "company": company, "title": title, "url": j["absolute_url"],
                "posted": j.get("first_published") or j.get("updated_at"), "description": "",
                "location": j.get("location", {}).get("name", "")}
+        looked = looked_up().get(jid)
         if jid in known:  # already saved: only needs to count as still live
             row["location"] = known[jid].get("location") or row["location"]
+        elif looked and looked["updated"] == j.get("updated_at") and not matches({**row, "location": looked["location"]}, cfg):
+            continue  # a role elsewhere is never saved, so without this its details would be fetched again every scan
         else:
             d = get_json(f"{base}/{j['id']}")
             # some boards (e.g. Cloudflare) put "Hybrid" in location and the cities in offices
             row["location"] = " / ".join(dict.fromkeys(filter(None, [row["location"]] + [o.get("name", "") for o in d.get("offices") or []])))
             row["description"] = strip_html(d.get("content", ""))
+            looked_up()[jid] = {"updated": j.get("updated_at"), "location": row["location"]}
         out.append(row)
     return out
 
@@ -333,6 +353,7 @@ def fetch_all():
                 answered.add(f"{PREFIX[ats]}:{slug}")
     _boards_answered.clear()
     _boards_answered.update(answered)
+    save_looked_up(answered)
     (DATA / "board_errors.json").write_text(json.dumps(dict(e for e in errors if isinstance(e, tuple))))
     errors = [e if isinstance(e, str) else f"{e[0]} ({e[1]})" for e in errors]
     if load_config().get("source_hn", True):

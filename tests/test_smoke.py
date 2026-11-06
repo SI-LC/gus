@@ -154,6 +154,11 @@ class FullRun(unittest.TestCase):
         self.assertEqual(len(self.roles()), 3)
         self.assertEqual(self.world.ai_calls(), calls)
 
+    def test_5b_a_role_elsewhere_is_only_looked_up_once(self):
+        roles = json.loads((self.world.app / "data" / "board_locations.json").read_text())
+        self.assertEqual(roles["gh:harborlight:5"]["location"], "San Francisco")
+        self.assertNotIn("gh:harborlight:4", roles)  # a title you don't want never needs its details
+
     def test_6_your_changes_survive_a_restart(self):
         role = self.roles()["Senior Product Manager"]
         self.world.post("/api/job", {"id": role["id"], "stage": "shortlisted", "note": "Worth a look"})
