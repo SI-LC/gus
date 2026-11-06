@@ -27,8 +27,9 @@ def refused(url, code=403):
 class Site:
     """Stands in for the web and notes every address asked for. A reply can be bytes, an exception, or a function of the address."""
 
-    def __init__(self, replies):
-        self.replies, self.asked, self.bodies = replies, [], []
+    def __init__(self, replies, **first):
+        """`first` are checked before `replies`, so a test can answer one address differently."""
+        self.replies, self.asked, self.bodies = {**first, **{k: v for k, v in replies.items() if k not in first}}, [], []
 
     def __call__(self, url, timeout=30, body=None, headers=None):
         self.asked.append(url)
@@ -47,15 +48,19 @@ class Site:
     def lists(self):
         return [u for u in self.asked if u.endswith("/jobs")]
 
+    def filters(self):
+        """What each request for a list of jobs asked to be filtered by."""
+        return [json.loads(b)["appliedFacets"] for b in self.bodies if b]
+
 
 def successfactors_site(**more):
     return Site({f"{SF}/robots.txt": sample("successfactors_robots.txt"), f"{SF}/sitemap.xml": sample("successfactors_sitemap.xml"),
-                 f"{SF}/job/": sample("successfactors_job.html"), **more})
+                 f"{SF}/job/": sample("successfactors_job.html")}, **more)
 
 
 def workday_site(**more):
     return Site({f"{WD_HOST}/robots.txt": sample("workday_robots.txt"), "External_Career_Site/jobs": sample("workday_list.json"),
-                 "External_Career_Site/job/": sample("workday_job.json"), **more})
+                 "External_Career_Site/job/": sample("workday_job.json")}, **more)
 
 
 class Base(unittest.TestCase):
@@ -410,15 +415,29 @@ class Closing(Base):
         site_for = lambda: successfactors_site(**{f"{SF}/sitemap.xml": refused(SF)})
         self.assertEqual(self.scan_twice(f"sf:{SF}:1", site_for).get("missed"), None)
 
-    def test_a_missing_workday_role_closes(self):
+    def workday_twice(self, site_for):
+        """A saved role that isn't in the list for your locations."""
         self.watch(["Salesforce", "workday", WD, "x"])
-        self.assertEqual(self.scan_twice(f"wd:{WD}:JR1", workday_site).get("ad_closed"), "now")
+        jid = f"wd:{WD}:JR1"
+        role = {**self.saved(jid)[jid], "url": f"https://{WD_HOST}/External_Career_Site/job/Texas---Austin/Product-Manager_JR1"}
+        with mock.patch.object(self, "saved", lambda _: {jid: role}):
+            return self.scan_twice(jid, site_for)
+
+    def test_a_saved_workday_role_outside_the_list_stays_open_while_its_page_exists(self):
+        self.assertIsNone(self.workday_twice(workday_site).get("ad_closed"))
+
+    def test_a_saved_workday_role_closes_when_its_page_has_gone(self):
+        site_for = lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)})
+        self.assertEqual(self.workday_twice(site_for).get("ad_closed"), "now")
+
+    def test_saved_roles_beyond_the_check_limit_stay_open(self):
+        with mock.patch.object(scan, "SAVED_CHECKS", 0):
+            role = self.workday_twice(lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)}))
+        self.assertIsNone(role.get("ad_closed"))
 
     def test_a_list_cut_short_closes_nothing(self):
-        self.watch(["Salesforce", "workday", WD, "x"])
-        full = json.dumps({"total": 5000, "jobPostings": json.loads(sample("workday_list.json"))["jobPostings"]}).encode()
         with mock.patch.object(scan, "WORKDAY_LIST_PAGES", 1):
-            role = self.scan_twice(f"wd:{WD}:JR1", lambda: workday_site(**{"External_Career_Site/jobs": full}))
+            role = self.workday_twice(lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)}))
         self.assertIsNone(role.get("ad_closed"))
         self.assertIsNone(role.get("missed"))
 
@@ -440,13 +459,41 @@ class Salesforce(Base):
         self.run_scan(site)
         self.assertEqual([u.rsplit("/", 1)[1] for u in site.pages()], ["Senior-Product-Manager_JR360001"])
 
-    def test_goes_through_the_whole_list(self):
-        rows = json.loads(sample("workday_list.json"))["jobPostings"]
-        pages = iter([json.dumps({"total": 21, "jobPostings": rows * 5}).encode(), json.dumps({"total": 0, "jobPostings": rows[:1]}).encode()])
+    def test_asks_only_for_jobs_in_your_locations(self):
+        site = workday_site()
+        self.run_scan(site)
+        country, places = site.filters()[1:]
+        self.assertEqual(site.filters()[0], {})
+        self.assertEqual(list(country.values()), [["29247e57dbaf46fb855b224e03170bc7"]])  # United Kingdom, not India
+        self.assertEqual(len(places["locations"]), 2)  # London and England remote, not Bangalore or California remote
+
+    def test_never_filters_by_anything_but_place(self):
+        site = workday_site()
+        self.run_scan(site)
+        self.assertFalse([f for f in site.filters() if "jobFamilyGroup" in f])
+
+    def test_a_board_with_nothing_in_your_locations_takes_one_request(self):
+        board = json.loads(sample("workday_list.json"))
+        board["facets"] = [{"facetParameter": "locations", "descriptor": "Locations", "values": [{"descriptor": "India - Bangalore", "id": "a", "count": 9}]}]
+        site = workday_site(**{"External_Career_Site/jobs": json.dumps(board).encode()})
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((len(site.lists()), jobs, errors), (1, [], {}))
+
+    def test_a_board_with_no_location_filter_is_reported_not_read_in_full(self):
+        board = {**json.loads(sample("workday_list.json")), "facets": [{"facetParameter": "jobFamilyGroup", "descriptor": "Job Category", "values": [{"descriptor": "Product", "id": "a"}]}]}
+        site = workday_site(**{"External_Career_Site/jobs": json.dumps(board).encode()})
+        _, errors = self.run_scan(site)
+        self.assertEqual(len(site.lists()), 1)
+        self.assertIn("no location filter", errors["Salesforce"])
+
+    def test_goes_through_every_page_of_a_filtered_list(self):
+        board = json.loads(sample("workday_list.json"))
+        board["facets"] = board["facets"][:1]
+        first = json.dumps(board).encode()
+        pages = iter([first, json.dumps({"total": 21, "jobPostings": board["jobPostings"] * 5}).encode(), json.dumps({"total": 0, "jobPostings": board["jobPostings"][:1]}).encode()])
         site = workday_site(**{"External_Career_Site/jobs": lambda _: next(pages)})
         self.run_scan(site)
-        self.assertEqual(len(site.lists()), 2)
-        self.assertEqual([json.loads(b)["offset"] for b in site.bodies if b], [0, 20])
+        self.assertEqual([json.loads(b)["offset"] for b in site.bodies if b], [0, 0, 20])
 
     def test_an_expired_ad_is_skipped(self):
         jobs, _ = self.run_scan(workday_site(**{"External_Career_Site/job/": refused("x", 404)}))

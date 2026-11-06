@@ -265,7 +265,8 @@ PAGES_PER_SCAN = 25  # job pages read per board; the rest wait for the next scan
 RETRY_UNREAD_DAYS = 7  # a job page that made no sense is tried again after this long
 UNREAD_TO_FLAG = 3  # this many unreadable pages, and none readable, means the board itself is the problem
 GONE = "gone"  # the site said the ad no longer exists
-WORKDAY_LIST_PAGES = 150  # of 20 jobs each, so 3,000 jobs; a longer list is cut short and closes nothing
+WORKDAY_LIST_PAGES = 50  # of 20 jobs each, so 1,000 jobs in your locations; a longer list is cut short
+SAVED_CHECKS = 10  # saved roles missing from a Workday list whose own page is checked each scan
 WORKDAY_JSON = {"Accept": "application/json", "Content-Type": "application/json"}
 ROBOTS_KEEP = 3600  # seconds to trust a robots.txt
 BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access denied", re.I)
@@ -405,6 +406,8 @@ def successfactors_list(slug: str) -> dict:
     for url in sitemap_urls(f"https://{slug}/sitemap.xml"):
         if hit := successfactors_job(url):
             found[hit[0]] = (url, hit[1])
+    if not found:  # an empty list is an error, or every saved role would look closed
+        raise Refused("Its sitemap lists no jobs")
     return found
 
 
@@ -414,29 +417,54 @@ def workday_data(slug: str) -> str:
     return f"https://{host}.myworkdayjobs.com/wday/cxs/{host.split('.')[0]}/{site}"
 
 
-def workday_jobs(slug: str, offset: int = 0) -> dict:
-    """One page of 20 jobs. Only the first page gives the total."""
-    ask = {"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": ""}
+def workday_jobs(slug: str, filters: dict = None, offset: int = 0) -> dict:
+    """One page of 20 jobs. Only the first page gives the total. With no filters it also describes the filters the board offers."""
+    ask = {"appliedFacets": filters or {}, "limit": 20, "offset": offset, "searchText": ""}
     return json.loads(polite_fetch(f"{workday_data(slug)}/jobs", json.dumps(ask).encode()))
 
 
+def location_filters(facets: list, cfg) -> tuple:
+    """({filter: [ids of the places your location rules want]}, whether the board has a location filter at all).
+    Each company names its filters its own way, so they're found by name: anything about locations or countries."""
+    wanted, any_found = {}, False
+    for f in facets or []:
+        values = f.get("values") or []
+        if f.get("facetParameter") and re.search(r"location|country", f"{f['facetParameter']} {f.get('descriptor') or ''}", re.I):
+            any_found = any_found or any(v.get("id") for v in values)
+            if ids := [v["id"] for v in values if v.get("id") and cfg["location_include"].search(v.get("descriptor") or "")]:
+                wanted[f["facetParameter"]] = ids
+        inner, inner_found = location_filters([v for v in values if "values" in v], cfg)  # a group of filters
+        wanted.update(inner)
+        any_found = any_found or inner_found
+    return wanted, any_found
+
+
 def workday_list(slug: str) -> dict:
-    """{job id: (address, words to test)} for every job, a page at a time. The title is in the list, so job pages stay few."""
+    """{job id: (address, title)} for jobs in your locations only. The board says which places it has, your location rules
+    pick from them, and only those jobs are asked for: a handful of requests where the whole list could be a hundred."""
     host, site = slug.split("/", 1)
-    found, seen, total = {}, 0, 0
+    filters, any_found = location_filters(workday_jobs(slug).get("facets"), load_config())
+    if not any_found:
+        raise Refused("It has no location filter Gus can use, and reading its whole list would be too many requests")
+    found, pages = {}, 0
     _cut_short.discard(slug)
-    for page in range(WORKDAY_LIST_PAGES):
-        time.sleep(PAGE_PAUSE if page else 0)
-        d = workday_jobs(slug, seen)
-        total, rows = total or d.get("total") or 0, d.get("jobPostings") or []
-        seen += len(rows)
-        for j in rows:
-            url = f"https://{host}.myworkdayjobs.com/{site}{j.get('externalPath', '')}"
-            if hit := workday_job(url):
-                found[hit[0]] = (url, j.get("title") or hit[1])
-        if not rows or seen >= total:
-            return found
-    _cut_short.add(slug)
+    for name, ids in filters.items():  # one filter at a time, as two together would mean "both"
+        seen = total = 0
+        while True:
+            if pages >= WORKDAY_LIST_PAGES:
+                _cut_short.add(slug)
+                return found
+            time.sleep(PAGE_PAUSE)
+            pages += 1
+            d = workday_jobs(slug, {name: ids}, seen)
+            total, rows = total or d.get("total") or 0, d.get("jobPostings") or []
+            seen += len(rows)
+            for j in rows:
+                url = f"https://{host}.myworkdayjobs.com/{site}{j.get('externalPath', '')}"
+                if hit := workday_job(url):
+                    found[hit[0]] = (url, j.get("title") or hit[1])
+            if not rows or seen >= total:
+                break
     return found
 
 
@@ -453,16 +481,13 @@ SITE_BOARDS = {
 
 
 def listed_jobs(ats: str, slug: str) -> dict:
-    """{id: (address, words to test)} for a board. An empty list is an error, or every saved role would look closed."""
+    """{id: (address, words to test)} for a board: every job on SuccessFactors, the jobs in your locations on Workday."""
     prefix, list_jobs = SITE_BOARDS[ats][:2]
-    listed = {f"{prefix}:{slug}:{i}": hit for i, hit in list_jobs(slug).items()}
-    if not listed:
-        raise Refused("It lists no jobs")
-    return listed
+    return {f"{prefix}:{slug}:{i}": hit for i, hit in list_jobs(slug).items()}
 
 
 def board_size(ats: str, slug: str) -> int:
-    """Open jobs on a board, for checking it exists. One request on Workday, not the whole list."""
+    """Open jobs on a board, for checking it exists. One request on Workday."""
     return workday_jobs(slug).get("total", 0) if ats == "workday" else len(listed_jobs(ats, slug))
 
 
@@ -529,7 +554,17 @@ def successfactors(company: str, slug: str):
 
 
 def workday(company: str, slug: str):
-    return read_site(company, "workday", slug)
+    """The list only holds jobs in places the board's filter matched, and a saved role can sit outside it: say, saved for a
+    second location. So a saved role that's missing is checked on its own page, and only "gone" lets it close."""
+    out = read_site(company, "workday", slug)
+    missing = [j for jid, j in known_jobs().items() if jid.startswith(f"wd:{slug}:") and jid not in _listed and not j.get("ad_closed")]
+    for n, j in enumerate(missing):
+        if n < SAVED_CHECKS:
+            time.sleep(PAGE_PAUSE)
+            if job_page(workday_job_data(j["url"]), workday_page) == GONE:
+                continue
+        _listed.add(j["id"])
+    return out
 
 
 def hn_who_is_hiring():
