@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse
 
 from radar.settings import group_of, groups, load
 from radar.store import locked
@@ -93,7 +93,7 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd", "teamtailor": "tt"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "googlecareers": "gc"}
 MISSES_TO_CLOSE = 2
 
 
@@ -273,6 +273,9 @@ BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access 
 PUBLIC_HOST = re.compile(r"(?:[a-z0-9-]+\.)+(?!local$|internal$|lan$|home$)[a-z]{2,}", re.I)  # no IP addresses, ports or home network names
 _robots: dict = {}
 _cut_short: set = set()  # boards whose list didn't finish, so a missing role proves nothing
+GOOGLE_SEARCH = "https://www.google.com/about/careers/applications/jobs/results"
+GOOGLE_EVERY = 20 * 3600  # seconds between reads: a little under a day, so a daily run at a set time is never skipped
+GOOGLE_NAMES = {"DeepMind": "Google DeepMind"}
 COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
              "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
 
@@ -616,6 +619,84 @@ def teamtailor(company: str, slug: str):
     return out
 
 
+def google_address(text: str) -> str:
+    """The search to read, always newest first and never past page one, which is all robots.txt allows for Google's job results."""
+    parts = urlparse(text.strip())
+    if f"{parts.scheme}://{parts.netloc}{parts.path}".rstrip("/") != GOOGLE_SEARCH:
+        raise Refused("This isn't a search on Google's careers site")
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in ("page", "sort_by")]
+    return f"{GOOGLE_SEARCH}?{urlencode(query + [('sort_by', 'date')], quote_via=quote)}"
+
+
+def google_results(text: str) -> tuple:
+    """(rows, total) from the data in a Google Careers page, which is the only place it says what matched. Google can change this
+    format at any time, so anything unexpected is reported rather than read as "no jobs"."""
+    for block in re.findall(r"AF_initDataCallback\(\{key: 'ds:\d+'.*?data:(.*?), sideChannel:", text, re.S):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        if isinstance(data, list) and len(data) == 4 and isinstance(data[2], int) and isinstance(data[3], int):
+            return data[0] or [], data[2]
+    raise Refused("A bot check came back instead of its jobs" if BOT_CHECK.search(text) else "The page no longer has job results Gus can read")
+
+
+def google_job(row: list, links: dict) -> dict:
+    def text(n):
+        return (row[n] or [None, ""])[1] or ""
+    stamp = (row[14] or row[12])[0]
+    return {
+        "id": f"gc:search:{row[0]}",
+        "company": GOOGLE_NAMES.get(row[7], row[7]),
+        "title": html.unescape(row[1]).strip(),
+        "location": " / ".join(dict.fromkeys(p[0] for p in row[9] or [])),
+        "url": f"{GOOGLE_SEARCH}/{links.get(row[0], row[0])}",
+        "posted": datetime.fromtimestamp(stamp, timezone.utc).isoformat(timespec="seconds"),
+        "description": strip_html("\n".join((text(10), text(3), text(4)))),
+    }
+
+
+def read_google(address: str) -> list:
+    page = polite_fetch(address)
+    rows, total = google_results(page)
+    links = {link.split("-")[0]: link for link in re.findall(r"jobs/results/(\d+-[^?\"\\&]+)", page)}
+    try:
+        jobs = [google_job(r, links) for r in rows]
+    except (IndexError, KeyError, TypeError, ValueError) as e:
+        raise Refused("The page no longer has job results Gus can read") from e
+    if len(jobs) >= UNREAD_TO_FLAG and not any(j["location"] for j in jobs):
+        raise Refused("The page no longer says where jobs are")
+    if total > len(jobs):  # only the first page can be read, so a role missing from it may just have moved down
+        _cut_short.add("search")
+    return jobs
+
+
+def google_careers(company: str, slug: str):
+    """One search, one page, at most once a day, whatever else runs. Between reads nothing is asked for, and a read that failed
+    stays on the Health page until the next one."""
+    _cut_short.add(slug)  # nothing can be called closed unless this read finishes
+    address = google_address(load_config().get("google_careers_search") or "")
+    state_file = DATA / "google_careers.json"
+    try:
+        state = json.loads(state_file.read_text())
+    except (OSError, ValueError):
+        state = {}
+    if state.get("address") == address and time.time() - state.get("read", 0) < GOOGLE_EVERY:
+        if state.get("error"):
+            raise Refused(state["error"])
+        return []
+    state = {"address": address, "read": time.time()}
+    try:
+        _cut_short.discard(slug)
+        return read_google(address)
+    except Exception as e:
+        _cut_short.add(slug)
+        state["error"] = str(e)[:200]
+        raise
+    finally:
+        state_file.write_text(json.dumps(state))
+
+
 def hn_who_is_hiring():
     """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
@@ -641,7 +722,7 @@ def hn_who_is_hiring():
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
-           "teamtailor": teamtailor}
+           "teamtailor": teamtailor, "googlecareers": google_careers}
 
 
 # --- pipeline ----------------------------------------------------------------
@@ -679,6 +760,15 @@ def matches(job, cfg, hn=False) -> bool:
 _boards_answered: set = set()
 
 
+def title_key(title: str) -> str:
+    return re.sub(r"\W+", " ", (title or "").lower()).strip()
+
+
+def google_titles(store: dict) -> set:
+    """Google roles Gus already holds under another source, so reading Google itself doesn't bring them in twice."""
+    return {title_key(j.get("title")) for j in store.values() if re.search("google|deepmind", j.get("company") or "", re.I)}
+
+
 def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
     """Roles gone from a board that answered, two scans running, are marked closed; if one returns, it's reopened."""
     closed = []
@@ -700,6 +790,8 @@ def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
 def fetch_all():
     rows = list(csv.DictReader(watchlist_path().open()))
     tasks = [(r["company"], r["ats"], r["slug"]) for r in rows if r["ats"] in SOURCES]
+    if load_config().get("google_careers_search"):
+        tasks.append(("Google", "googlecareers", "search"))
     errors, jobs = [], []
 
     def run(t):
@@ -740,12 +832,15 @@ def main():
     live = {j["id"] for j in jobs} | _listed
     with locked(JOBS) as store:
       mark_closed(store, _boards_answered, live, now)
+      google_has = google_titles(store)
       for j in jobs:
         hn = j.pop("_hn", False)
         if not matches(j, cfg, hn):
             continue
         if j["id"] in store:
             store[j["id"]]["last_seen"] = now
+            continue
+        if j["id"].startswith("gc:") and title_key(j["title"]) in google_has:  # already found on a job search site
             continue
         j.update(first_seen=now, last_seen=now, stage="new", score=None, why=None, source="hn" if hn else "board")
         store[j["id"]] = j
