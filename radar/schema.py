@@ -67,9 +67,7 @@ def check_record(name: str, key: str, rec, companies: dict, people: dict) -> lis
             errs.append(f"{f}={rec[f]!r} isn't one of {[v for v in vals if v]}")
     if name == "jobs" and rec.get("score") is not None and not 1 <= rec["score"] <= 10:
         errs.append("score must be 1-10")
-    if name == "companies":
-        if "why_it_fits" in rec:
-            errs.append("why_it_fits should be fit_why (companies sync renames it)")
+    if name == "companies":  # an old `why_it_fits` isn't flagged: companies sync renames it on the next scan
         for i, e in enumerate(rec.get("events") or []):
             if not isinstance(e, dict) or any(not e.get(f) for f in EVENT_FIELDS):
                 errs.append(f"events[{i}] needs {', '.join(EVENT_FIELDS)}")
