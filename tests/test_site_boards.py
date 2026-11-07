@@ -539,6 +539,165 @@ class Salesforce(Base):
         self.assertIn("Salesforce", errors)
 
 
+GOOGLE = "https://www.google.com/about/careers/applications/jobs/results"
+GOOGLE_PAGE = "/jobs/results?"
+SEARCH = f"{GOOGLE}?location=London%2C%20UK&q=%22product%20manager%22&company=Google&company=DeepMind"
+ROBOTS = "www.google.com/robots.txt"
+
+
+def google_site(**more):
+    return Site({ROBOTS: sample("google_robots.txt"), GOOGLE_PAGE: sample("google_careers_results.html")}, **more)
+
+
+def google_page(rows, total=None):
+    data = json.dumps([rows, None, len(rows) if total is None else total, 20])
+    return f"<script>AF_initDataCallback({{key: 'ds:1', hash: '2', data:{data}, sideChannel: {{}}}});</script>".encode()
+
+
+class GoogleCareers(Base):
+    def setUp(self):
+        super().setUp()
+        self.watch()
+        self.search = SEARCH
+
+    def run_scan(self, site):
+        real = scan.load_config
+
+        def with_search():
+            return {**real(), "google_careers_search": self.search}
+        with mock.patch.object(scan, "load_config", with_search):
+            return super().run_scan(site)
+
+    def state(self):
+        return json.loads((self.dir / "google_careers.json").read_text())
+
+    def a_day_later(self):
+        state = {**self.state(), "read": self.state()["read"] - scan.GOOGLE_EVERY - 1}
+        (self.dir / "google_careers.json").write_text(json.dumps(state))
+
+    def pages(self, site):
+        return [u for u in site.asked if "robots" not in u]
+
+    def role(self, jobs, title):
+        return next(j for j in jobs if j["title"] == title)
+
+    def test_one_page_is_asked_for_newest_first(self):
+        site = google_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(len(jobs), 4)
+        self.assertEqual(self.pages(site), [f"{SEARCH}&sort_by=date"])
+
+    def test_a_page_number_in_the_saved_search_is_dropped(self):
+        self.search = f"{SEARCH}&page=3&sort_by=relevance"
+        site = google_site()
+        self.run_scan(site)
+        self.assertEqual(self.pages(site), [f"{SEARCH}&sort_by=date"])
+
+    def test_it_reads_the_real_fields_and_every_place(self):
+        jobs, _ = self.run_scan(google_site())
+        job = self.role(jobs, "Senior Product Manager, AI Ecosystems, Frontier AI, DeepMind")
+        self.assertEqual(job["id"], "gc:search:129187054603903686")
+        self.assertEqual(job["company"], "Google DeepMind")
+        self.assertEqual(job["location"], "Paris, France / Zürich, Switzerland / London, UK / Mountain View, CA, USA")
+        self.assertEqual(job["url"], f"{GOOGLE}/129187054603903686-senior-product-manager-ai-ecosystems-frontier-ai-deepmind")
+        self.assertTrue(job["posted"].startswith("2026-11-03"))
+        self.assertTrue(job["description"])
+        self.assertNotIn("<", job["description"])
+
+    def test_a_title_with_a_slash_keeps_the_link_google_gave_it(self):
+        jobs, _ = self.run_scan(google_site())
+        self.assertTrue(self.role(jobs, "Forward Deployed Engineering Intern, BS/MS, 2027")["url"].endswith("-forward-deployed-engineering-intern-bsms-2027"))
+
+    def test_it_reads_once_a_day_however_often_scans_run(self):
+        site = google_site()
+        self.run_scan(site)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((jobs, errors, len(self.pages(site))), ([], {}, 1))
+        self.a_day_later()
+        self.run_scan(site)
+        self.assertEqual(len(self.pages(site)), 2)
+
+    def test_a_scan_that_reads_nothing_closes_nothing(self):
+        self.run_scan(google_site())
+        self.run_scan(google_site())
+        self.assertNotIn("gc:search", scan._boards_answered)
+
+    def test_changing_the_search_reads_it_straight_away(self):
+        site = google_site()
+        self.run_scan(site)
+        self.search = f"{GOOGLE}?q=lead"
+        self.run_scan(site)
+        self.assertEqual(self.pages(site)[1], f"{GOOGLE}?q=lead&sort_by=date")
+
+    def test_a_short_list_can_show_a_role_has_gone(self):
+        self.run_scan(google_site())
+        self.assertIn("gc:search", scan._boards_answered)
+
+    def test_a_list_longer_than_a_page_proves_nothing_has_gone(self):
+        jobs, _ = self.run_scan(google_site())
+        self.assertEqual(len(jobs), 4)
+        self.a_day_later()
+        rows = json.loads(re.search(r"data:(\[\[\[\"\d.*?), sideChannel", sample("google_careers_results.html").decode(), re.S)[1])[0]
+        self.run_scan(google_site(**{GOOGLE_PAGE: google_page(rows, total=25)}))
+        self.assertNotIn("gc:search", scan._boards_answered)
+
+    def test_a_search_with_no_results_is_not_an_error(self):
+        jobs, errors = self.run_scan(google_site(**{GOOGLE_PAGE: google_page(None, total=0)}))
+        self.assertEqual((jobs, errors), ([], {}))
+        self.assertIn("gc:search", scan._boards_answered)
+
+    def test_an_address_robots_disallows_is_never_fetched(self):
+        site = google_site(**{ROBOTS: b"User-agent: *\nDisallow: /about/careers/\n"})
+        _, errors = self.run_scan(site)
+        self.assertEqual(self.pages(site), [])
+        self.assertIn("robots.txt disallows", errors["Google"])
+
+    def test_a_refused_request_stays_on_health_until_the_next_read(self):
+        site = google_site(**{GOOGLE_PAGE: refused(GOOGLE, 429)})
+        _, errors = self.run_scan(site)
+        self.assertIn("429", errors["Google"])
+        _, errors = self.run_scan(site)
+        self.assertIn("429", errors["Google"])
+        self.assertEqual(len(self.pages(site)), 1)
+
+    def test_a_bot_check_or_a_changed_page_is_reported_not_read_as_empty(self):
+        _, errors = self.run_scan(google_site(**{GOOGLE_PAGE: b"<html>captcha</html>"}))
+        self.assertIn("bot check", errors["Google"])
+        self.a_day_later()
+        _, errors = self.run_scan(google_site(**{GOOGLE_PAGE: b"<html>new design</html>"}))
+        self.assertIn("no longer has job results", errors["Google"])
+        self.a_day_later()
+        _, errors = self.run_scan(google_site(**{GOOGLE_PAGE: google_page([["1", "PM"]])}))
+        self.assertIn("no longer has job results", errors["Google"])
+
+    def test_another_address_is_refused_without_a_request(self):
+        self.search = "https://www.google.com/search?q=jobs"
+        site = google_site()
+        _, errors = self.run_scan(site)
+        self.assertEqual(site.asked, [])
+        self.assertIn("isn't a search", errors["Google"])
+
+    def test_no_search_saved_means_no_requests(self):
+        self.search = ""
+        site = google_site()
+        self.assertEqual(self.run_scan(site), ([], {}))
+        self.assertEqual(site.asked, [])
+
+    def test_a_role_already_found_elsewhere_is_not_added_twice(self):
+        (self.dir / "jobs.json").write_text(json.dumps({"adzuna:1": {
+            "id": "adzuna:1", "company": "Google", "title": "Senior Product Manager, AI Ecosystems, Frontier AI, DeepMind", "location": "London"}}))
+        real = scan.load_config
+
+        def with_search():
+            return {**real(), "google_careers_search": self.search, "source_hn": False}
+        with self.fetch(google_site()), mock.patch.object(scan, "load_config", with_search), mock.patch.object(sys, "argv", ["scan"]):
+            scan.main()
+        store = json.loads((self.dir / "jobs.json").read_text())
+        self.assertNotIn("gc:search:129187054603903686", store)
+        self.assertIn("gc:search:88601134075126470", store)
+
+
 class Teamtailor(Base):
     def setUp(self):
         super().setUp()
