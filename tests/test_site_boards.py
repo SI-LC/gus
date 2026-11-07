@@ -187,7 +187,7 @@ class Fetching(Base):
 
     def test_only_public_web_addresses(self):
         site = Site({})
-        for url in ("http://example.com/a", "https://127.0.0.1/a", "https://localhost/a", "https://sipi.local/a", "https://example.com:8000/a", "file:///etc/passwd"):
+        for url in ("http://example.com/a", "https://127.0.0.1/a", "https://localhost/a", "https://pi.local/a", "https://example.com:8000/a", "file:///etc/passwd"):
             with self.fetch(site), self.assertRaises(scan.Refused):
                 scan.polite_fetch(url)
         self.assertEqual(site.asked, [])

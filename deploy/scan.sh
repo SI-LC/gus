@@ -71,6 +71,7 @@ fi
 
 # 7. It still works
 python3 -m compileall -q radar tests && good "Python compiles" || bad "Python doesn't compile"
+if [ -d data ]; then python3 -m radar.schema check >/dev/null 2>&1 && good "data files match docs/objects.md" || bad "data files don't match docs/objects.md (run: python3 -m radar.schema check)"; fi
 if out=$(python3 -m unittest discover -s tests 2>&1); then good "tests pass"; else bad "tests fail (python3 -m unittest discover -s tests)"; echo "$out" | grep -v ResourceWarning | tail -30; fi
 if command -v node >/dev/null; then
   js="$(mktemp).js"; python3 -c "import re;print('\n'.join(re.findall(r'<script>(.*?)</script>',open('radar/cockpit.html').read(),re.S)))" > "$js"
