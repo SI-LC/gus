@@ -1,0 +1,258 @@
+[
+ {
+  "absolute_url": "https://jobs.gem.com/acme/am9icG9zdDpAcmVQbGFjZWhvbGRlcjAx",
+  "content": "<div>Locations: London / Dublin / Prague\nOwn a core area of the platform & work with design.</div>",
+  "content_plain": "Locations: London / Dublin / Prague\nOwn a core area of the platform & work with design.",
+  "created_at": "2026-08-01T10:00:00.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "4001",
+    "name": "Product",
+    "parent_id": null
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2026-10-08T14:15:12.588Z",
+  "id": "am9icG9zdDpAcmVQbGFjZWhvbGRlcjAx",
+  "internal_job_id": "4002",
+  "location": {
+   "name": "United Kingdom - Remote"
+  },
+  "location_type": "hybrid",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "400",
+    "location": {
+     "name": "United Kingdom - Remote"
+    },
+    "name": "London",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "401",
+    "location": {
+     "name": "Prague, Czechia"
+    },
+    "name": "Prague (Hybrid)",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "402",
+    "location": {
+     "name": "Ireland - Remote"
+    },
+    "name": "Dublin",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "16",
+  "title": "Senior Product Manager & Platform Lead  ",
+  "updated_at": "2026-10-14T20:22:07.841Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/acme/am9icG9zdDpAcmVQbGFjZWhvbGRlcjAy",
+  "content": "<div>Work with the data team.</div>",
+  "content_plain": "Work with the data team.",
+  "created_at": "2026-08-01T10:00:00.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "4001",
+    "name": "Product",
+    "parent_id": null
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2026-09-24T16:21:47.202Z",
+  "id": "am9icG9zdDpAcmVQbGFjZWhvbGRlcjAy",
+  "internal_job_id": "4002",
+  "location": {
+   "name": "Prague, Czechia"
+  },
+  "location_type": "hybrid",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "400",
+    "location": {
+     "name": "Prague, Czechia"
+    },
+    "name": "Prague (Hybrid)",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "401",
+    "location": {
+     "name": "Czechia - Remote"
+    },
+    "name": "Remote Czechia",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "402",
+    "location": {
+     "name": "Czechia - Remote"
+    },
+    "name": "Remote Europe",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "403",
+    "location": {
+     "name": "Brno, Czechia"
+    },
+    "name": "Brno (Hybrid)",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "16",
+  "title": "Product Manager, Data",
+  "updated_at": "2026-10-14T20:22:07.841Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/acme/am9icG9zdDpAcmVQbGFjZWhvbGRlcjAz",
+  "content": "<div>Lead growth.</div>",
+  "content_plain": "Lead growth.",
+  "created_at": "2026-08-01T10:00:00.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "4001",
+    "name": "Product",
+    "parent_id": null
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2026-10-19T18:50:37.788Z",
+  "id": "am9icG9zdDpAcmVQbGFjZWhvbGRlcjAz",
+  "internal_job_id": "4002",
+  "location": {
+   "name": "Poland - Remote"
+  },
+  "location_type": "hybrid",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "400",
+    "location": {
+     "name": "Poland - Remote"
+    },
+    "name": "Poland - Remote",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "16",
+  "title": "Product Manager, Growth",
+  "updated_at": "2026-10-14T20:22:07.841Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/acme/am9icG9zdDpAcmVQbGFjZWhvbGRlcjA0",
+  "content": "<div>Lead the team.</div>",
+  "content_plain": "Lead the team.",
+  "created_at": "2026-08-01T10:00:00.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "4001",
+    "name": "Product",
+    "parent_id": null
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2026-10-27T16:40:23.041Z",
+  "id": "am9icG9zdDpAcmVQbGFjZWhvbGRlcjA0",
+  "internal_job_id": "4002",
+  "location": {
+   "name": "United States - Remote"
+  },
+  "location_type": "remote",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "400",
+    "location": {
+     "name": "United States - Remote"
+    },
+    "name": "Remote, US",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "16",
+  "title": "Head of Product",
+  "updated_at": "2026-10-14T20:22:07.841Z"
+ },
+ {
+  "absolute_url": "https://jobs.gem.com/acme/4003629005",
+  "content": "<div>Build things.</div>",
+  "content_plain": "Build things.",
+  "created_at": "2026-08-01T10:00:00.000Z",
+  "departments": [
+   {
+    "child_ids": [],
+    "id": "4001",
+    "name": "Product",
+    "parent_id": null
+   }
+  ],
+  "employment_type": "full_time",
+  "first_published_at": "2022-03-25T18:46:39.000Z",
+  "id": "4003629005",
+  "internal_job_id": "4002",
+  "location": {
+   "name": "San Francisco, United States"
+  },
+  "location_type": "in_office",
+  "offices": [
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "400",
+    "location": {
+     "name": "San Francisco, United States"
+    },
+    "name": "San Francisco",
+    "parent_id": null,
+    "parent_office_external_id": null
+   },
+   {
+    "child_ids": [],
+    "child_office_external_ids": [],
+    "id": "401",
+    "location": {
+     "name": "New York, United States"
+    },
+    "name": "New York",
+    "parent_id": null,
+    "parent_office_external_id": null
+   }
+  ],
+  "requisition_id": "16",
+  "title": "Software Engineer",
+  "updated_at": "2026-10-14T20:22:07.841Z"
+ }
+]
