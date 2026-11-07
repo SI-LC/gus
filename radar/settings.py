@@ -63,6 +63,8 @@ SCHEMA = [
 
     ("source_adzuna", "Adzuna", "bool", "Job sources", "Job search across many sites, with short extracts of each ad. Needs the Adzuna keys (Keys tab)."),
     ("source_jsearch", "JSearch", "bool", "Job sources", "Google for Jobs results with full descriptions, including some LinkedIn roles. Needs the JSearch key (Keys tab)."),
+    ("google_careers_search", "Google Careers search", "text", "Job sources",
+     "Paste the address of a search on Google's careers site. Gus reads its first page once a day, newest first, as that's all the site's rules allow. Leave empty to turn this off."),
     ("sources_location", "Location", "text", "Job sources", "A town or city. Leave empty to search the whole country, which finds more roles."),
     ("sources_country", "Country code", "text", "Job sources", "Two letters, e.g. gb, us, de."),
     ("sources_distance_km", "Distance (km)", "int:1-200", "Job sources", "Adzuna only: how far from the location to search."),

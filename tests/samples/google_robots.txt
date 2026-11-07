@@ -1,0 +1,15 @@
+User-agent: *
+User-agent: Yandex
+Disallow: /search
+Disallow: /about/careers/applications/candidate-prep
+Disallow: /about/careers/applications/connect-with-a-googler
+Disallow: /about/careers/applications/jobs/results?page=
+Disallow: /about/careers/applications/jobs/results/?page=
+Disallow: /about/careers/applications/jobs/results?*&page=
+Disallow: /about/careers/applications/jobs/results/?*&page=
+
+User-agent: Yandex
+Disallow: /about/careers/applications/jobs/results
+Disallow: /about/careers/applications-a/jobs/results
+
+Sitemap: https://www.google.com/sitemap.xml
