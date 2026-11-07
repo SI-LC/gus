@@ -24,15 +24,15 @@ Skip anything already present, whatever its status. Never re-add a company with 
 - **Lookalikes**: 2 per top-5 company by fit score.
 - **Neighbours of favourites**: the `favourites` list from `due` holds companies the candidate loves that are due a look.
   For each, name up to 3 companies close to it: same buyer, same kind of product, or founded by its alumni. Run
-  `python3 -m radar.resolve --add "<Company>"` and add each one as `{"status": "watched", "sector": "neighbour", "neighbour_of": "<favourite>", "why_it_fits": "<one line>", "added": "<today>"}`.
+  `python3 -m radar.resolve --add "<Company>"` and add each one as `{"status": "watched", "sector": "neighbour", "neighbour_of": "<favourite>", "fit_why": "<one line>", "added": "<today>"}`.
   A neighbour is a place to watch, not a decision, so it skips the fit score below, and never ask the candidate to rate one.
   Then set `neighbours_checked` to today on the favourite.
 Aim for 10–30 candidates per run; quality over volume.
 
 ## 2. Enrich (candidates, flagged, stale, and rejected companies due a recheck)
-Fill or refresh: `stage`, `last_round`, `investors`, `headcount`, `london` (HQ|office|remote-UK|none),
+Fill or refresh (field names are in `docs/objects.md`): `stage`, `last_round`, `investors`, `headcount`, `london` (HQ|office|remote-UK|none),
 `product` (one line), `customers` (B2B / B2B2C / B2C / enterprise), `product_leaders`
-[{name, role, url}], `signals` (dated: launches, rounds, exec hires, layoffs), `careers_url`.
+[{name, role, url}], `careers_url`. Dated things that happened (launches, rounds, exec hires, layoffs) go in `events`, see 3b.
 For flagged companies, read their `pending_signals` first, then clear `pending_signals` and `reassess`.
 
 ## 3. Assess fit (1–10)

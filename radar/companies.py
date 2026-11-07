@@ -47,6 +47,10 @@ def sync():
         rec = c.setdefault(row["company"], {})
         rec.setdefault("status", "watched")
         rec["board"] = f"{row['ats']}:{row['slug']}"
+    for rec in c.values():  # older records used a second name for the same field
+        old = rec.pop("why_it_fits", None)
+        if old and not rec.get("fit_why"):
+            rec["fit_why"] = old
     save(c)
     return c
 

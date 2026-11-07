@@ -127,7 +127,7 @@ def brief() -> dict:
         touched = last_touch(name, moves)
         ppl = [dict(p, id=pid) for pid, p in people.items() if p.get("company") == name and p.get("stage") != "closed"]
         out.append({
-            "account": name, "tier": t, "fit": c.get("fit"), "why_it_fits": c.get("fit_why") or c.get("why_it_fits"),
+            "account": name, "tier": t, "fit": c.get("fit"), "why_it_fits": c.get("fit_why"),
             "fresh_signals": fresh[:5],
             "people": [{**{k: p.get(k) for k in ("id", "name", "role", "kind", "warm", "evidence", "url", "stage", "confidence")},
                         "distance": dist[p["id"]]} for p in ppl],

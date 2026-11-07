@@ -81,7 +81,7 @@ def state():
         ev = A.events(name, c, raw_jobs)
         touched = A.last_touch(name, moves)
         accts.append({"name": name, "tier": t, "tier_locked": bool(c.get("tier_locked")), "fit": c.get("fit"),
-                      "why": c.get("fit_why") or c.get("why_it_fits"), "product": c.get("product"), "london": c.get("london"),
+                      "why": c.get("fit_why"), "product": c.get("product"), "london": c.get("london"),
                       "stage": c.get("stage"), "board": c.get("board"), "board_broken": c.get("board_broken"),
                       "added": c.get("added"), "previous_fit": c.get("previous_fit"), "favourite": bool(c.get("favourite")),
                       "events": ev[:6], "fresh": sum(e["fresh"] for e in ev),
@@ -248,9 +248,6 @@ def update_job(body):
             if "://" in folder and not folder.lower().startswith(("https://", "http://")):
                 return {"error": "Use a web link starting with https://, or a folder path"}
             j["folder"] = folder
-        if "person" in body:
-            p = (j.get("people") or [])[int(body["person"])]
-            p["sent_at"] = now() if body.get("sent", True) else None
         return {"ok": True, "job": {k: v for k, v in j.items() if k != "description"}}
 
 

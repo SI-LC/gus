@@ -7,7 +7,8 @@ dated `events`; the people mapped at each (`data/people.json`, with warm paths f
 **weekly moves** (`data/moves.json`): one person + one fresh signal + angle + draft, at most 5 a week,
 validated by `python3 -m radar.accounts plan`. Raw items from feeds and social media are **signals**
 (`data/signals.json`). Roles are in `data/jobs.json` (stage new → shortlisted → preparing → applied →
-interviewing → closed, or skipped); a role scoring 7+ counts as a signal on its account.
+interviewing → closed, or skipped); a role scoring 7+ counts as a signal on its account. Every object's fields are in
+`docs/objects.md`; `python3 -m radar.schema check` confirms the data files still match it.
 
 ## Commands the candidate will use
 
