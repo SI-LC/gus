@@ -17,7 +17,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, board_size, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, board_size, gem_posts, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {
@@ -40,6 +40,7 @@ BOARD_LINKS = {
     "recruitee": re.compile(r"([\w-]+)\.recruitee\.com", re.I),
     # the slug is the whole host. These names are Teamtailor's own, and most careers pages mention at least one of them
     "teamtailor": re.compile(r"\b((?!(?:app|www|api|docs|support|career|integrations)\.)[\w-]+(?:\.na)?\.teamtailor\.com)", re.I),
+    "gem": re.compile(r"\b(?:jobs\.gem\.com|api\.gem\.com/job_board/v0)/([\w-]+)", re.I),
 }
 WORKDAY_LINK = re.compile(r"([\w-]+\.wd\d+)\.myworkdayjobs\.com(?:/[a-z]{2}-[A-Z]{2})?(?:/([\w-]+))?")
 CAREERS_HOSTS = re.compile(r"https://((?:careers?|jobs)\.[a-z0-9.-]+)", re.I)
@@ -59,6 +60,8 @@ def probe(ats: str, slug: str):
     try:
         if ats == "teamtailor":
             n = len(teamtailor_items(slug))
+        elif ats == "gem":
+            n = len(gem_posts(slug))
         elif ats in SITE_BOARDS:
             n = board_size(ats, slug)
         else:
@@ -101,7 +104,7 @@ def from_careers(url: str):
         page = polite_fetch(url)
     except (OSError, ValueError, http.client.HTTPException):
         return None
-    hosts = [h for h in dict.fromkeys(CAREERS_HOSTS.findall(page)) if not h.lower().endswith(".teamtailor.com")][:2]
+    hosts = [h for h in dict.fromkeys(CAREERS_HOSTS.findall(page)) if not h.lower().endswith((".teamtailor.com", "jobs.gem.com"))][:2]
     for ats, slug in named_boards(page)[:5] + [(ats, h) for h in hosts for ats in OWN_HOST_BOARDS]:
         if hit := try_board(ats, slug):
             return hit
@@ -110,7 +113,8 @@ def from_careers(url: str):
 
 def resolve(name: str, careers: str = None):
     """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors, Workday and Teamtailor boards
-    have no address to work out from a name, so they're only found from a careers address: Gus never guesses at them."""
+    have no address to work out from a name, and a Gem board's reply never says whose it is, so a guess there couldn't be
+    checked and might be another company's. All four are only found from a careers address: Gus never guesses at them."""
     if careers and (hit := from_careers(careers)):
         return hit
     tries = [(a, s) for s in slugs(name) for a in PROBES]

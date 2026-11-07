@@ -93,7 +93,7 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd", "teamtailor": "tt"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem"}
 MISSES_TO_CLOSE = 2
 
 
@@ -270,6 +270,7 @@ SAVED_CHECKS = 10  # saved roles missing from a Workday list whose own page is c
 WORKDAY_JSON = {"Accept": "application/json", "Content-Type": "application/json"}
 ROBOTS_KEEP = 3600  # seconds to trust a robots.txt
 BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access denied", re.I)
+GEM_API = "api.gem.com"
 PUBLIC_HOST = re.compile(r"(?:[a-z0-9-]+\.)+(?!local$|internal$|lan$|home$)[a-z]{2,}", re.I)  # no IP addresses, ports or home network names
 _robots: dict = {}
 _cut_short: set = set()  # boards whose list didn't finish, so a missing role proves nothing
@@ -313,7 +314,9 @@ def site_rules(host: str) -> tuple:
     try:
         rules = parse_robots(fetch_bytes(f"https://{host}/robots.txt").decode("utf-8-sig", "ignore"))
     except urllib.error.HTTPError as e:
-        if e.code in (401, 403, 429) or e.code >= 500:
+        # Gem's API has no robots.txt: its gateway gives this 403 for every address it doesn't know. The job list still answers for itself.
+        no_file = e.code == 403 and host == GEM_API and e.headers.get("x-amzn-ErrorType") == "ForbiddenException"
+        if (e.code in (401, 403, 429) or e.code >= 500) and not no_file:
             raise Refused(f"robots.txt answered {e.code}") from e
         rules = ([], [])
     _robots[host] = (time.monotonic() + ROBOTS_KEEP, rules)
@@ -616,6 +619,61 @@ def teamtailor(company: str, slug: str):
     return out
 
 
+def gem_posts(slug: str) -> list:
+    """Every open job on a board, in one reply, from the public job board API Gem documents for custom careers pages: no key, no
+    pages. The slug is the path in jobs.gem.com/<slug>. A board with no jobs gives an empty list; an unknown board gives a 404."""
+    text = polite_fetch(f"https://{GEM_API}/job_board/v0/{slug}/job_posts/")
+    try:
+        posts = json.loads(text)
+    except ValueError:
+        posts = None
+    if not isinstance(posts, list):
+        raise Refused("A bot check came back instead of its job list" if BOT_CHECK.search(text) else "It has no Gem job list")
+    return posts
+
+
+def gem_place(job: dict) -> str:
+    """Every office, by the name candidates see, with the place behind it when that adds something: "London (United Kingdom - Remote)".
+    The top-level location is only the first office. location_type can't rule remote out, as it says hybrid on "Poland - Remote" jobs,
+    so "Remote" is added only when it says remote and no place does: a place that names a country keeps that limit."""
+    places = []
+    for office in job.get("offices") or []:
+        name, place = office.get("name") or "", (office.get("location") or {}).get("name") or ""
+        adds_nothing = set(re.findall(r"\w+", re.sub(r"\(.*?\)", "", name).lower())) <= set(re.findall(r"\w+", place.lower()))
+        places.append(place if adds_nothing else f"{name} ({place})" if place else name)
+    found = " / ".join(dict.fromkeys(filter(None, places))) or (job.get("location") or {}).get("name") or ""
+    return " / ".join(filter(None, [found, "Remote" if job.get("location_type") == "remote" and "remote" not in found.lower() else ""]))
+
+
+def gem_job(company: str, slug: str, post: dict) -> dict:
+    title = " ".join(html.unescape(post["title"]).split())
+    if not (title and post["id"] and post["absolute_url"]):
+        raise ValueError("Part of the ad is empty")
+    return {
+        "id": f"gem:{slug}:{post['id']}",
+        "company": company,
+        "title": title,
+        "location": gem_place(post),
+        "url": post["absolute_url"],
+        "posted": post.get("first_published_at"),
+        "description": strip_html(post.get("content_plain") or post.get("content")),
+    }
+
+
+def gem(company: str, slug: str):
+    posts = gem_posts(slug)
+    out = []
+    _cut_short.discard(slug)
+    for post in posts:
+        try:
+            out.append(gem_job(company, slug, post))
+        except (AttributeError, KeyError, TypeError, ValueError):  # one odd ad is skipped, but nothing can be called closed this scan
+            _cut_short.add(slug)
+    if len(posts) >= UNREAD_TO_FLAG and not any(j["location"] for j in out):  # a job can have no place, but not all of them: the list has changed
+        raise Refused("Its job list no longer says where jobs are")
+    return out
+
+
 def hn_who_is_hiring():
     """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
@@ -641,7 +699,7 @@ def hn_who_is_hiring():
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
-           "teamtailor": teamtailor}
+           "teamtailor": teamtailor, "gem": gem}
 
 
 # --- pipeline ----------------------------------------------------------------

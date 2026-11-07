@@ -17,6 +17,7 @@ SF = "careers.optimizely.com"
 WD = "salesforce.wd12/External_Career_Site"
 WD_HOST = "salesforce.wd12.myworkdayjobs.com"
 TT = "acme-1721317262.teamtailor.com"
+GEM_API = "api.gem.com/job_board/v0/acme/job_posts/"
 
 
 def sample(name: str) -> bytes:
@@ -68,6 +69,15 @@ def workday_site(**more):
 
 def teamtailor_site(host=TT, **more):
     return Site({f"{host}/robots.txt": sample("teamtailor_robots.txt"), f"{host}/jobs.json": sample("teamtailor_feed.json")}, **more)
+
+
+def gateway_403(url):
+    """What Gem's API answers for every address it doesn't know, /robots.txt included."""
+    return urllib.error.HTTPError(url, 403, "Forbidden", {"x-amzn-ErrorType": "ForbiddenException"}, None)
+
+
+def gem_site(**more):
+    return Site({"api.gem.com/robots.txt": gateway_403, GEM_API: sample("gem_job_posts.json")}, **more)
 
 
 def feed(*items):
@@ -664,6 +674,194 @@ class Teamtailor(Base):
         with self.fetch(site), mock.patch.object(resolve, "get_json", lambda _: {}):
             resolve.resolve("Acme")
         self.assertFalse(any("teamtailor" in u for u in site.asked))
+
+
+class Gem(Base):
+    def setUp(self):
+        super().setUp()
+        self.watch(["Acme", "gem", "acme", "x"])
+
+    def role(self, jobs, title="Senior Product Manager & Platform Lead"):
+        return next(j for j in jobs if j["title"] == title)
+
+    def test_one_request_reads_the_whole_board(self):
+        site = gem_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(len(jobs), 5)
+        self.assertEqual([u for u in site.asked if "robots" not in u], [f"https://{GEM_API}"])
+
+    def test_it_reads_the_real_fields(self):
+        job = self.role(self.run_scan(gem_site())[0])
+        self.assertEqual(job["id"], "gem:acme:am9icG9zdDpAcmVQbGFjZWhvbGRlcjAx")
+        self.assertEqual(job["url"], "https://jobs.gem.com/acme/am9icG9zdDpAcmVQbGFjZWhvbGRlcjAx")
+        self.assertEqual(job["posted"], "2026-10-08T14:15:12.588Z")
+        self.assertIn("core area of the platform & work", job["description"])
+
+    def test_the_description_falls_back_to_the_html(self):
+        job = {"id": "1", "title": "PM", "absolute_url": "https://x.io/1", "content": "<p>A &amp; B</p>"}
+        self.assertEqual(scan.gem_job("Acme", "acme", job)["description"], "A & B")
+
+    def test_every_office_counts_not_just_the_first(self):
+        jobs, _ = self.run_scan(gem_site())
+        self.assertEqual(self.role(jobs, "Software Engineer")["location"], "San Francisco, United States / New York, United States")
+
+    def test_an_office_name_the_location_hides_is_kept(self):
+        place = self.role(self.run_scan(gem_site())[0])["location"]
+        self.assertEqual(place, "London (United Kingdom - Remote) / Prague, Czechia / Dublin (Ireland - Remote)")
+
+    def test_a_city_hidden_in_the_office_name_matches(self):
+        jobs, _ = self.run_scan(gem_site())
+        cfg = {**scan.load_config(), "title_include": re.compile("product", re.I), "location_include": re.compile("London", re.I)}
+        self.assertTrue(scan.matches(self.role(jobs), cfg))
+
+    def test_remote_offices_keep_the_area_they_cover(self):
+        jobs, _ = self.run_scan(gem_site())
+        self.assertEqual(self.role(jobs, "Head of Product")["location"], "Remote, US (United States - Remote)")
+        self.assertEqual(self.role(jobs, "Product Manager, Data")["location"], "Prague, Czechia / Czechia - Remote / Remote Europe (Czechia - Remote) / Brno, Czechia")
+
+    def test_location_type_does_not_overrule_a_remote_place(self):
+        self.assertEqual(self.role(self.run_scan(gem_site())[0], "Product Manager, Growth")["location"], "Poland - Remote")
+
+    def test_a_remote_job_naming_no_office_is_marked_remote(self):
+        self.assertEqual(scan.gem_place({"location_type": "remote", "offices": []}), "Remote")
+
+    def test_with_no_offices_the_top_level_location_is_used(self):
+        self.assertEqual(scan.gem_place({"location": {"name": "London, United Kingdom"}, "offices": []}), "London, United Kingdom")
+
+    def test_a_job_with_no_place_is_kept_without_faulting_the_board(self):
+        post = {"id": "1", "title": "PM", "absolute_url": "https://x.io/1"}
+        jobs, errors = self.run_scan(gem_site(**{GEM_API: json.dumps([post]).encode()}))
+        self.assertEqual((jobs[0]["location"], errors), ("", {}))
+
+    def test_a_list_that_stops_giving_places_is_reported(self):
+        posts = [{"id": str(n), "title": "PM", "absolute_url": f"https://x.io/{n}"} for n in range(3)]
+        _, errors = self.run_scan(gem_site(**{GEM_API: json.dumps(posts).encode()}))
+        self.assertIn("no longer says where", errors["Acme"])
+
+    def test_a_list_of_nothing_but_bad_ads_is_reported(self):
+        _, errors = self.run_scan(gem_site(**{GEM_API: b"[1, 2, 3]"}))
+        self.assertIn("no longer says where", errors["Acme"])
+
+    def test_a_real_robots_txt_is_obeyed(self):
+        site = gem_site(**{"api.gem.com/robots.txt": b"User-agent: *\nDisallow: /job_board/\n"})
+        _, errors = self.run_scan(site)
+        self.assertIn("robots.txt disallows", errors["Acme"])
+        self.assertEqual([u for u in site.asked if "robots" not in u], [])
+
+    def test_any_other_answer_about_robots_txt_stops_the_read(self):
+        for code in (401, 403, 429, 503):
+            with self.subTest(code):
+                site = gem_site(**{"api.gem.com/robots.txt": refused("x", code)})
+                _, errors = self.run_scan(site)
+                self.assertIn(f"robots.txt answered {code}", errors["Acme"])
+                self.assertEqual([u for u in site.asked if "robots" not in u], [])
+
+    def test_the_gateway_403_only_means_no_file_on_gems_api(self):
+        site = Site({"elsewhere.example.com/robots.txt": gateway_403})
+        with self.fetch(site), self.assertRaises(scan.Refused):
+            scan.site_rules("elsewhere.example.com")
+
+    def test_a_refusal_is_recorded_once_and_the_scan_moves_on(self):
+        for code in (403, 429):
+            with self.subTest(code):
+                site = gem_site(**{GEM_API: refused("x", code)})
+                _, errors = self.run_scan(site)
+                self.assertIn(str(code), errors["Acme"])
+                self.assertEqual(len([u for u in site.asked if "job_posts" in u]), 1)
+
+    def test_the_gateway_403_on_the_job_list_is_a_refusal(self):
+        _, errors = self.run_scan(gem_site(**{GEM_API: gateway_403}))
+        self.assertIn("403", errors["Acme"])
+
+    def test_a_bot_check_is_reported_as_one(self):
+        _, errors = self.run_scan(gem_site(**{GEM_API: b"<html>Just a moment...</html>"}))
+        self.assertIn("bot check", errors["Acme"])
+
+    def test_a_reply_that_is_no_list_is_reported(self):
+        for reply in (b"<html>a new design</html>", b"{}", b'{"jobs": []}'):
+            with self.subTest(reply):
+                _, errors = self.run_scan(gem_site(**{GEM_API: reply}))
+                self.assertIn("no Gem job list", errors["Acme"])
+
+    def saved(self):
+        """One saved role on the board, then a scan that no longer lists it."""
+        jid = "gem:acme:gone"
+        (self.dir / "jobs.json").write_text(json.dumps({jid: {"id": jid, "company": "Acme", "title": "PM", "location": "London"}}))
+        return jid
+
+    def scan_twice(self, site):
+        """Two full scans, as closing a role takes two misses, then what's saved."""
+        cfg = {**scan.load_config(), "source_hn": False}
+        for _ in range(2):
+            self.clear()
+            with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
+                scan.main()
+        return json.loads((self.dir / "jobs.json").read_text())
+
+    def test_a_role_gone_from_the_list_closes_after_two_scans(self):
+        jid = self.saved()
+        self.assertTrue(self.scan_twice(gem_site())[jid].get("ad_closed"))
+
+    def test_an_empty_list_is_a_real_answer(self):
+        jid = self.saved()
+        self.assertTrue(self.scan_twice(gem_site(**{GEM_API: b"[]"}))[jid].get("ad_closed"))
+
+    def test_a_refused_board_closes_nothing(self):
+        for reply in (refused("x"), refused("x", 404), b"<html>Just a moment...</html>"):
+            with self.subTest(reply):
+                jid = self.saved()
+                self.assertFalse(self.scan_twice(gem_site(**{GEM_API: reply}))[jid].get("ad_closed"))
+
+    def test_a_bad_ad_closes_nothing_and_does_not_fault_the_board(self):
+        good = json.loads(sample("gem_job_posts.json"))
+        for bad in ({"title": "No id"}, "not an ad", {"id": "1", "title": "", "absolute_url": "https://x.io/1"},
+                    {"id": "1", "title": "PM", "absolute_url": "https://x.io/1", "offices": [{"location": "odd"}]}):
+            with self.subTest(bad):
+                jid = self.saved()
+                site = gem_site(**{GEM_API: json.dumps([*good, bad]).encode()})
+                saved = self.scan_twice(site)
+                self.assertFalse(saved[jid].get("ad_closed"))
+                self.assertEqual(json.loads((self.dir / "board_errors.json").read_text()), {})
+                (self.dir / "jobs.json").unlink()
+
+    def test_a_bad_ad_is_not_remembered(self):
+        good = json.loads(sample("gem_job_posts.json"))
+        broken = {**good[0], "title": None}
+        self.run_scan(gem_site(**{GEM_API: json.dumps([broken]).encode()}))
+        jobs, _ = self.run_scan(gem_site())
+        self.assertEqual(self.role(jobs)["id"], f"gem:acme:{good[0]['id']}")
+
+    def test_a_board_address_is_found(self):
+        with self.fetch(gem_site()):
+            self.assertEqual(resolve.from_careers("https://jobs.gem.com/acme"), ("gem", "acme", 5))
+
+    def test_a_job_address_is_found(self):
+        with self.fetch(gem_site()):
+            self.assertEqual(resolve.from_careers("https://jobs.gem.com/acme/am9icG9zdDp?src=x"), ("gem", "acme", 5))
+
+    def test_a_page_that_links_to_a_board_is_followed(self):
+        page = b'<a href="https://jobs.gem.com/acme">Open roles</a>'
+        with self.fetch(gem_site(**{"www.acme.com/careers": page})):
+            self.assertEqual(resolve.from_careers("https://www.acme.com/careers"), ("gem", "acme", 5))
+
+    def test_a_page_built_on_the_api_is_followed(self):
+        page = b'fetch("https://api.gem.com/job_board/v0/acme/job_posts/")'
+        with self.fetch(gem_site(**{"www.acme.com/careers": page})):
+            self.assertEqual(resolve.from_careers("https://www.acme.com/careers"), ("gem", "acme", 5))
+
+    def test_gems_own_site_is_not_a_board(self):
+        self.assertEqual(resolve.named_boards("https://www.gem.com/pricing https://help.gem.com/x https://static.gem.com/y.js https://myjobs.gem.com/z"), [])
+
+    def test_an_unknown_board_is_not_found(self):
+        with self.fetch(gem_site()):
+            self.assertIsNone(resolve.from_careers("https://jobs.gem.com/someone-else"))
+
+    def test_it_is_never_guessed_from_a_name(self):
+        site = Site({})
+        with self.fetch(site), mock.patch.object(resolve, "get_json", lambda _: {}):
+            resolve.resolve("Acme")
+        self.assertFalse(any("gem.com" in u for u in site.asked))
 
 
 class Resolving(Base):
