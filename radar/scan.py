@@ -93,7 +93,7 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt"}
 MISSES_TO_CLOSE = 2
 
 
@@ -273,6 +273,8 @@ BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access 
 PUBLIC_HOST = re.compile(r"(?:[a-z0-9-]+\.)+(?!local$|internal$|lan$|home$)[a-z]{2,}", re.I)  # no IP addresses, ports or home network names
 _robots: dict = {}
 _cut_short: set = set()  # boards whose list didn't finish, so a missing role proves nothing
+COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
+             "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
 
 
 def parse_robots(text: str) -> tuple:
@@ -567,6 +569,53 @@ def workday(company: str, slug: str):
     return out
 
 
+def teamtailor_items(slug: str) -> list:
+    """Every open job on a board, from the feed each Teamtailor site publishes and lists in its api-catalog. The slug is the careers
+    host, as many are a company's own domain and the rest carry a number no one could guess. A board with no jobs gives an empty list."""
+    text = polite_fetch(f"https://{slug}/jobs.json")
+    try:
+        feed = json.loads(text)
+    except ValueError:
+        feed = None
+    if not isinstance(feed, dict) or "jsonfeed.org" not in str(feed.get("version")) or not isinstance(feed.get("items"), list):
+        raise Refused("A bot check came back instead of its job feed" if BOT_CHECK.search(text) else "It has no Teamtailor job feed")
+    return feed["items"]
+
+
+def teamtailor_place(job: dict) -> str:
+    """Every place in a job's details, then "Remote" if it's remote. The country a remote job names isn't used: it's often just the
+    company's home, as on a London job that says Sweden."""
+    found = job.get("jobLocation") or []
+    places = []
+    for p in found if isinstance(found, list) else [found]:
+        a = p.get("address") or {}
+        places.append(", ".join(dict.fromkeys(filter(None, [a.get("addressLocality"), COUNTRIES.get(a.get("addressCountry"), a.get("addressCountry"))]))))
+    return " / ".join(dict.fromkeys(filter(None, places + ["Remote" if job.get("jobLocationType") == "TELECOMMUTE" else ""])))
+
+
+def teamtailor(company: str, slug: str):
+    items = teamtailor_items(slug)
+    out = []
+    _cut_short.discard(slug)
+    for i in items:
+        if not (i.get("id") and i.get("title") and i.get("url")):  # one odd ad is skipped, but nothing can be called closed this scan
+            _cut_short.add(slug)
+            continue
+        job = i.get("_jobposting") or {}
+        out.append({
+            "id": f"tt:{slug}:{i['id']}",
+            "company": company,
+            "title": html.unescape(i["title"]).strip(),
+            "location": teamtailor_place(job),
+            "url": i["url"],
+            "posted": i.get("date_published") or job.get("datePosted"),
+            "description": strip_html(i.get("content_html") or job.get("description")),
+        })
+    if len(out) >= UNREAD_TO_FLAG and not any(j["location"] for j in out):  # a job can have no place, but not all of them: the feed has changed
+        raise Refused("Its feed no longer says where jobs are")
+    return out
+
+
 def hn_who_is_hiring():
     """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
@@ -591,7 +640,8 @@ def hn_who_is_hiring():
 
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
-           "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday}
+           "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
+           "teamtailor": teamtailor}
 
 
 # --- pipeline ----------------------------------------------------------------
