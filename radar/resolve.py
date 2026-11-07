@@ -17,7 +17,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, board_size, get_json, polite_fetch, site_rules, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, board_size, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {
@@ -38,9 +38,12 @@ BOARD_LINKS = {
     "workable": re.compile(r"apply\.workable\.com/([\w-]+)", re.I),
     "smartrecruiters": re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([\w-]+)", re.I),
     "recruitee": re.compile(r"([\w-]+)\.recruitee\.com", re.I),
+    # the slug is the whole host. These names are Teamtailor's own, and most careers pages mention at least one of them
+    "teamtailor": re.compile(r"\b((?!(?:app|www|api|docs|support|career|integrations)\.)[\w-]+(?:\.na)?\.teamtailor\.com)", re.I),
 }
 WORKDAY_LINK = re.compile(r"([\w-]+\.wd\d+)\.myworkdayjobs\.com(?:/[a-z]{2}-[A-Z]{2})?(?:/([\w-]+))?")
-CAREERS_HOSTS = re.compile(r"https://((?:careers|jobs)\.[a-z0-9.-]+)", re.I)
+CAREERS_HOSTS = re.compile(r"https://((?:careers?|jobs)\.[a-z0-9.-]+)", re.I)
+OWN_HOST_BOARDS = ("teamtailor", "successfactors")  # these run on a company's own domain, so the host itself has to be tried
 
 
 def slugs(name: str):
@@ -54,7 +57,9 @@ def slugs(name: str):
 
 def probe(ats: str, slug: str):
     try:
-        if ats in SITE_BOARDS:
+        if ats == "teamtailor":
+            n = len(teamtailor_items(slug))
+        elif ats in SITE_BOARDS:
             n = board_size(ats, slug)
         else:
             url, count = PROBES[ats]
@@ -84,26 +89,28 @@ def named_boards(text: str) -> list:
 
 
 def from_careers(url: str):
-    """The board behind a careers address: one it names, SuccessFactors on its own host, or one its page links to."""
+    """The board behind a careers address: one it names, Teamtailor or SuccessFactors on its own host, or one its page links to."""
     for ats, slug in named_boards(url):
         if hit := try_board(ats, slug):
             return hit
     host = urlparse(url).netloc
-    if hit := try_board("successfactors", host):
-        return hit
+    for ats in OWN_HOST_BOARDS:
+        if hit := try_board(ats, host):
+            return hit
     try:
         page = polite_fetch(url)
     except (OSError, ValueError, http.client.HTTPException):
         return None
-    for ats, slug in named_boards(page)[:5] + [("successfactors", h) for h in dict.fromkeys(CAREERS_HOSTS.findall(page))][:2]:
+    hosts = [h for h in dict.fromkeys(CAREERS_HOSTS.findall(page)) if not h.lower().endswith(".teamtailor.com")][:2]
+    for ats, slug in named_boards(page)[:5] + [(ats, h) for h in hosts for ats in OWN_HOST_BOARDS]:
         if hit := try_board(ats, slug):
             return hit
     return None
 
 
 def resolve(name: str, careers: str = None):
-    """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors and Workday boards have no
-    address to work out from a name, so they're only found from a careers address: Gus never guesses at them."""
+    """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors, Workday and Teamtailor boards
+    have no address to work out from a name, so they're only found from a careers address: Gus never guesses at them."""
     if careers and (hit := from_careers(careers)):
         return hit
     tries = [(a, s) for s in slugs(name) for a in PROBES]

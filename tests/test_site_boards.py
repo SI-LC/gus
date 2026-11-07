@@ -1,6 +1,8 @@
 """Company careers sites: read only what each site publishes, take no for an answer. No network: replies are saved samples."""
 import csv
 import json
+import re
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -14,6 +16,7 @@ SAMPLES = Path(__file__).parent / "samples"
 SF = "careers.optimizely.com"
 WD = "salesforce.wd12/External_Career_Site"
 WD_HOST = "salesforce.wd12.myworkdayjobs.com"
+TT = "acme-1721317262.teamtailor.com"
 
 
 def sample(name: str) -> bytes:
@@ -61,6 +64,14 @@ def successfactors_site(**more):
 def workday_site(**more):
     return Site({f"{WD_HOST}/robots.txt": sample("workday_robots.txt"), "External_Career_Site/jobs": sample("workday_list.json"),
                  "External_Career_Site/job/": sample("workday_job.json")}, **more)
+
+
+def teamtailor_site(host=TT, **more):
+    return Site({f"{host}/robots.txt": sample("teamtailor_robots.txt"), f"{host}/jobs.json": sample("teamtailor_feed.json")}, **more)
+
+
+def feed(*items):
+    return json.dumps({"version": "https://jsonfeed.org/version/1.1", "items": list(items)}).encode()
 
 
 class Base(unittest.TestCase):
@@ -516,6 +527,143 @@ class Salesforce(Base):
         _, errors = self.run_scan(site)
         self.assertEqual(site.pages(), [])
         self.assertIn("Salesforce", errors)
+
+
+class Teamtailor(Base):
+    def setUp(self):
+        super().setUp()
+        self.watch(["Acme", "teamtailor", TT, "x"])
+
+    def role(self, jobs, title="Senior Product Manager"):
+        return next(j for j in jobs if j["title"] == title)
+
+    def test_one_request_reads_the_whole_board(self):
+        site = teamtailor_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(len(jobs), 4)
+        self.assertEqual([u for u in site.asked if "robots" not in u], [f"https://{TT}/jobs.json"])
+
+    def test_it_reads_the_real_fields_and_every_place(self):
+        jobs, _ = self.run_scan(teamtailor_site())
+        job = self.role(jobs)
+        self.assertEqual(job["id"], f"tt:{TT}:4632288f-4964-4533-b081-a58e5c113215")
+        self.assertEqual(job["location"], "Paris, France / London, United Kingdom")
+        self.assertEqual(job["url"], f"https://{TT}/jobs/8460685-senior-product-manager")
+        self.assertEqual(job["posted"], "2026-09-26T14:34:12+02:00")
+        self.assertIn("own a core area of the platform & work", job["description"])
+        self.assertNotIn("<", job["description"])
+
+    def test_a_role_in_two_cities_matches_on_either(self):
+        jobs, _ = self.run_scan(teamtailor_site())
+        cfg = {**scan.load_config(), "title_include": re.compile("product manager", re.I), "location_include": re.compile("London", re.I)}
+        self.assertTrue(scan.matches(self.role(jobs), cfg))
+
+    def test_a_remote_role_is_marked_without_the_country_the_feed_gives(self):
+        jobs, _ = self.run_scan(teamtailor_site())
+        self.assertEqual(self.role(jobs, "Product Manager, Data")["location"], "Stockholm, Sweden / Remote")
+
+    def test_a_place_named_after_its_country_is_not_repeated(self):
+        job = {"jobLocation": [{"address": {"addressLocality": "United States", "addressCountry": "US"}}]}
+        self.assertEqual(scan.teamtailor_place(job), "United States")
+
+    def test_a_job_with_no_place_is_kept_without_faulting_the_board(self):
+        jobs, errors = self.run_scan(teamtailor_site(**{f"{TT}/jobs.json": feed({"id": "1", "title": "PM", "url": "https://x.io/jobs/1"})}))
+        self.assertEqual((jobs[0]["location"], errors), ("", {}))
+
+    def test_a_feed_that_stops_giving_places_is_reported(self):
+        items = [{"id": str(n), "title": "PM", "url": f"https://x.io/jobs/{n}"} for n in range(3)]
+        _, errors = self.run_scan(teamtailor_site(**{f"{TT}/jobs.json": feed(*items)}))
+        self.assertIn("no longer says where", errors["Acme"])
+
+    def test_an_address_it_disallows_is_never_fetched(self):
+        site = teamtailor_site(**{f"{TT}/robots.txt": b"User-agent: *\nDisallow: /jobs.json\n"})
+        _, errors = self.run_scan(site)
+        self.assertIn("robots.txt disallows", errors["Acme"])
+        self.assertEqual([u for u in site.asked if "robots" not in u], [])
+
+    def test_a_refusal_is_recorded_once_and_the_scan_moves_on(self):
+        for code in (403, 429):
+            with self.subTest(code):
+                site = teamtailor_site(**{f"{TT}/jobs.json": refused(TT, code)})
+                _, errors = self.run_scan(site)
+                self.assertIn(str(code), errors["Acme"])
+                self.assertEqual(len([u for u in site.asked if "jobs.json" in u]), 1)
+
+    def test_a_bot_check_is_reported_as_one(self):
+        _, errors = self.run_scan(teamtailor_site(**{f"{TT}/jobs.json": b"<html>Just a moment...</html>"}))
+        self.assertIn("bot check", errors["Acme"])
+
+    def test_a_page_that_is_no_feed_is_reported(self):
+        for reply in (b"<html>a new design</html>", b"[]", b'{"version": "https://jsonfeed.org/version/1.1"}'):
+            with self.subTest(reply):
+                _, errors = self.run_scan(teamtailor_site(**{f"{TT}/jobs.json": reply}))
+                self.assertIn("no Teamtailor job feed", errors["Acme"])
+
+    def saved(self, **more):
+        """One saved role on the board, then a scan that no longer lists it."""
+        jid = f"tt:{TT}:gone"
+        (self.dir / "jobs.json").write_text(json.dumps({jid: {"id": jid, "company": "Acme", "title": "PM", "location": "London", **more}}))
+        return jid
+
+    def scan_twice(self, site):
+        """Two full scans, as closing a role takes two misses, then what's saved."""
+        cfg = {**scan.load_config(), "source_hn": False}
+        for _ in range(2):
+            self.clear()
+            with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
+                scan.main()
+        return json.loads((self.dir / "jobs.json").read_text())
+
+    def test_a_role_gone_from_the_feed_closes_after_two_scans(self):
+        jid = self.saved()
+        self.assertTrue(self.scan_twice(teamtailor_site())[jid].get("ad_closed"))
+
+    def test_an_empty_feed_is_a_real_answer(self):
+        jid = self.saved()
+        self.assertTrue(self.scan_twice(teamtailor_site(**{f"{TT}/jobs.json": feed()}))[jid].get("ad_closed"))
+
+    def test_a_refused_board_closes_nothing(self):
+        jid = self.saved()
+        self.assertFalse(self.scan_twice(teamtailor_site(**{f"{TT}/jobs.json": refused(TT)}))[jid].get("ad_closed"))
+
+    def test_an_unreadable_ad_closes_nothing_and_does_not_fault_the_board(self):
+        jid = self.saved()
+        good = json.loads(sample("teamtailor_feed.json"))["items"]
+        site = teamtailor_site(**{f"{TT}/jobs.json": feed(*good, {"title": "No id"})})
+        self.assertFalse(self.scan_twice(site)[jid].get("ad_closed"))
+        self.assertEqual(json.loads((self.dir / "board_errors.json").read_text()), {})
+
+    def test_the_address_on_a_teamtailor_host_is_found_whatever_its_number(self):
+        with self.fetch(teamtailor_site()):
+            self.assertEqual(resolve.from_careers(f"https://{TT}/jobs/8460685-senior-product-manager"), ("teamtailor", TT, 4))
+
+    def test_a_company_domain_on_teamtailor_is_found(self):
+        with self.fetch(teamtailor_site("careers.acme.com")):
+            self.assertEqual(resolve.from_careers("https://careers.acme.com/jobs"), ("teamtailor", "careers.acme.com", 4))
+
+    def test_a_page_that_links_to_a_board_is_followed(self):
+        page = f'<a href="https://{TT}/jobs">Jobs</a><img src="https://images.teamtailor-cdn.com/x.png">'.encode()
+        with self.fetch(teamtailor_site(**{"www.acme.com/careers": page})):
+            self.assertEqual(resolve.from_careers("https://www.acme.com/careers"), ("teamtailor", TT, 4))
+
+    def test_a_linked_company_domain_is_tried(self):
+        page = b'<a href="https://career.acme.com/">Jobs</a>'
+        with self.fetch(teamtailor_site("career.acme.com", **{"www.acme.com/careers": page})):
+            self.assertEqual(resolve.from_careers("https://www.acme.com/careers"), ("teamtailor", "career.acme.com", 4))
+
+    def test_teamtailors_own_addresses_are_not_a_company_board(self):
+        text = "https://app.teamtailor.com https://www.teamtailor.com https://career.teamtailor.com https://images.teamtailor-cdn.com"
+        self.assertEqual(resolve.named_boards(text), [])
+
+    def test_a_board_in_north_america_keeps_its_whole_host(self):
+        self.assertEqual(resolve.named_boards("https://acme.na.teamtailor.com/jobs"), [("teamtailor", "acme.na.teamtailor.com")])
+
+    def test_it_is_never_guessed_from_a_name(self):
+        site = Site({})
+        with self.fetch(site), mock.patch.object(resolve, "get_json", lambda _: {}):
+            resolve.resolve("Acme")
+        self.assertFalse(any("teamtailor" in u for u in site.asked))
 
 
 class Resolving(Base):

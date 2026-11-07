@@ -78,7 +78,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Make it yours
 
-- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of eight job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors or Workday need it: Gus never guesses their address.
+- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of nine job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors, Workday or Teamtailor need it: Gus never guesses their address.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources.

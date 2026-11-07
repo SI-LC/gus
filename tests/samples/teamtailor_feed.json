@@ -1,0 +1,180 @@
+{
+ "version": "https://jsonfeed.org/version/1.1",
+ "title": "Acme",
+ "home_page_url": "https://acme-1721317262.teamtailor.com/jobs",
+ "feed_url": "https://acme-1721317262.teamtailor.com/jobs.json",
+ "items": [
+  {
+   "id": "4632288f-4964-4533-b081-a58e5c113215",
+   "title": "Senior Product Manager",
+   "url": "https://acme-1721317262.teamtailor.com/jobs/8460685-senior-product-manager",
+   "date_published": "2026-09-26T14:34:12+02:00",
+   "content_html": "<h3>About Acme</h3><p>You will own a core area of the platform &amp; work with a squad of engineers.</p>",
+   "_jobposting": {
+    "@context": "http://schema.org/",
+    "@type": "JobPosting",
+    "title": "Senior Product Manager",
+    "description": "<h3>About Acme</h3><p>You will own a core area of the platform &amp; work with a squad of engineers.</p>",
+    "identifier": {
+     "@type": "PropertyValue",
+     "name": "Acme",
+     "value": "8460685"
+    },
+    "datePosted": "2026-09-26T14:34:12+02:00",
+    "employmentType": "FULL_TIME",
+    "directApply": true,
+    "hiringOrganization": {
+     "@type": "Organization",
+     "name": "Acme",
+     "sameAs": "https://acme-1721317262.teamtailor.com"
+    },
+    "jobLocation": [
+     {
+      "@type": "Place",
+      "address": {
+       "streetAddress": null,
+       "addressLocality": "Paris",
+       "postalCode": null,
+       "addressCountry": "FR",
+       "addressRegion": "EMEA",
+       "@type": "PostalAddress"
+      }
+     },
+     {
+      "@type": "Place",
+      "address": {
+       "streetAddress": null,
+       "addressLocality": "London",
+       "postalCode": null,
+       "addressCountry": "GB",
+       "addressRegion": "EMEA",
+       "@type": "PostalAddress"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "6d0f2e3a-91c4-4b57-8a7e-2f1c3b5d7e90",
+   "title": "Product Marketing Director",
+   "url": "https://acme-1721317262.teamtailor.com/jobs/8322528-product-marketing-director",
+   "date_published": "2026-08-01T10:00:00+02:00",
+   "content_html": "<p>Lead product marketing.</p>",
+   "_jobposting": {
+    "@context": "http://schema.org/",
+    "@type": "JobPosting",
+    "title": "Product Marketing Director",
+    "description": "<p>Lead product marketing.</p>",
+    "identifier": {
+     "@type": "PropertyValue",
+     "name": "Acme",
+     "value": "8322528"
+    },
+    "datePosted": "2026-08-01T10:00:00+02:00",
+    "employmentType": "FULL_TIME",
+    "directApply": true,
+    "hiringOrganization": {
+     "@type": "Organization",
+     "name": "Acme",
+     "sameAs": "https://acme-1721317262.teamtailor.com"
+    },
+    "jobLocation": [
+     {
+      "@type": "Place",
+      "address": {
+       "streetAddress": null,
+       "addressLocality": "London",
+       "postalCode": null,
+       "addressCountry": "GB",
+       "addressRegion": "EMEA",
+       "@type": "PostalAddress"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "1b7c9e44-5a2d-4f03-b6c1-8e4d2a6f0c11",
+   "title": "Enterprise Account Executive France",
+   "url": "https://acme-1721317262.teamtailor.com/jobs/8103683-enterprise-account-executive-france",
+   "date_published": "2026-07-01T10:00:00+02:00",
+   "content_html": "<p>Sell to enterprises.</p>",
+   "_jobposting": {
+    "@context": "http://schema.org/",
+    "@type": "JobPosting",
+    "title": "Enterprise Account Executive France",
+    "description": "<p>Sell to enterprises.</p>",
+    "identifier": {
+     "@type": "PropertyValue",
+     "name": "Acme",
+     "value": "8103683"
+    },
+    "datePosted": "2026-07-01T10:00:00+02:00",
+    "employmentType": "FULL_TIME",
+    "directApply": true,
+    "hiringOrganization": {
+     "@type": "Organization",
+     "name": "Acme",
+     "sameAs": "https://acme-1721317262.teamtailor.com"
+    },
+    "jobLocation": [
+     {
+      "@type": "Place",
+      "address": {
+       "streetAddress": null,
+       "addressLocality": "Paris",
+       "postalCode": null,
+       "addressCountry": "FR",
+       "addressRegion": "EMEA",
+       "@type": "PostalAddress"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "a3e5c7d9-2b4f-4a6c-9e01-7d3b5f1a2c44",
+   "title": "Product Manager, Data",
+   "url": "https://acme-1721317262.teamtailor.com/jobs/8653191-product-manager-data",
+   "date_published": "2026-10-01T10:00:00+02:00",
+   "content_html": "<p>Remote within Sweden.</p>",
+   "_jobposting": {
+    "@context": "http://schema.org/",
+    "@type": "JobPosting",
+    "title": "Product Manager, Data",
+    "description": "<p>Remote within Sweden.</p>",
+    "identifier": {
+     "@type": "PropertyValue",
+     "name": "Acme",
+     "value": "8653191"
+    },
+    "datePosted": "2026-10-01T10:00:00+02:00",
+    "employmentType": "FULL_TIME",
+    "directApply": true,
+    "hiringOrganization": {
+     "@type": "Organization",
+     "name": "Acme",
+     "sameAs": "https://acme-1721317262.teamtailor.com"
+    },
+    "jobLocation": [
+     {
+      "@type": "Place",
+      "address": {
+       "streetAddress": null,
+       "addressLocality": "Stockholm",
+       "postalCode": null,
+       "addressCountry": "SE",
+       "addressRegion": "EMEA",
+       "@type": "PostalAddress"
+      }
+     }
+    ],
+    "jobLocationType": "TELECOMMUTE",
+    "applicantLocationRequirements": {
+     "@type": "Country",
+     "name": "Sweden"
+    }
+   }
+  }
+ ]
+}
