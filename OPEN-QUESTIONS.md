@@ -36,6 +36,12 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 - **Bring in the network:** import connections, and fill past employers so routes work.
 - **Scoring calibration** from shortlist and skip decisions.
 - **"Applied AI" in title matching** may be too broad. Decide whether to narrow it.
+- **One role posted once per country.** Grafana Labs lists the same Staff PM role six times on one board, once per
+  country, and Elastic one Principal PM role four times by region, each copy scored on its own (5 to 7 for the same job).
+  `radar.jobs dedupe` leaves them alone on purpose: two ids on one board are two roles, which is right for n8n's two
+  identical Senior PM postings. Proposed rule: same board, same title, and location lists that differ but overlap are one
+  role; keep the copy whose location best matches the search setting, fold the rest under `also`, carry the highest score.
+  Identical locations stay separate. Eight of 76 live roles on 8 Nov 2026.
 
 ## Sources
 
