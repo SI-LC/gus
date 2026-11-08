@@ -20,11 +20,6 @@ from radar import usage
 from radar.scan import DATA, ROOT, load_config
 from radar.settings import secret
 
-# Claude Code installs to ~/.local/bin, which a plain `ssh pi command` doesn't have on its PATH (the service sets it)
-_LOCAL_BIN = os.path.expanduser("~/.local/bin")
-if not shutil.which("claude") and os.path.exists(os.path.join(_LOCAL_BIN, "claude")):
-    os.environ["PATH"] = _LOCAL_BIN + os.pathsep + os.environ.get("PATH", "")
-
 
 class BudgetReached(RuntimeError):
     """Today's AI limit is used up; runs resume tomorrow or when the limit is raised."""
