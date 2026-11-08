@@ -38,7 +38,8 @@ MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "di
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 RUN_TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ")
-STAGES = {"new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"}
+ROLE_STAGES = ["new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"]
+STAGES = set(ROLE_STAGES)
 
 
 def now():
@@ -69,7 +70,7 @@ def state():
              "can_watch": bool(j.get("board")) and sources.same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
     signals = read(DATA / "signals.json", {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
-    from radar import accounts as A
+    from radar import accounts as A, events as E
     from radar.network import distances, summary as net_summary
     companies, people, moves, raw_jobs = read(COMPANIES, {}), read(A.PEOPLE, {}), read(A.MOVES, {}), read(JOBS, {})
     stored_events = read(A.EVENTS, {})
@@ -99,8 +100,9 @@ def state():
         "kinds": list(dict.fromkeys(k[0] for k in kinds)),
         "kind_default": kinds[-1][0] if kinds else "",
         "jobs": jobs,
-        "companies": companies,
         "accounts": accts,
+        "events": sorted((E.decorate(dict(e, id=eid)) for eid, e in stored_events.items()),
+                         key=lambda e: (not e["fresh"], -e["strength"], e["age_days"] if e["age_days"] is not None else 999)),
         "board_guesses": guesses,
         "people": {pid: dict(p, id=pid, distance=dist[pid]) for pid, p in people.items()},
         "moves": shown,
@@ -115,7 +117,8 @@ def state():
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
-        "labels": {"events": A.EVENT_LABEL, "outcomes": A.OUTCOMES, "person_stages": A.PERSON_STAGES},
+        "labels": {"events": A.EVENT_LABEL, "event_types": E.TYPES, "outcomes": A.OUTCOMES, "person_stages": A.PERSON_STAGES,
+                   "role_stages": ROLE_STAGES},
         "health": {
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
@@ -231,6 +234,68 @@ def role_contact(body):
             p["stage"] = "mapped"
             p.setdefault("history", []).append({"stage": "mapped", "at": now()})
     return {"ok": True}
+
+
+def update_event(body):
+    """Record something that happened at an account by hand, correct it, or dismiss it. Nothing is deleted: a move may cite it."""
+    from radar import events as E
+    if not body.get("id"):
+        if body.get("account") not in read(COMPANIES, {}):
+            return {"error": "No such account"}
+        try:
+            eid = E.add(str(body["account"]), str(body.get("type") or ""), str(body.get("summary") or ""),
+                        str(body.get("url") or ""), str(body.get("date") or ""))
+        except ValueError as e:
+            return {"error": str(e)}
+        return {"ok": True, "id": eid}
+    with locked(E.EVENTS) as events:
+        e = events.get(body.get("id"))
+        if not e:
+            return {"error": "No such event"}
+        if body.get("type") in E.TYPES:
+            e["type"] = body["type"]
+        if "summary" in body:
+            e["summary"] = str(body["summary"] or "").strip()[:300]
+        if body.get("date"):
+            d = E.parse_date(body["date"])
+            if not d:
+                return {"error": "needs a real date (YYYY-MM-DD)"}
+            e["date"] = str(d)
+        if "dismissed" in body:  # a dismissed event stops counting, like a role whose ad closed
+            if e.get("type") == "role_posted" and e.get("job_id"):
+                return {"error": "This follows the role: skip the role instead"}
+            if body["dismissed"]:
+                e["closed"] = now()[:10]
+            else:
+                e.pop("closed", None)
+    return {"ok": True, "id": body["id"]}
+
+
+def add_company(body):
+    """Add a company to watch from the cockpit: find its job board the way `radar.resolve --add` does, then make it an account.
+    Without a public board it's still an account, with no board until the watchlist agent or you find one."""
+    from radar import resolve
+    name = " ".join(str(body.get("name") or "").split())[:80]
+    careers = str(body.get("careers") or "").strip() or None
+    if not name:
+        return {"error": "Needs a company name"}
+    if careers and not re.match(r"https?://", careers):
+        return {"error": "The careers address needs to start with http"}
+    if name.lower() in {n.lower() for n in read(COMPANIES, {})} or sources.same_company(name) in links.watched():
+        return {"error": f"{name} is already on your list"}
+    hit = resolve.resolve(name, careers)  # network, outside the lock
+    if hit:
+        resolve.add_board(name, hit[0], hit[1])
+    with locked(COMPANIES) as companies:
+        c = companies.setdefault(name, {})
+        c.setdefault("status", "watched")
+        c.setdefault("added", now()[:10])
+        c.setdefault("source", "manual")
+        if careers:
+            c["careers_url"] = careers
+        if hit:
+            c["board"] = f"{hit[0]}:{hit[1]}"
+    return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
 
 
 def update_job(body):
@@ -409,6 +474,10 @@ class Handler(BaseHTTPRequestHandler):
                             for k in ("degree", "via", "degree_at"):
                                 p.pop(k, None)
                 return self.send(200, {"ok": True, "id": body["id"]} | ({"created": created} if created is not None else {}))
+            if path == "/api/event":
+                return self.send(200, update_event(body))
+            if path == "/api/company/add":
+                return self.send(200, add_company(body))
             if path == "/api/account":
                 with locked(COMPANIES) as companies:
                     c = companies.get(body.get("name"))
