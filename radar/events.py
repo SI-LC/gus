@@ -137,12 +137,16 @@ def sync(jobs: dict | None = None) -> dict:
                     if lead is not None and not lead.get("company"):
                         lead["company"] = name
                         out["signals"] += 1
-        # 2. role events: a role this good is a signal while it's open
+            accounts = set(companies)
+        # 2. role events: a role this good at an account is a signal while it's open
         for jid, j in jobs.items():
-            good = (j.get("score") or 0) >= ROLE_EVENT_SCORE and j.get("company")
+            good = (j.get("score") or 0) >= ROLE_EVENT_SCORE and j.get("company") in accounts
             live = good and not j.get("ad_closed") and j.get("stage") not in ("skipped", "closed")
             eid = f"role:{jid}"
-            if live:
+            if not good and eid in events and j.get("company") not in accounts:
+                del events[eid]  # a role at a company that isn't an account was never a signal
+                out["dropped"] = out.get("dropped", 0) + 1
+            elif live:
                 posted = parse_date(j.get("posted")) or parse_date(j.get("first_seen"))
                 if eid not in events:
                     events[eid] = {"account": j["company"], "type": "role_posted", "url": j.get("url"), "job_id": jid,
