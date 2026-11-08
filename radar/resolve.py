@@ -6,6 +6,8 @@ Usage:
     python3 -m radar.resolve --add "Wayve" "PolyAI"          # append hits to watchlist.csv
     python3 -m radar.resolve "Acme" --careers https://careers.acme.com     # start from its careers address, the surest way
     python3 -m radar.resolve --missing                       # check every active company with no board; --add appends the hits
+    python3 -m radar.resolve --auto                          # the full run's step: add boards found from careers addresses,
+                                                             # keep name-guesses for you to look at in the cockpit
 """
 from __future__ import annotations
 
@@ -14,10 +16,17 @@ import http.client
 import json
 import re
 import sys
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, board_size, gem_posts, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, board_size, fetch_bytes, gem_posts, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
+
+GUESS_DAYS = 14  # how long before a company with no board is guessed at again
+# Where a person can look at a board found by name, to see whose it really is
+BOARD_URL = {"greenhouse": "https://job-boards.greenhouse.io/{s}", "ashby": "https://jobs.ashbyhq.com/{s}", "lever": "https://jobs.lever.co/{s}",
+             "workable": "https://apply.workable.com/{s}", "smartrecruiters": "https://jobs.smartrecruiters.com/{s}", "recruitee": "https://{s}.recruitee.com"}
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {
@@ -130,8 +139,90 @@ def missing() -> dict:
     return {n: r.get("careers_url") for n, r in companies.items() if r.get("status") in ("watched", "maybe", "candidate") and not r.get("board")}
 
 
+def address_answers(url: str) -> bool:
+    """False only when the address says it's gone (404 or 410). A site that blocks the check still counts as answering."""
+    try:
+        fetch_bytes(url, timeout=20)
+    except urllib.error.HTTPError as e:
+        return e.code not in (404, 410)
+    except Exception:
+        pass
+    return True
+
+
+def add_board(name: str, ats: str, slug: str) -> bool:
+    """One more row in watchlist.csv, unless the company is already there."""
+    path = watchlist_path()
+    if name.lower() in {r["company"].lower() for r in csv.DictReader(path.open())}:
+        return False
+    with path.open("a", newline="") as f:
+        csv.writer(f).writerow([name, ats, slug, "discovered"])
+    return True
+
+
+def _look(name: str, rec: dict):
+    """What one company without a board turns up: ("board", hit) from its careers address, ("guess", hit) from its name, or None."""
+    careers = rec.get("careers_url")
+    if careers:
+        rec_broken = not address_answers(careers)
+        if not rec_broken and (hit := from_careers(careers)):
+            return "board", hit, False
+    else:
+        rec_broken = False
+    if rec.get("board_guess") or (rec.get("guess_checked") or "") > str(date.today() - timedelta(days=GUESS_DAYS)):
+        return None, None, rec_broken
+    hit = resolve(name)
+    if hit and f"{hit[0]}:{hit[1]}" in (rec.get("board_guess_rejected") or []):
+        hit = None
+    return "guess", hit, rec_broken
+
+
+def auto() -> dict:
+    """The full run's board step. A board named by a company's own careers address is added straight away: Gus
+    never guesses there. A board found only from the name is kept on the record as `board_guess` for a person to
+    accept or reject in the cockpit, because a name can match another company's board. A careers address that has
+    gone is marked `careers_url_broken` so the watchlist agent finds a new one."""
+    path = DATA / "companies.json"
+    companies = json.loads(path.read_text()) if path.exists() else {}
+    todo = {n: companies[n] for n in missing()}
+    out = {"added": [], "guesses": [], "broken": []}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(zip(todo, pool.map(lambda item: _look(*item), todo.items())))
+    today = str(date.today())
+    for name, (kind, hit, broken) in results:
+        rec = companies[name]
+        if broken:
+            rec["careers_url_broken"] = True
+            out["broken"].append(name)
+        else:
+            rec.pop("careers_url_broken", None)
+        if kind == "board":
+            ats, slug, _ = hit
+            add_board(name, ats, slug)
+            rec["board"] = f"{ats}:{slug}"
+            out["added"].append(name)
+        elif kind == "guess":
+            rec["guess_checked"] = today
+            if hit:
+                ats, slug, n = hit
+                rec["board_guess"] = {"board": f"{ats}:{slug}", "url": BOARD_URL.get(ats, "").format(s=slug), "open_roles": n, "found": today}
+                out["guesses"].append(name)
+    path.write_text(json.dumps(companies, indent=2, ensure_ascii=False))
+    if out["added"]:
+        from radar.companies import sync
+        sync()
+    return out
+
+
 def main():
     args = sys.argv[1:]
+    if "--auto" in args:
+        out = auto()
+        print(f"{len(out['added'])} boards added from careers addresses: {', '.join(out['added']) or 'none'}")
+        print(f"{len(out['guesses'])} found by name, waiting for you in the cockpit: {', '.join(out['guesses']) or 'none'}")
+        if out["broken"]:
+            print(f"careers addresses that have gone: {', '.join(out['broken'])}")
+        return
     add = "--add" in args
     careers = args.pop(args.index("--careers") + 1) if "--careers" in args else None
     names = [a for a in args if not a.startswith("--")]

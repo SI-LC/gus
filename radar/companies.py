@@ -130,6 +130,35 @@ def veto(name: str):
     print(f"Removed {match} from the watchlist ({len(rows) - len(keep)} board). It won't be re-added.")
 
 
+def accept_board(name: str) -> bool:
+    """You've looked at a board found by name and it's theirs: watch it."""
+    c = load()
+    guess = (c.get(name) or {}).get("board_guess")
+    if not guess:
+        return False
+    ats, slug = guess["board"].split(":", 1)
+    from radar.resolve import add_board
+    add_board(name, ats, slug)
+    c[name].pop("board_guess", None)
+    c[name]["board"] = guess["board"]
+    save(c)
+    sync()
+    return True
+
+
+def reject_board(name: str) -> bool:
+    """It's another company's board: never offer this one again."""
+    c = load()
+    guess = (c.get(name) or {}).pop("board_guess", None)
+    if not guess:
+        return False
+    rejected = c[name].setdefault("board_guess_rejected", [])
+    if guess["board"] not in rejected:
+        rejected.append(guess["board"])
+    save(c)
+    return True
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "due"
     if cmd == "sync":

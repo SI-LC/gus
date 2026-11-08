@@ -1,0 +1,11 @@
+id: board-guess-needs-a-look
+requirement: When Gus finds a company's job board by its name alone, it asks me whether the board is really theirs before watching it.
+given: scanned
+check:
+  - open Companies
+  - see "Needs a look"
+  - see "Lanternfield"
+  - see "greenhouse:lanternfield"
+  - click "Not them"
+  - not see "Lanternfield"
+judge: Is it clear what Gus is unsure about and what each answer does?

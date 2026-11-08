@@ -42,8 +42,9 @@ Only with a link and a real date. These events are what weekly moves are built o
 ## 2. Companies
 Company research and fit assessment belong to the watchlist loop (`prompts/watchlist.md`).
 Here, add any new company you came across to `data/companies.json` as
-`{"status": "candidate", "source", "signal", "careers_url"}`, with `careers_url` whenever you can find one: it's how a board gets resolved
-for a company with its own careers site. **Fast path**: if it has a live target role in a target location that
+`{"status": "candidate", "source", "signal", "careers_url"}`, with `careers_url` whenever you can find one: the run's next step reads
+the board behind it automatically, and it's the only way a company with its own careers site gets one. Open the address before
+you record it; a dead or guessed address wastes the step. **Fast path**: if it has a live target role in a target location that
 looks like a 7+, run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` now so the role isn't missed, and
 mark the record `status: "candidate", "fast_tracked": true`. The loop assesses it properly later.
 

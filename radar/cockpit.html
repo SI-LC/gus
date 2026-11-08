@@ -444,6 +444,10 @@ async function watchCompany(id) {
   const d = await post("/api/watch", { id });
   if (d) { toast(d.ok ? "Added to your watchlist" : "Already on your watchlist"); load(); }
 }
+async function boardGuess(name, accept) {
+  const d = await post("/api/company/board", { name, accept });
+  if (d) { toast(accept ? "Watching its board. Roles arrive on the next check." : "Noted. Gus won't offer that board again."); load(); }
+}
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
@@ -612,7 +616,7 @@ const V = {
           <div><span class="tier t${a.tier}">${a.tier}</span> <b class="acct-name">${esc(a.name)}</b>
             <button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
-            ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}</div>
+            ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
@@ -623,9 +627,15 @@ const V = {
         ${ppl.length ? `<div class="chips">${ppl.map(personChip).join("")}</div>` : `<div class="sub" style="margin-top:6px">No contacts found yet.</div>`}
       </article>`;
     };
+    const guesses = S.board_guesses || [];
+    const lookAt = guesses.length ? `<div class="section">Needs a look · ${guesses.length}</div>
+      <p class="sub">Gus found these job boards by company name alone, so each could be another company's. Open the board, then say.</p>
+      <table>${guesses.map(g => `<tr><td><b>${esc(g.name)}</b></td>
+        <td><a href="${link(g.url)}" target="_blank" rel="noopener">${esc(g.board)}</a> <span class="sub">· ${g.open_roles} open role${g.open_roles === 1 ? "" : "s"}</span></td>
+        <td class="row"><button class="primary" onclick="boardGuess(${jsq(g.name)}, true)">It's theirs</button> <button onclick="boardGuess(${jsq(g.name)}, false)">Not them</button></td></tr>`).join("")}</table>` : "";
     return `<h1>Companies <span class="count">${S.accounts.length}</span></h1>
       <p class="lede">The companies you're aiming for, their latest news and who to talk to.</p>
-      <div class="row" style="margin-bottom:8px"><input type="text" placeholder="Filter companies" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" style="flex:1;max-width:360px"></div>` +
+      <div class="row" style="margin-bottom:8px"><input type="text" placeholder="Filter companies" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" style="flex:1;max-width:360px"></div>` + lookAt +
       tiers.map(t => { const rows = list.filter(a => a.tier === t).sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
         return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
   },

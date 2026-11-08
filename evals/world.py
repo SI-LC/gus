@@ -21,6 +21,10 @@ FAKE = ROOT / "evals" / "fake"
 WATCHLIST = "company,ats,slug,sector\nHarborlight,greenhouse,harborlight,ai-lab\n"
 STARTER = "company,ats,slug,sector\nHarborlight,greenhouse,harborlight,software\n"
 PROFILE = "# Candidate profile\n\n## What I want\n- Made-up target roles\n"
+# A company found with no careers address, whose board Gus guessed from its name: it waits for a person in Companies
+COMPANIES = {"Lanternfield": {"status": "candidate", "added": "2026-11-01",
+                              "board_guess": {"board": "greenhouse:lanternfield", "url": "https://job-boards.greenhouse.io/lanternfield",
+                                              "open_roles": 3, "found": "2026-11-01"}}}
 SETTINGS = {"title_include": "product manager\nproduct owner", "location_include": "london\nremote (exactly)",
             "where_groups": "London: london\nRemote: remote, anywhere\nElsewhere: *",
             "role_kinds": "Forward deployed: forward deployed\nProduct: *"}
@@ -49,6 +53,8 @@ class World:
             (self.app / "profile" / "profile.md").write_text(PROFILE)
             (self.app / "watchlist.csv").write_text(WATCHLIST)
             (self.app / "settings.json").write_text(json.dumps(SETTINGS))
+            (self.app / "data").mkdir(exist_ok=True)
+            (self.app / "data" / "companies.json").write_text(json.dumps(COMPANIES))
         tools = self.home / ".local" / "bin"
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):
