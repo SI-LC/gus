@@ -23,10 +23,13 @@ Skip anything already present, whatever its status. Never re-add a company with 
   State of AI, Sifted's lists.
 - **Lookalikes**: 2 per top-5 company by fit score.
 - **Neighbours of favourites**: the `favourites` list from `due` holds companies the candidate loves that are due a look.
-  For each, name up to 3 companies close to it: same buyer, same kind of product, or founded by its alumni. Run
-  `python3 -m radar.resolve --add "<Company>"` and add each one as `{"status": "watched", "sector": "neighbour", "neighbour_of": "<favourite>", "fit_why": "<one line>", "added": "<today>"}`.
-  A neighbour is a place to watch, not a decision, so it skips the fit score below, and never ask the candidate to rate one.
-  Then set `neighbours_checked` to today on the favourite.
+  For each, name up to 3 companies close to it: same buyer, same kind of product, or founded by its alumni. Find each
+  one's careers page first, then run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` (leave out
+  `--careers` only if you can't find one), and add it as `{"status": "watched", "sector": "neighbour", "neighbour_of": "<favourite>",
+  "careers_url": "<careers_url>", "fit_why": "<one line>", "added": "<today>"}`. A neighbour is only watched if something
+  reads its roles: with no public board, the `careers_url` on the record is what lets the next board step find one, so
+  never leave it out when it exists. A neighbour is a place to watch, not a decision, so it skips the fit score below,
+  and never ask the candidate to rate one. Then set `neighbours_checked` to today on the favourite.
 Aim for 10–30 candidates per run; quality over volume.
 
 ## 2. Enrich (candidates, flagged, stale, and rejected companies due a recheck)

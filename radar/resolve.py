@@ -237,6 +237,7 @@ def main():
     known = {r["company"].lower() for r in csv.DictReader(path.open())}
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(zip(todo, pool.map(lambda t: resolve(*t), todo.items())))
+    added = False
     for name, hit in results:
         if not hit:
             print(f"  ✗ {name}: no public board found")
@@ -248,6 +249,10 @@ def main():
             with path.open("a", newline="") as f:
                 csv.writer(f).writerow([name, ats, slug, "discovered"])
             known.add(name.lower())
+            added = True
+    if added:  # the record gets its `board` now, so the next board step doesn't offer the same board back as a guess
+        from radar.companies import sync
+        sync()
 
 
 if __name__ == "__main__":
