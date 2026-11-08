@@ -9,7 +9,8 @@ Records may carry extra fields: the research agents keep what they find. What's 
 ## Role (`data/jobs.json`)
 
 A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `lever:…`, `hn:…`, `adzuna:…`,
-`gc:search:…` and `amz:search:…` for the saved Google Careers and amazon.jobs searches, `email:<message id>:<n>` for roles
+`gc:search:…` and `amz:search:…` for the saved Google Careers and amazon.jobs searches, `ghc:github:…` for GitHub's own
+careers site, `email:<message id>:<n>` for roles
 pulled from the inbox. One ad is one record however many places list it: before
 adding a role, every writer asks `radar.jobs.find_match` whether Gus has it already (by id, by address without tracking
 tags, or by company and title among live roles found through another source) and, if so, records the sighting under

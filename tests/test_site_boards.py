@@ -1175,3 +1175,102 @@ class AmazonJobs(Base):
         jobs, errors = self.run_scan(amazon_site(b"<html>Please verify you are a human</html>"))
         self.assertEqual(jobs, [])
         self.assertIn("no longer answers with job results", errors["Amazon"])
+
+
+GITHUB = "https://www.github.careers"
+
+
+def github_site(reply=None, **more):
+    return Site({"www.github.careers/robots.txt": sample("github_robots.txt"), f"{GITHUB}/api/jobs": reply or sample("github_careers_jobs.json")}, **more)
+
+
+class GitHubCareers(Base):
+    """github.careers is GitHub's own site, not a job board system: one list for the whole company, read once a day from a
+    watchlist row whose careers address names the site."""
+
+    def setUp(self):
+        super().setUp()
+        self.watch(["GitHub", "githubcareers", "github", "devtools"])
+        patcher = mock.patch.object(scan, "GITHUB_PAUSE", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def pages(self, site):
+        return [u for u in site.asked if "robots" not in u]
+
+    def test_the_list_is_read_a_hundred_at_a_time(self):
+        site = github_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(self.pages(site), [f"{GITHUB}/api/jobs?page=1&limit=100"])
+        self.assertEqual(len(jobs), 3)
+
+    def test_it_reads_the_real_fields_and_the_whole_ad(self):
+        jobs, _ = self.run_scan(github_site())
+        job = next(j for j in jobs if j["id"] == "ghc:github:5716")
+        self.assertEqual(job["company"], "GitHub")
+        self.assertEqual(job["title"], "Senior Product Manager")
+        self.assertEqual(job["location"], "US Remote / United States")
+        self.assertEqual(job["url"], f"{GITHUB}/careers-home/jobs/5716")
+        self.assertEqual(job["posted"], "2026-09-09T15:54:00+0000")
+        self.assertIn("About GitHub", job["description"])
+        self.assertNotIn("<", job["description"])
+        uk = next(j for j in jobs if j["id"] == "ghc:github:6591")
+        self.assertEqual(uk["location"], "United Kingdom Remote")  # the country is already in the place
+
+    def test_a_long_list_is_read_page_by_page_until_a_short_page(self):
+        full = json.loads(sample("github_careers_jobs.json"))
+        with mock.patch.object(scan, "GITHUB_PAGE", 2):
+            def reply(url):
+                page = int(re.search(r"page=(\d+)", url)[1])
+                return json.dumps({"jobs": full["jobs"][(page - 1) * 2:page * 2]}).encode()
+            site = github_site(reply)
+            jobs, errors = self.run_scan(site)
+        self.assertEqual((len(jobs), errors), (3, {}))
+        self.assertEqual([re.search(r"page=(\d+)", u)[1] for u in self.pages(site)], ["1", "2"])
+        self.assertNotIn("github", scan._cut_short)
+
+    def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
+        full = json.loads(sample("github_careers_jobs.json"))
+        with mock.patch.object(scan, "GITHUB_PAGE", 1), mock.patch.object(scan, "GITHUB_PAGES", 2):
+            site = github_site(lambda url: json.dumps({"jobs": full["jobs"][:1]}).encode())
+            self.run_scan(site)
+        self.assertEqual(len(self.pages(site)), 2)
+        self.assertIn("github", scan._cut_short)
+
+    def test_it_waits_between_pages_as_the_robots_file_asks(self):
+        full = json.loads(sample("github_careers_jobs.json"))
+        with mock.patch.object(scan, "GITHUB_PAGE", 1), mock.patch.object(scan, "GITHUB_PAGES", 3), mock.patch.object(scan, "GITHUB_PAUSE", 5), \
+                mock.patch.object(scan.time, "sleep") as slept:
+            site = github_site(lambda url: json.dumps({"jobs": full["jobs"][:1]}).encode())
+            self.run_scan(site)
+        self.assertEqual(slept.call_args_list, [mock.call(5), mock.call(5)])
+
+    def test_it_reads_once_a_day_however_often_scans_run(self):
+        site = github_site()
+        self.run_scan(site)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((jobs, errors, len(self.pages(site))), ([], {}, 1))
+
+    def test_a_page_that_is_not_job_results_is_reported_not_read_as_no_jobs(self):
+        jobs, errors = self.run_scan(github_site(b"<html>Please verify you are a human</html>"))
+        self.assertEqual(jobs, [])
+        self.assertIn("no longer answers with job results", errors["GitHub"])
+
+    def test_the_careers_address_names_the_board(self):
+        with self.fetch(github_site(json.dumps({"jobs": [], "totalCount": 100}).encode())):
+            self.assertEqual(resolve.from_careers(f"{GITHUB}/careers-home"), ("githubcareers", "github", 100))
+
+    def test_a_page_that_links_to_the_site_is_followed(self):
+        page = b'<a href="https://www.github.careers/careers-home">Careers</a>'
+        with self.fetch(github_site(json.dumps({"jobs": [], "totalCount": 100}).encode(), **{"github.com/about/careers": page})):
+            self.assertEqual(resolve.from_careers("https://github.com/about/careers"), ("githubcareers", "github", 100))
+
+    def test_github_dot_com_is_not_the_board(self):
+        self.assertEqual(resolve.named_boards("https://github.com/acme https://docs.github.com/careers https://github.careers.example/x"), [])
+
+    def test_it_is_never_guessed_from_a_name(self):
+        site = Site({})
+        with self.fetch(site), mock.patch.object(resolve, "get_json", lambda _: {}):
+            resolve.resolve("GitHub")
+        self.assertFalse(any("github.careers" in u for u in site.asked))
