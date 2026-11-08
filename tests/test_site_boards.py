@@ -1087,3 +1087,91 @@ class Resolving(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+AMAZON = "https://www.amazon.jobs"
+AMAZON_SEARCH = f"{AMAZON}/en-gb/search?base_query=product+manager&loc_query=London%2C+England%2C+United+Kingdom&country=GBR&city=London"
+AMAZON_JSON = f"{AMAZON}/en-gb/search.json?base_query=product+manager&loc_query=London%2C+England%2C+United+Kingdom&country=GBR&city=London&sort=recent"
+
+
+def amazon_site(reply=None, **more):
+    return Site({"www.amazon.jobs/robots.txt": sample("amazon_robots.txt"), f"{AMAZON}/en-gb/search.json": reply or sample("amazon_jobs_search.json")}, **more)
+
+
+class AmazonJobs(Base):
+    """amazon.jobs isn't a job board system, so a saved search there is read like the Google Careers one: once a day, newest first."""
+
+    def setUp(self):
+        super().setUp()
+        self.watch()
+        self.search = AMAZON_SEARCH
+
+    def run_scan(self, site):
+        real = scan.load_config
+
+        def with_search():
+            return {**real(), "amazon_jobs_search": self.search}
+        with mock.patch.object(scan, "load_config", with_search):
+            return super().run_scan(site)
+
+    def pages(self, site):
+        return [u for u in site.asked if "robots" not in u]
+
+    def test_the_pasted_search_is_read_as_json_newest_first_with_paging_params_replaced(self):
+        self.search = f"{AMAZON_SEARCH}&offset=200&result_limit=10&sort=relevant"
+        site = amazon_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(self.pages(site), [f"{AMAZON_JSON}&result_limit=100&offset=0"])
+        self.assertEqual(len(jobs), 3)
+
+    def test_it_reads_the_real_fields_and_the_whole_ad(self):
+        jobs, _ = self.run_scan(amazon_site())
+        job = next(j for j in jobs if j["id"] == "amz:search:10601122")
+        self.assertEqual(job["company"], "Amazon")
+        self.assertEqual(job["title"], "Product Manager – Compliance Digital Tools, AWS Enterprise Support")
+        self.assertEqual(job["location"], "London, England, GBR")
+        self.assertEqual(job["url"], f"{AMAZON}/en-gb/jobs/10601122/product-manager-compliance-digital-tools-aws")
+        self.assertEqual(job["posted"], "2026-11-07")
+        self.assertIn("Bachelor's degree", job["description"])
+        self.assertNotIn("<", job["description"])
+        first = next(j for j in jobs if j["id"] == "amz:search:10596386")
+        self.assertEqual(first["posted"], "2026-11-05")  # the site's double-spaced day
+        self.assertIsNone(next(j for j in jobs if j["id"] == "amz:search:10588001")["posted"])
+
+    def test_a_long_list_is_read_page_by_page_until_a_short_page(self):
+        full = json.loads(sample("amazon_jobs_search.json"))
+        with mock.patch.object(scan, "AMAZON_PAGE", 2):
+            def reply(url):
+                offset = int(re.search(r"offset=(\d+)", url)[1])
+                return json.dumps({"hits": 3, "jobs": full["jobs"][offset:offset + 2]}).encode()
+            site = amazon_site(reply)
+            jobs, errors = self.run_scan(site)
+        self.assertEqual((len(jobs), errors), (3, {}))
+        self.assertEqual([re.search(r"offset=(\d+)", u)[1] for u in self.pages(site)], ["0", "2"])
+        self.assertNotIn("amazon", scan._cut_short)
+
+    def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
+        full = json.loads(sample("amazon_jobs_search.json"))
+        with mock.patch.object(scan, "AMAZON_PAGE", 1), mock.patch.object(scan, "AMAZON_PAGES", 2):
+            site = amazon_site(lambda url: json.dumps({"hits": 3, "jobs": full["jobs"][:1]}).encode())
+            jobs, _ = self.run_scan(site)
+        self.assertEqual(len(self.pages(site)), 2)
+        self.assertIn("amazon", scan._cut_short)
+
+    def test_it_reads_once_a_day_however_often_scans_run(self):
+        site = amazon_site()
+        self.run_scan(site)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((jobs, errors, len(self.pages(site))), ([], {}, 1))
+
+    def test_a_search_somewhere_else_is_refused_and_shown_on_the_health_page(self):
+        self.search = "https://www.amazon.co.uk/search?q=product+manager"
+        jobs, errors = self.run_scan(amazon_site())
+        self.assertEqual(jobs, [])
+        self.assertIn("isn't a search on amazon.jobs", errors["Amazon"])
+
+    def test_a_page_that_is_not_job_results_is_reported_not_read_as_no_jobs(self):
+        jobs, errors = self.run_scan(amazon_site(b"<html>Please verify you are a human</html>"))
+        self.assertEqual(jobs, [])
+        self.assertIn("no longer answers with job results", errors["Amazon"])

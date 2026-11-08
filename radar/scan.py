@@ -94,7 +94,7 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz"}
 MISSES_TO_CLOSE = 2
 
 
@@ -278,6 +278,9 @@ _cut_short: set = set()  # boards whose list didn't finish, so a missing role pr
 GOOGLE_SEARCH = "https://www.google.com/about/careers/applications/jobs/results"
 GOOGLE_EVERY = 20 * 3600  # seconds between reads: a little under a day, so a daily run at a set time is never skipped
 GOOGLE_NAMES = {"DeepMind": "Google DeepMind"}
+AMAZON_HOST = "https://www.amazon.jobs"
+AMAZON_PAGE = 100  # jobs per request, the most the site gives
+AMAZON_PAGES = 5  # requests per read, so 500 roles; a longer list is cut short
 COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
              "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
 
@@ -730,12 +733,10 @@ def read_google(address: str) -> list:
     return jobs
 
 
-def google_careers(company: str, slug: str):
-    """One search, one page, at most once a day, whatever else runs. Between reads nothing is asked for, and a read that failed
+def read_daily(slug: str, address: str, state_file, reader) -> list:
+    """A saved search read at most once a day, whatever else runs. Between reads nothing is asked for, and a read that failed
     stays on the Health page until the next one."""
     _cut_short.add(slug)  # nothing can be called closed unless this read finishes
-    address = google_address(load_config().get("google_careers_search") or "")
-    state_file = DATA / "google_careers.json"
     try:
         state = json.loads(state_file.read_text())
     except (OSError, ValueError):
@@ -747,13 +748,70 @@ def google_careers(company: str, slug: str):
     state = {"address": address, "read": time.time()}
     try:
         _cut_short.discard(slug)
-        return read_google(address)
+        return reader(address)
     except Exception as e:
         _cut_short.add(slug)
         state["error"] = str(e)[:200]
         raise
     finally:
         state_file.write_text(json.dumps(state))
+
+
+def google_careers(company: str, slug: str):
+    """One search, one page a day: all robots.txt allows for Google's job results."""
+    address = google_address(load_config().get("google_careers_search") or "")
+    return read_daily(slug, address, DATA / "google_careers.json", read_google)
+
+
+def amazon_address(text: str) -> str:
+    """The search to read on amazon.jobs: the one you pasted, as its JSON form, newest first. Location and keywords stay as you set
+    them on the site, so nothing about where you're looking is decided here."""
+    parts = urlparse(text.strip())
+    m = re.fullmatch(r"/([a-z]{2}(?:-[a-z]{2})?)/search(?:\.json)?/?", parts.path)
+    if f"{parts.scheme}://{parts.netloc}" != AMAZON_HOST or not m:
+        raise Refused("This isn't a search on amazon.jobs")
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in ("offset", "result_limit", "sort")]
+    return f"{AMAZON_HOST}/{m[1]}/search.json?{urlencode(query + [('sort', 'recent')])}"  # spaces as +, the site's own form
+
+
+def amazon_job(j: dict) -> dict:
+    posted = None
+    try:
+        posted = datetime.strptime(re.sub(r"\s+", " ", j.get("posted_date") or ""), "%B %d, %Y").date().isoformat()
+    except ValueError:
+        pass
+    return {
+        "id": f"amz:search:{j['id_icims']}",
+        "company": "Amazon",
+        "title": html.unescape(j["title"]).strip(),
+        "location": j.get("normalized_location") or j.get("location") or "",
+        "url": f"{AMAZON_HOST}{j['job_path']}",
+        "posted": posted,
+        "description": strip_html("\n".join(filter(None, (j.get("description"), j.get("basic_qualifications"), j.get("preferred_qualifications"))))),
+    }
+
+
+def read_amazon(address: str) -> list:
+    """Every page of the search, newest first, until a page comes back short or the page limit is reached."""
+    jobs = []
+    for page in range(AMAZON_PAGES):
+        try:
+            d = json.loads(polite_fetch(f"{address}&result_limit={AMAZON_PAGE}&offset={page * AMAZON_PAGE}"))
+            found = [amazon_job(j) for j in d["jobs"]]
+        except (ValueError, KeyError, TypeError) as e:
+            raise Refused("The site no longer answers with job results Gus can read") from e
+        jobs += found
+        if len(found) < AMAZON_PAGE:
+            return jobs
+        time.sleep(PAGE_PAUSE)
+    _cut_short.add("amazon")  # more pages than Gus reads: a role missing from these may just be further down
+    return jobs
+
+
+def amazon_jobs(company: str, slug: str):
+    """Amazon's own careers site, which isn't one of the job board systems: a saved search, read once a day."""
+    address = amazon_address(load_config().get("amazon_jobs_search") or "")
+    return read_daily(slug, address, DATA / "amazon_jobs.json", read_amazon)
 
 
 def hn_who_is_hiring():
@@ -781,7 +839,7 @@ def hn_who_is_hiring():
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
-           "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers}
+           "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs}
 
 
 # --- pipeline ----------------------------------------------------------------
@@ -843,6 +901,8 @@ def fetch_all():
     tasks = [(r["company"], r["ats"], r["slug"], r.get("only") or None) for r in rows if r["ats"] in SOURCES]
     if load_config().get("google_careers_search"):
         tasks.append(("Google", "googlecareers", "search", None))
+    if load_config().get("amazon_jobs_search"):
+        tasks.append(("Amazon", "amazonjobs", "amazon", None))
     errors, jobs = [], []
 
     def run(t):

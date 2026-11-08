@@ -1,0 +1,46 @@
+{
+ "error": null,
+ "hits": 3,
+ "facets": {},
+ "jobs": [
+  {
+   "id_icims": "10596386",
+   "title": "Sr Product Manager - Tech, Integration Lead for Transit Time Authority",
+   "job_path": "/en-gb/jobs/10596386/sr-product-manager-tech-integration-lead",
+   "normalized_location": "London, England, GBR",
+   "location": "GB, London",
+   "posted_date": "November  5, 2026",
+   "business_category": "transportation-and-logistics",
+   "company_name": "Amazon EU SARL (UK Branch)",
+   "description": "<p>Own the roadmap for transit time estimates across Europe.</p><p>You will work with science and engineering teams.</p>",
+   "basic_qualifications": "<ul><li>5+ years of product management experience</li></ul>",
+   "preferred_qualifications": "<ul><li>Experience with logistics systems</li></ul>"
+  },
+  {
+   "id_icims": "10601122",
+   "title": "Product Manager &ndash; Compliance Digital Tools, AWS Enterprise Support",
+   "job_path": "/en-gb/jobs/10601122/product-manager-compliance-digital-tools-aws",
+   "normalized_location": "London, England, GBR",
+   "location": "GB, London",
+   "posted_date": "November 7, 2026",
+   "business_category": "amazon-web-services",
+   "company_name": "AWS EMEA SARL (UK Branch)",
+   "description": "<p>Build the digital tools that keep AWS Enterprise Support compliant.</p>",
+   "basic_qualifications": "<ul><li>Bachelor's degree</li></ul>",
+   "preferred_qualifications": ""
+  },
+  {
+   "id_icims": "10588001",
+   "title": "Senior Product Marketing Manager, Veeqo",
+   "job_path": "/en-gb/jobs/10588001/senior-product-marketing-manager-veeqo",
+   "normalized_location": "London, England, GBR",
+   "location": "GB, London",
+   "posted_date": "not a date",
+   "business_category": "amazon-stores",
+   "company_name": "Amazon UK Services Ltd.",
+   "description": "<p>Tell the Veeqo story to sellers.</p>",
+   "basic_qualifications": "",
+   "preferred_qualifications": ""
+  }
+ ]
+}
