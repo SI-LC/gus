@@ -47,6 +47,10 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 What happened at the account lives in `data/events.json`, below. An older record's inline `events` and `pending_signals` are
 migrated off it by the next scan.
 
+Accounts come from `watchlist.csv` (`companies sync`), the watchlist agent, or you: `python3 -m radar.resolve --add` or the
+Companies page in the cockpit (POST `/api/company/add` with `name` and an optional `careers` address). Both look for its
+public job board first; a company with no board found is still an account (`source: manual`, no `board`) until one turns up.
+
 ## Event (`data/events.json`)
 
 Something that happened at an account which makes it worth acting on now: the reason behind a move. Key:
@@ -62,9 +66,12 @@ Something that happened at an account which makes it worth acting on now: the re
 | `added` | |
 
 Events are written by the discover agent (from a signal), the watchlist agent (from research), `radar.events sync` (from
-roles scoring 7+, the threshold being `ROLE_EVENT_SCORE`) or you (`python3 -m radar.events add`). The same link at the same
-account is one event. Age, freshness (30 days) and strength are worked out at read time. Only **fresh** events at **A or B**
-accounts reach the weekly planner.
+roles scoring 7+, the threshold being `ROLE_EVENT_SCORE`) or you, with `python3 -m radar.events add` or from the account's
+card in the cockpit (POST `/api/event`). The same link at the same account is one event. Age, freshness (30 days) and strength
+are worked out at read time. Only **fresh** events at **A or B** accounts reach the weekly planner.
+
+Dismissing an event in the cockpit sets `closed`: it stops counting but stays on record, as a move may cite it. A
+`role_posted` event can't be dismissed, since it follows its role: skip the role instead.
 
 ## Person (`data/people.json`)
 

@@ -1,0 +1,9 @@
+id: add-a-company
+requirement: I can add a company to watch from the Companies page, by name or with its careers address.
+given: scanned
+check:
+  - open Companies
+  - click "+ Add a company"
+  - see "Gus looks for its public job board."
+  - type "Quiet Co" into "Company name"
+judge: Is it clear how to add a company, and when the careers address is needed?

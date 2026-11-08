@@ -1,0 +1,13 @@
+id: add-news-to-a-company
+requirement: When I hear something about a company Gus missed, I can record it on the company's card and it counts as news there.
+given: scanned
+check:
+  - open Companies
+  - see "Harborlight"
+  - click "+ Add news"
+  - type "https://example.com/harborlight-series-b" into "Link for Harborlight"
+  - type "Raised a Series B" into "Summary for Harborlight"
+  - click "Save"
+  - see "Raised a Series B"
+  - not see "No news yet."
+judge: Is it clear where to add news about a company, what Gus needs for it, and that it has been recorded?

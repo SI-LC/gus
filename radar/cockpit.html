@@ -184,6 +184,11 @@
   .sig i { font: 11px var(--mono); font-style: normal; color: var(--muted); white-space: nowrap; }
   .sig.fresh { border-color: var(--accent); } .sig.fresh b, .sig.fresh i { color: var(--accent); }
   .sig:hover, .person-chip:hover { border-color: var(--text); }
+  .sig-wrap { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+  .sig-wrap button.x { border: 0; background: none; color: var(--muted); opacity: .5; padding: 0 4px; font-size: 14px; line-height: 1; min-height: 0; cursor: pointer; }
+  .sig-wrap:hover button.x, .sig-wrap button.x:focus-visible { opacity: 1; } .sig-wrap button.x:hover { color: var(--text); }
+  .add-event { margin-top: 8px; } .add-event summary { cursor: pointer; list-style: none; } .add-event summary::-webkit-details-marker { display: none; }
+  .add-event input[type=text], .add-event input[type=date], .add-event select { min-height: 30px; padding: 4px 8px; }
   .person-chip b { font-weight: 600; }
   .dist { display: inline-block; font: 700 11px var(--mono); padding: 1px 5px; border: 1px dashed var(--muted); color: var(--muted); vertical-align: 1px; white-space: nowrap; }
   .dist.d1 { border-color: var(--hi); color: var(--hi); } .dist.d2 { border-color: var(--mid); color: var(--mid); }
@@ -270,7 +275,7 @@ const ago = iso => {
   return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + "h ago" : Math.round(m / 1440) + "d ago";
 };
 const DAY = 864e5;
-const PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];
+let PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];  // the role stages on the board, refreshed from the server
 const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied", interviewing: "Interviewing", closed: "Finished" };
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
@@ -279,6 +284,7 @@ async function load() {
   const r = await fetch("/api/state", { cache: "no-store" });
   if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
   S = await r.json(); checkRoleFilters();
+  if (S.labels.role_stages) PIPE = S.labels.role_stages.filter(st => !["new", "skipped"].includes(st));
   if (S.setup.needed && location.hash !== "#welcome") location.hash = "#welcome";
   else if (location.hash === "#welcome" && !S.setup.can_run) location.hash = "#pipeline";
   render();
@@ -311,8 +317,9 @@ const newRoles = () => S.jobs.filter(j => roleMatch(j, roleView, roleWhere, role
   .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
 const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
 const daysAgo = n => n == null ? "undated" : n === 0 ? "today" : n + "d ago";
-const sigChip = e => `<a class="sig ${e.fresh ? "fresh" : ""}" href="${link(e.url)}" target="_blank" rel="noopener" title="${esc(e.summary)}">
-  <b>${esc(S.labels.events[e.type] || e.type)}</b> ${esc((e.summary || "").slice(0, 60))} <i>${daysAgo(e.age_days)}</i></a>`;
+const sigChip = (e, edit) => `<span class="sig-wrap"><a class="sig ${e.fresh ? "fresh" : ""}" href="${link(e.url)}" target="_blank" rel="noopener" title="${esc(e.summary)}${e.source ? " · from " + esc(String(e.source).split(":")[0]) : ""}">
+  <b>${esc(S.labels.events[e.type] || e.type)}</b> ${esc((e.summary || "").slice(0, 60))} <i>${daysAgo(e.age_days)}</i></a>${edit && e.id && e.type !== "role_posted" ? `<button class="mini x" title="Not news any more. It stops counting, and stays on record." aria-label="Dismiss" onclick="dismissEvent(${jsq(e.id)})">×</button>` : ""}</span>`;
+const eventsAt = name => (S.events || []).filter(e => e.account === name && !e.closed);
 const dist = p => p.distance || { label: "3rd+", certain: false, paths: [] };
 const distBadge = p => { const d = dist(p);
   return `<span class="dist d${d.hops || 3} ${d.certain ? "sure" : ""}" title="${d.certain ? "Confirmed" : "Estimated from your connections, not confirmed"}">${esc(d.label)}</span>`; };
@@ -381,7 +388,7 @@ function costs() {
   const u = S.usage, max = Math.max(0.01, ...u.days.map(d => d.ai + d.x));
   const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   return `<h1>Usage</h1>
-    <p class="lede">How much AI Gus has used. On a Claude plan, this isn't money you pay.</p>
+    <p class="lede">What Gus's AI runs have used, by day and by task. On a Claude plan, the Claude part isn't money you pay.</p>
     <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
       ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     <div class="section">Last 14 days</div>
@@ -592,9 +599,9 @@ const V = {
     const planned = new Set(mine.map(m => m.account));
     const firing = S.accounts.filter(a => ["A", "B"].includes(a.tier) && a.fresh && !planned.has(a.name))
       .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
-    const steps = [["Signals", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
+    const steps = [["Events", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
     return `<h1>To do <span class="count">${todo.length}</span></h1>
-      <p class="lede">Week ${Number(wk.split("-W")[1])}: people worth contacting now, with a message ready to send.</p>
+      <p class="lede">Week ${Number(wk.split("-W")[1])}: the people worth contacting now, each with a reason and a draft. You edit it and press send.</p>
       <div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>
       ${meetingsBlock()}
       ${followUpsBlock()}
@@ -610,7 +617,7 @@ const V = {
     const q = (window._acctq || "").toLowerCase();
     const list = S.accounts.filter(a => !q || (a.name + " " + (a.product || "")).toLowerCase().includes(q));
     const card = a => {
-      const ppl = peopleAt(a.name), near = ppl.map(p => dist(p).hops).filter(Boolean);
+      const ppl = peopleAt(a.name), evs = eventsAt(a.name), near = ppl.map(p => dist(p).hops).filter(Boolean);
       const warm = ppl.filter(p => dist(p).hops === 1).length, closest = near.length ? Math.min(...near) : null;
       return `<article class="card acct">
         <div class="acct-head">
@@ -624,7 +631,8 @@ const V = {
         </div>
         ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · London: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
         ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
-        ${a.events.length ? `<div class="chips">${a.events.slice(0, 4).map(sigChip).join("")}</div>` : `<div class="sub" style="margin-top:8px">No recent news yet.</div>`}
+        ${evs.length ? `<div class="chips">${evs.slice(0, 6).map(e => sigChip(e, true)).join("")}${evs.length > 6 ? `<span class="sub">+${evs.length - 6} older</span>` : ""}</div>` : `<div class="sub" style="margin-top:8px">No news yet.</div>`}
+        ${eventForm(a.name)}
         ${ppl.length ? `<div class="chips">${ppl.map(personChip).join("")}</div>` : `<div class="sub" style="margin-top:6px">No contacts found yet.</div>`}
       </article>`;
     };
@@ -635,7 +643,12 @@ const V = {
         <td><a href="${link(g.url)}" target="_blank" rel="noopener">${esc(g.board)}</a> <span class="sub">· ${g.open_roles} open role${g.open_roles === 1 ? "" : "s"}</span></td>
         <td class="row"><button class="primary" onclick="boardGuess(${jsq(g.name)}, true)">It's theirs</button> <button onclick="boardGuess(${jsq(g.name)}, false)">Not them</button></td></tr>`).join("")}</table>` : "";
     return `<h1>Companies <span class="count">${S.accounts.length}</span></h1>
-      <p class="lede">The companies you're aiming for, their latest news and who to talk to.</p>
+      <p class="lede">The companies you're aiming for, by tier, with what's happened at each and who to talk to there.</p>
+      <details class="add-event" style="margin:0 0 12px"><summary class="sub">+ Add a company</summary>
+        <div class="row" style="margin-top:6px"><input type="text" id="add-co-name" placeholder="Company name" aria-label="Company name" style="flex:1">
+          <input type="text" id="add-co-careers" placeholder="Careers page address (optional, but surer)" aria-label="Careers address" style="flex:2">
+          <button class="primary" id="add-co-go" onclick="addCompany()">Add</button></div>
+        <p class="sub" style="margin:6px 0 0">Gus looks for its public job board. Companies on Workday, SuccessFactors, Teamtailor or Gem need the careers address.</p></details>
       <div class="row" style="margin-bottom:8px"><input type="text" placeholder="Filter companies" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" style="flex:1;max-width:360px"></div>` + lookAt +
       tiers.map(t => { const rows = list.filter(a => a.tier === t).sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
         return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
@@ -660,7 +673,7 @@ const V = {
           ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>
           ${roleExtras(j)}</div>`;
       }).join("") + `</div>`; }).join("");
-    return `<h1>Pipeline</h1><p class="lede">Who you're talking to and where each application stands.</p>
+    return `<h1>Pipeline</h1><p class="lede">Every conversation and application, by stage. Move a card on as things happen.</p>
       ${meetingsBlock()}
       ${ppl.length || S.jobs.some(j => PIPE.includes(j.stage)) ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions" style="justify-content:center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
       <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
@@ -668,7 +681,7 @@ const V = {
   },
   roles() {
     const rows = newRoles();
-    return `<h1>Role Inbox <span class="count">${rows.length}</span></h1><p class="lede">New roles, best first. Shortlist the ones you'd apply for and skip the rest.</p>
+    return `<h1>Role Inbox <span class="count">${rows.length}</span></h1><p class="lede">New roles scored against your profile, best first. Shortlist the ones you'd apply for and skip the rest.</p>
       ${getStarted()}
       ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView")}
       ${chipRow("Where", [...S.places.map(p => [p, esc(p)]), ["all", "All"]], roleWhere, "roleWhere")}
@@ -688,7 +701,7 @@ const V = {
     const tab = (location.hash.split("/")[1] || "ai");
     const tabs = SETTINGS_TABS.map(([k, l]) => `<a href="#settings/${k}" class="${k === tab ? "on" : ""}">${l}</a>`).join("");
     const body = (SETTINGS_TABS.find(t => t[0] === tab) || SETTINGS_TABS[0])[2]();
-    return `<h1>Settings</h1><p class="lede">Choose what Gus looks for. Changes save by themselves.</p>
+    return `<h1>Settings</h1><p class="lede">What Gus looks for, where, and how it runs. Changes save by themselves.</p>
       <div class="tabs" role="tablist">${tabs}</div>${body}`;
   },
   health() {
@@ -1000,6 +1013,28 @@ async function startRun(job) {
   toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : job === "sources" ? "Checking job sources. Only those due make requests, and it can take a while" : "Quick check started. It takes about 2 minutes");
   await load(); watchRun();
 }
+function eventForm(name) {
+  const k = "ev" + name.replace(/[^a-z0-9]/gi, "");
+  return `<details class="add-event" id="${k}"><summary class="sub">+ Add news</summary>
+    <div class="row" style="margin-top:6px"><select id="${k}-type" aria-label="What happened at ${esc(name)}">${(S.labels.event_types || []).map(t => `<option value="${t}">${esc(S.labels.events[t] || t)}</option>`).join("")}</select>
+      <input type="date" id="${k}-date" value="${new Date().toISOString().slice(0, 10)}" aria-label="When, at ${esc(name)}"></div>
+    <div class="row" style="margin-top:6px"><input type="text" id="${k}-url" placeholder="Link" aria-label="Link for ${esc(name)}" style="flex:1">
+      <input type="text" id="${k}-summary" placeholder="One line on what happened" aria-label="Summary for ${esc(name)}" style="flex:2">
+      <button class="primary" onclick="addEvent(${jsq(name)}, ${jsq(k)})">Save</button></div></details>`;
+}
+async function addEvent(account, k) {
+  const v = id => ($(k + "-" + id) || {}).value || "";
+  if (await post("/api/event", { account, type: v("type"), date: v("date"), url: v("url").trim(), summary: v("summary") })) { toast("Added"); load(); }
+}
+async function addCompany() {
+  const name = $("add-co-name").value.trim(), careers = $("add-co-careers").value.trim(), b = $("add-co-go");
+  if (!name) { toast("Needs a company name"); return; }
+  b.disabled = true; b.textContent = "Looking…";
+  const d = await post("/api/company/add", { name, careers });
+  if (d) { toast(d.board ? `${d.name} added: ${d.board}, ${d.open_roles} open role${d.open_roles === 1 ? "" : "s"}` : `${d.name} added, but no public job board found yet. Gus keeps looking`); load(); }
+  else { b.disabled = false; b.textContent = "Add"; }
+}
+async function dismissEvent(id) { if (await post("/api/event", { id, dismissed: true })) { toast("Dismissed"); load(); } }
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
 async function setFavourite(name, favourite) { if (await post("/api/account", { name, favourite })) { toast(favourite ? `${name} is a favourite` : "Removed from favourites"); load(); } }
 async function vetoCo(name) {

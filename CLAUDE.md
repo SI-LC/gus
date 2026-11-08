@@ -47,4 +47,4 @@ with `--no-verify`.
 
 - Never submit applications, enter credentials or message anyone on the candidate's behalf. Draft only.
 - Never invent experience or numbers. Use UK spelling.
-- To add a company, append to `watchlist.csv` and verify the slug returns jobs before saving.
+- To add a company, use `python3 -m radar.resolve --add "Name"` (or the Companies page), which verifies the board returns jobs before saving. Never append to `watchlist.csv` unchecked.

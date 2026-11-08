@@ -1,11 +1,13 @@
 # Gus
 
-**An agentic, account-based job search.** It watches the companies you care about, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
+**An agentic, account-based job search.** It watches the companies you care about, notices what happens at each, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 
 ```
- SIGNALS     job boards · job search sites · newsletters · funding news · social · email
+ SIGNALS     raw items from job boards · job search sites · newsletters · funding news · social · email
     ↓
- ACCOUNTS    target companies, tiered A/B/C, with the people who matter
+ ACCOUNTS    target companies, tiered A/B/C, with the people mapped at each
+    ↓
+ EVENTS      what happened there, dated and linked: funding, a new leader, a post about hiring, a strong role
     ↓
  MOVES       at most 5 a week: one person, one fresh event, one draft
     ↓
@@ -13,6 +15,8 @@
     ↓
  PIPELINE    replies → conversations → interviews
 ```
+
+The objects behind this, and the fields each one carries, are in [`docs/objects.md`](docs/objects.md).
 
 ## Why this exists
 
@@ -34,18 +38,18 @@ Gus does one full run a day, or whenever you press **Full run**. It's one job, i
 
 Scanning uses no AI. Scoring does, but only for new roles. **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
-**No signal, no move.** A move is rejected in code unless it cites a dated, linked signal from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently.
+**No event, no move.** A move is rejected in code unless it cites a dated, linked event from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently. Raw signals never count on their own: an agent has to turn one into an event first.
 
 ## The cockpit
 
-A small web app, and the place you work:
+A small web app, and the place you work. Each page is one object from the list above:
 
-- **Role Inbox:** new roles by score, filtered by place and type
-- **Pipeline:** conversations and applications, and the page the cockpit opens on
-- **To do:** this week's outreach moves, each with why now, your angle and a draft, plus funnel numbers
-- **Companies:** target companies by tier, with their signals and people
-- **Usage:** what AI runs use, by day and task
-- **Settings:** AI provider, matching, schedule, job sources and their limits, email, keys and your profile
+- **Role Inbox:** new roles scored against your profile, best first, filtered by place and type. Shortlist or skip each one
+- **Pipeline:** every conversation and application by stage, and the page the cockpit opens on
+- **To do:** this week's moves, each with the event behind it, your angle and a draft, plus the funnel from events to interviews
+- **Companies:** your accounts by tier, with what's happened at each and who to talk to there. Add a company, set its tier, mark the ones you love, add news Gus missed or dismiss news that isn't
+- **Usage:** what the AI runs have used, by day and by task
+- **Settings:** AI provider, matching, schedule, job sources and their limits, newsletters, email, keys and your profile
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
 
@@ -78,7 +82,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Make it yours
 
-- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of ten job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address. A company whose roles sit on its parent's board (Base44 on Wix's) takes the parent's slug and a pattern its titles must match in the `only` column of `watchlist.csv`.
+- **Add a company:** type its name under Companies in the cockpit, or run `python3 -m radar.resolve --add "Acme"`. Either way Gus works out which of ten job board systems it uses. Giving its careers address is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address. A company whose roles sit on its parent's board (Base44 on Wix's) takes the parent's slug and a pattern its titles must match in the `only` column of `watchlist.csv`.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources. Google has no job board to read, so paste a Google Careers search there too: Gus reads its first page once a day.
