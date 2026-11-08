@@ -25,6 +25,7 @@ class Sync(unittest.TestCase):
         return out, json.loads(self.files["EVENTS"].read_text()) if self.files["EVENTS"].exists() else {}
 
     def test_a_good_open_role_is_an_event_until_it_closes(self):
+        self.write("COMPANIES", {"Acme": {"status": "watched"}})
         job = {"company": "Acme", "title": "PM", "url": "https://x/j", "score": 8, "stage": "new", "posted": self.fresh}
         out, ev = self.sync({"gh:acme:1": job})
         self.assertEqual(out["role_events"], 1)
@@ -38,10 +39,14 @@ class Sync(unittest.TestCase):
         out, _ = self.sync({"gh:acme:1": dict(job, ad_closed="2026-11-07T00:00:00")})
         self.assertEqual(out["closed"], 0, "closing is recorded once")
 
-    def test_roles_under_the_threshold_or_skipped_are_not_events(self):
-        _, ev = self.sync({"a": {"company": "Acme", "title": "PM", "url": "u", "score": E.ROLE_EVENT_SCORE - 1, "stage": "new"},
-                           "b": {"company": "Acme", "title": "PM", "url": "u", "score": 9, "stage": "skipped"}})
+    def test_roles_under_the_threshold_skipped_or_at_no_account_are_not_events(self):
+        self.write("COMPANIES", {"Acme": {"status": "watched"}})
+        self.write("EVENTS", {"role:c": {"account": "Stranger", "type": "role_posted", "url": "u", "date": "2026-11-01"}})
+        out, ev = self.sync({"a": {"company": "Acme", "title": "PM", "url": "u", "score": E.ROLE_EVENT_SCORE - 1, "stage": "new"},
+                             "b": {"company": "Acme", "title": "PM", "url": "u", "score": 9, "stage": "skipped"},
+                             "c": {"company": "Stranger", "title": "PM", "url": "u", "score": 9, "stage": "new"}})
         self.assertEqual(ev, {})
+        self.assertEqual(out["dropped"], 1)
 
     def test_inline_account_events_and_pending_signals_move_off_the_account(self):
         self.write("SIGNALS", {"feed:1": {"source": "Sifted", "url": "https://x/s", "status": "new"}})
