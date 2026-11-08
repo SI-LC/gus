@@ -25,7 +25,8 @@ def step(page, text):
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'see "(.+)"', text):
         page.locator("#main").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
-    elif m := re.fullmatch(r'not see "(.+)"', text):
+    elif m := re.fullmatch(r'not see "(.+)"', text):  # gives the page the same time to take something away as `see` gives it to show something
+        page.locator("#main").get_by_text(m[1]).first.wait_for(state="detached", timeout=WAIT_MS)
         assert m[1] not in page.locator("#main").inner_text(), f'"{m[1]}" is on the page'
     elif m := re.fullmatch(r'status bar says "(.+)"', text):
         page.locator("#ticker").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
