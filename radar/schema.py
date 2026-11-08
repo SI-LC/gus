@@ -20,7 +20,7 @@ from radar.scan import DATA
 STR, INT, BOOL, LIST, DICT, NUM = str, int, bool, list, dict, (int, float)
 
 JOB_STAGES = ["new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"]
-JOB_SOURCES = ["board", "hn", "email", "x", "web", "adzuna", "jsearch"]
+JOB_SOURCES = ["board", "hn", "email", "x", "web", "adzuna", "jsearch", "manual"]
 COMPANY_STATUS = ["candidate", "watched", "maybe", "rejected"]
 TIERS = ["A", "B", "C"]
 EVENT_TYPES = ["post_hiring", "role_posted", "leader_hire", "funding", "london_office", "launch", "mention"]

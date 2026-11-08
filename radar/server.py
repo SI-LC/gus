@@ -378,6 +378,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"ok": True})
             if path == "/api/person":
                 from radar import accounts as A
+                created = None
+                if not body.get("id") and body.get("name"):  # a new person, added by hand
+                    try:
+                        body["id"], created = A.add_person(*(str(body.get(k) or "") for k in ("name", "company", "role", "url", "kind", "evidence")))
+                    except ValueError as e:
+                        return self.send(200, {"error": str(e)})
                 with locked(A.PEOPLE) as people:
                     p = people.get(body.get("id"))
                     if not p:
@@ -395,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             for k in ("degree", "via", "degree_at"):
                                 p.pop(k, None)
-                return self.send(200, {"ok": True})
+                return self.send(200, {"ok": True, "id": body["id"]} | ({"created": created} if created is not None else {}))
             if path == "/api/account":
                 with locked(COMPANIES) as companies:
                     c = companies.get(body.get("name"))

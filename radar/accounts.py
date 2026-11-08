@@ -13,6 +13,8 @@ enforced here, not left to the agent's judgement.
     python3 -m radar.accounts brief                # what the planner sees: fresh signals by account
     python3 -m radar.accounts plan FILE.json       # validate proposed moves, keep the best 5
     python3 -m radar.accounts funnel               # signals → moves → replies → conversations
+    python3 -m radar.accounts add-person "Name" "Company" [--role R] [--url U] [--kind K]
+                                                   # someone you know of, e.g. a recruiter who contacted you
 """
 from __future__ import annotations
 
@@ -248,6 +250,34 @@ def migrate():
     print(f"{added} people links from roles → {len(read(PEOPLE, {}))} people")
 
 
+def add_person(name: str, company: str, role: str = "", url: str = "", kind: str = "", evidence: str = "") -> tuple[str, bool]:
+    """Record a person by hand (an inbound recruiter, someone you've met). Returns (id, created).
+    An existing person is left as they are, apart from filling in fields they don't have yet."""
+    name, company = (name or "").strip(), (company or "").strip()
+    if not name or not company:
+        raise ValueError("Needs a name and a company")
+    known = {c.lower(): c for c in read(COMPANIES, {})}
+    if company.lower() not in known:
+        raise ValueError(f"{company} isn't a tracked account yet")
+    company = known[company.lower()]
+    if kind and kind not in KINDS:
+        raise ValueError(f"kind must be one of {KINDS}")
+    if url and not re.match(r"https?://", url):
+        raise ValueError("url must be a web link")
+    pid = person_id(name, company)
+    if not re.fullmatch(r"[a-z0-9-]+@[a-z0-9-]+", pid):
+        raise ValueError("Name and company need letters or numbers")
+    with locked(PEOPLE) as people:
+        created = pid not in people
+        p = people.setdefault(pid, {"name": name, "company": company, "stage": "mapped", "added": str(today()),
+                                    "warm": False, "source": "manual",
+                                    "history": [{"stage": "mapped", "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}]})
+        for k, v in (("role", role), ("url", url), ("kind", kind), ("evidence", evidence)):
+            if v and not p.get(k):
+                p[k] = v.strip()[:2000]
+    return pid, created
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "brief"
     if cmd == "migrate":
@@ -258,6 +288,18 @@ def main():
         plan(sys.argv[2])
     elif cmd == "funnel":
         print(json.dumps(funnel(), indent=2))
+    elif cmd == "add-person":
+        import argparse
+        ap = argparse.ArgumentParser(prog="radar.accounts add-person")
+        ap.add_argument("name"), ap.add_argument("company")
+        for f in ("role", "url", "kind", "evidence"):
+            ap.add_argument(f"--{f}", default="")
+        a = ap.parse_args(sys.argv[2:])
+        try:
+            pid, created = add_person(a.name, a.company, a.role, a.url, a.kind, a.evidence)
+        except ValueError as e:
+            sys.exit(str(e))
+        print(f"{'added' if created else 'already there'}: {pid}")
 
 
 if __name__ == "__main__":
