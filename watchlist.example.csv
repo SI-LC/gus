@@ -1,4 +1,4 @@
-company,ats,slug,sector
+company,ats,slug,sector,only
 Anthropic,greenhouse,anthropic,ai-lab
 OpenAI,ashby,openai,ai-lab
 Mistral,ashby,mistral.ai,ai-lab

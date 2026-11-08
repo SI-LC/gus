@@ -847,21 +847,25 @@ def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
 
 def fetch_all():
     rows = list(csv.DictReader(watchlist_path().open()))
-    tasks = [(r["company"], r["ats"], r["slug"]) for r in rows if r["ats"] in SOURCES]
+    # `only`: a company that shares a parent's board (Base44 on Wix's) keeps just the titles matching this pattern
+    tasks = [(r["company"], r["ats"], r["slug"], r.get("only") or None) for r in rows if r["ats"] in SOURCES]
     if load_config().get("google_careers_search"):
-        tasks.append(("Google", "googlecareers", "search"))
+        tasks.append(("Google", "googlecareers", "search", None))
     errors, jobs = [], []
 
     def run(t):
-        company, ats, slug = t
+        company, ats, slug, only = t
         try:
-            return t, SOURCES[ats](company, slug), None
+            found = SOURCES[ats](company, slug)
+            if only:
+                found = [j for j in found if re.search(only, j["title"], re.I)]
+            return t, found, None
         except Exception as e:  # one dead board shouldn't stop the scan
             return t, [], (company, f"{ats}:{slug}: {e}")
 
     answered = set()
     with ThreadPoolExecutor(max_workers=6) as pool:
-        for (_, ats, slug), found, err in pool.map(run, tasks):
+        for (_, ats, slug, _), found, err in pool.map(run, tasks):
             jobs += found
             if err:
                 errors.append(err)
