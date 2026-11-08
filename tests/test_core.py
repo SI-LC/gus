@@ -587,14 +587,26 @@ class BotIdentity(unittest.TestCase):
 
     def test_user_agent_names_the_repo_and_release(self):
         from radar import scan
-        self.assertRegex(scan.UA["User-Agent"], r"^gus/(\d+\.\d+\.\d+|dev) \(\+https://github\.com/SI-LC/gus; .+\)$")
+        self.assertRegex(scan.ua()["User-Agent"], r"^gus/(\d+\.\d+\.\d+|dev) \(\+https://github\.com/SI-LC/gus; .+\)$")
 
     def test_version_without_git_is_dev(self):
         import subprocess
         from unittest import mock
         from radar import scan
-        with mock.patch.object(subprocess, "run", side_effect=OSError("no git")):
+        with mock.patch.object(subprocess, "run", side_effect=OSError("no git")), mock.patch.object(scan, "_version", (0.0, "")):
             self.assertEqual(scan.version(), "dev")
+
+    def test_a_tag_made_after_the_start_is_picked_up_within_the_hour(self):
+        """The release is tagged after the Pi has started the new code, so the header must not be fixed at import."""
+        from unittest import mock
+        from radar import scan
+        with mock.patch.object(scan, "_version", (0.0, "")):
+            with mock.patch.object(scan.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.9\n")):
+                self.assertEqual(scan.version(), "9.9.9")
+            with mock.patch.object(scan.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.10\n")):
+                self.assertEqual(scan.version(), "9.9.9", "cached for an hour")
+                scan._version = (0.0, scan._version[1])  # the hour is up
+                self.assertEqual(scan.version(), "9.9.10", "read again")
 
     def test_requests_to_one_host_are_paced(self):
         import io

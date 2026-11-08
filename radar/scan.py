@@ -36,22 +36,32 @@ JOBS = DATA / "jobs.json"
 LOOKED_UP = DATA / "board_locations.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
 REPO = "https://github.com/SI-LC/gus"
+VERSION_KEEP = 3600  # seconds before the release tag is read again
+_version = (0.0, "")  # (good until, release)
 
 
 def version() -> str:
     """The release this code is from, read from its git tag, so a site operator seeing Gus in their logs knows which one asked.
-    "dev" when there is no tag or no git."""
+    "dev" when there is no tag or no git. Read again every hour, because the release is tagged after the Pi has started the
+    new code: the service picks the tag up without a restart."""
+    global _version
+    if _version[0] > time.monotonic():
+        return _version[1]
     try:
         out = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
                              capture_output=True, text=True, timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         out = ""
-    return out.lstrip("v") or "dev"
+    _version = (time.monotonic() + VERSION_KEEP, out.lstrip("v") or "dev")
+    return _version[1]
 
 
-# Who is asking: the convention is name/version and, in brackets, a link where the site's owner can read what the bot is
-# and reach whoever runs it. A bot that can be identified and is plainly small is the kind nobody bothers to block.
-UA = {"User-Agent": f"gus/{version()} (+{REPO}; a personal job-search radar)", "Accept-Encoding": "gzip"}
+def ua() -> dict:
+    """Who is asking: the convention is name/version and, in brackets, a link where the site's owner can read what the bot is
+    and reach whoever runs it. A bot that can be identified and is plainly small is the kind nobody bothers to block."""
+    return {"User-Agent": f"gus/{version()} (+{REPO}; a personal job-search radar)", "Accept-Encoding": "gzip"}
+
+
 HOST_PAUSE = 1.5  # seconds between any two requests to one host, whichever threads send them
 _hosts: dict = {}  # host -> the moment it may next be asked
 _hosts_lock = threading.Lock()
@@ -98,7 +108,7 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory."""
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
-    req = urllib.request.Request(url, data=body, headers={**UA, **(headers or {})})
+    req = urllib.request.Request(url, data=body, headers={**ua(), **(headers or {})})
     _pace(urlparse(url).netloc.lower())
     if getattr(_limit, "deadline", None) is not None:
         return _fetch_by(req, _limit.deadline)

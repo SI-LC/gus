@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from radar import jobs as J
 from radar.jobs import same_company, same_title  # one definition, shared with scan and links
-from radar.scan import DATA, JOBS, UA, left_out, load_config, matches, strip_html
+from radar.scan import DATA, JOBS, left_out, load_config, matches, strip_html, ua
 from radar.settings import secret
 from radar.store import locked
 
@@ -48,7 +48,7 @@ class Failed(Exception):
 
 def call(url, headers=None):
     """Errors carry only a status code: Adzuna's key is in the address, and it must never reach a log."""
-    req = urllib.request.Request(url, headers={**UA, "Accept-Encoding": "identity", **(headers or {})})
+    req = urllib.request.Request(url, headers={**ua(), "Accept-Encoding": "identity", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.load(r)
