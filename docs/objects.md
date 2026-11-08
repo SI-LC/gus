@@ -18,7 +18,7 @@ A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `
 | `history` | `[{stage, at}]`, appended on every stage change |
 | `score`, `why`, `flags` | Triage: 1–10 against the profile, null until scored; under 5 goes straight to `skipped` |
 | `score_before_salary` | When a stated salary lowered the score |
-| `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch` |
+| `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed |
 | `note`, `folder` | Yours: a note and where the application files are |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
