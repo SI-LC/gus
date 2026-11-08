@@ -326,10 +326,11 @@ class ClosedAds(unittest.TestCase):
         self.scan(store); self.scan(store)
         self.assertTrue(all("ad_closed" not in j for j in store.values()))
 
-    def test_closed_roles_stop_being_signals(self):
-        from radar.accounts import events
-        jobs = {"j": {"company": "Acme", "score": 9, "title": "PM", "url": "u", "ad_closed": "x", "stage": "new"}}
-        self.assertEqual(events("Acme", {}, jobs), [])
+    def test_closed_roles_stop_being_events(self):
+        from radar import events as E
+        stored = {"role:j": {"account": "Acme", "type": "role_posted", "url": "u", "date": "2026-11-01", "closed": "x"},
+                  "role:k": {"account": "Acme", "type": "role_posted", "url": "v", "date": "2026-11-01"}}
+        self.assertEqual([e["id"] for e in E.for_account("Acme", stored)], ["role:k"])
 
 
 class FollowUps(unittest.TestCase):

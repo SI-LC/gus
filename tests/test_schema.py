@@ -7,12 +7,13 @@ from pathlib import Path
 from radar import schema
 
 GOOD = {
-    "companies.json": {"Acme": {"status": "watched", "tier": "A", "fit": 8, "fit_why": "Right domain",
-                                "events": [{"type": "funding", "summary": "Series B", "url": "https://x/1", "date": "2026-11-01"}]}},
+    "companies.json": {"Acme": {"status": "watched", "tier": "A", "fit": 8, "fit_why": "Right domain", "source": "discover"}},
+    "events.json": {"acme:funding:2026-11-01": {"account": "Acme", "type": "funding", "summary": "Series B", "url": "https://x/1",
+                                                "date": "2026-11-01", "source": "signal:feed:1"}},
     "people.json": {"sam-jones@acme": {"name": "Sam Jones", "company": "Acme", "stage": "mapped", "kind": "peer_pm", "warm": False}},
     "jobs.json": {"gh:acme:1": {"company": "Acme", "title": "PM", "url": "https://x/j", "stage": "new", "score": None, "source": "board"}},
     "moves.json": {"2026-W45:sam-jones@acme": {"week": "2026-W45", "account": "Acme", "person_id": "sam-jones@acme",
-                                               "signal": {"type": "funding", "url": "https://x/1", "date": "2026-11-01"},
+                                               "event_id": "acme:funding:2026-11-01",
                                                "why_now": "a", "angle": "b", "draft": "c", "status": "todo", "outcome": None}},
     "signals.json": {"feed:1": {"source": "Lenny", "url": "https://x/s", "status": "new"}},
 }
@@ -39,9 +40,26 @@ class Schema(unittest.TestCase):
         self.assertIn("gh:acme:1: stage='open' isn't one of ['new', 'shortlisted', 'preparing', 'applied', 'interviewing', 'closed', 'skipped']", out["jobs"])
         self.assertIn("gh:acme:1: score must be 1-10", out["jobs"])
 
-    def test_bad_event_is_named_but_a_field_sync_migrates_is_not(self):
-        out = self.run_check(**{"companies.json": {"Acme": {"why_it_fits": "x", "events": [{"type": "funding", "summary": "no link"}]}}})
-        self.assertEqual(out["companies"], ["Acme: events[0] needs type, summary, url, date"])
+    def test_fields_the_next_scan_migrates_are_not_flagged(self):
+        out = self.run_check(**{"companies.json": {"Acme": {"why_it_fits": "x", "events": [{"type": "funding"}], "pending_signals": []}}})
+        self.assertEqual(out, {})
+
+    def test_bad_event_is_named(self):
+        out = self.run_check(**{"events.json": {"acme:funding:2026-11-01": {"account": "Nope", "type": "ipo", "url": "x/1", "date": "Nov 1",
+                                                                            "source": "guess"}}})
+        self.assertEqual(out["events"], ["acme:funding:2026-11-01: type='ipo' isn't one of " + str(schema.EVENT_TYPES),
+                                         "acme:funding:2026-11-01: account 'Nope' isn't in companies.json",
+                                         "acme:funding:2026-11-01: url isn't a web link",
+                                         "acme:funding:2026-11-01: date should be YYYY-MM-DD",
+                                         "acme:funding:2026-11-01: source should start with one of " + str(schema.EVENT_SOURCES)])
+
+    def test_move_must_point_at_a_recorded_event(self):
+        out = self.run_check(**{"moves.json": {"2026-W45:sam-jones@acme": {"event_id": "acme:funding:1999-01-01"}}})
+        self.assertEqual(out["moves"], ["2026-W45:sam-jones@acme: event 'acme:funding:1999-01-01' isn't in events.json"])
+
+    def test_job_text_kind_is_one_of_two(self):
+        out = self.run_check(**{"jobs.json": {"gh:acme:1": {"text_kind": "blurb"}}})
+        self.assertEqual(out["jobs"], ["gh:acme:1: text_kind='blurb' isn't one of ['posting', 'summary']"])
 
     def test_move_must_point_at_known_account_and_person(self):
         out = self.run_check(**{"moves.json": {"2026-W45:sam-jones@acme": {"account": "Nope", "person_id": "who@nope"}}})

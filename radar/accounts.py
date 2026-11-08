@@ -1,18 +1,19 @@
 """Account-based job search: accounts (companies), the people mapped at each,
 dated events that make an account worth acting on, and the weekly moves.
 
-data/companies.json   accounts: tier, fit, events [{type, summary, url, date}]
+data/companies.json   accounts: tier, fit, research
+data/events.json      dated, linked things that happened at an account (radar.events)
 data/people.json      people per account: role, kind, evidence, warm path, stage
-data/moves.json       weekly moves: one person + one fresh signal + angle + draft
+data/moves.json       weekly moves: one person + one fresh event + angle + draft
 
-A move is only accepted if it cites a dated signal from the last FRESH_DAYS days
-with a link, at an A or B account, to a person mapped there with evidence. That's
-enforced here, not left to the agent's judgement.
+A move is only accepted if it cites an event from the last FRESH_DAYS days at an A or B
+account, to a person mapped there with evidence. That's enforced here, not left to the
+agent's judgement.
 
     python3 -m radar.accounts migrate              # one-off: people from roles → people.json, tiers
-    python3 -m radar.accounts brief                # what the planner sees: fresh signals by account
+    python3 -m radar.accounts brief                # what the planner sees: fresh events by account
     python3 -m radar.accounts plan FILE.json       # validate proposed moves, keep the best 5
-    python3 -m radar.accounts funnel               # signals → moves → replies → conversations
+    python3 -m radar.accounts funnel               # events → moves → replies → conversations
     python3 -m radar.accounts add-person "Name" "Company" [--role R] [--url U] [--kind K]
                                                    # someone you know of, e.g. a recruiter who contacted you
 """
@@ -23,21 +24,18 @@ import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 
+from radar import events as E
+from radar.events import EVENTS, FRESH_DAYS, parse_date
 from radar.scan import DATA, JOBS
 from radar.store import locked
 
 COMPANIES = DATA / "companies.json"
 PEOPLE = DATA / "people.json"
 MOVES = DATA / "moves.json"
-FRESH_DAYS = 30
 MAX_MOVES = 5
 COOLDOWN_DAYS = 21  # don't contact the same account again this soon without a new signal
 
-# how strongly each kind of event says "act now"
-STRENGTH = {"post_hiring": 5, "role_posted": 4, "leader_hire": 4, "funding": 3, "london_office": 3,
-            "launch": 2, "mention": 1}
-EVENT_LABEL = {"post_hiring": "Posted about hiring", "role_posted": "Role posted", "leader_hire": "New product leader",
-               "funding": "Funding", "london_office": "London office", "launch": "Launch in your area", "mention": "In the news"}
+EVENT_LABEL = E.LABEL
 KINDS = ["product_leader", "hiring_manager", "peer_pm", "recruiter", "warm", "announcer"]
 PERSON_STAGES = ["mapped", "contacted", "replied", "conversation", "referred", "closed"]
 OUTCOMES = ["no_reply", "replied", "conversation", "interview", "referral", "not_now"]
@@ -60,18 +58,6 @@ def person_id(name, company):
     return f"{slug(name)}@{slug(company)}"
 
 
-def parse_date(s):
-    if not s:
-        return None
-    if isinstance(s, (int, float)):  # epoch seconds (Reddit) or milliseconds
-        return datetime.fromtimestamp(s / 1000 if s > 1e11 else s, timezone.utc).date()
-    try:
-        return datetime.fromisoformat(str(s).replace("Z", "+00:00")).date()
-    except ValueError:
-        m = re.match(r"(\d{4})-(\d{2})(?:-(\d{2}))?", str(s))
-        return date(int(m[1]), int(m[2]), int(m[3] or 1)) if m else None
-
-
 def read(path, default):
     try:
         return json.loads(path.read_text())
@@ -90,21 +76,9 @@ def tier(c: dict) -> str:
     return "A" if fit >= 8 else "B" if fit >= 7 else "C"
 
 
-def events(name: str, c: dict, jobs: dict) -> list[dict]:
-    """Stored events plus live roles scoring 7+ (derived, so they're always current)."""
-    ev = [dict(e) for e in c.get("events", []) if e.get("url")]
-    for j in jobs.values():
-        if j.get("company") == name and (j.get("score") or 0) >= 7 and not j.get("ad_closed") and j.get("stage") not in ("skipped", "closed"):
-            # the company's own posting date; when we first saw it only if the board doesn't say
-            posted = parse_date(j.get("posted")) or parse_date(j.get("first_seen"))
-            ev.append({"type": "role_posted", "summary": f"{j['title']} ({j['score']}/10)", "url": j["url"],
-                       "date": str(posted) if posted else None, "job_id": j["id"]})
-    for e in ev:
-        d = parse_date(e.get("date"))
-        e["age_days"] = (today() - d).days if d else None
-        e["fresh"] = d is not None and e["age_days"] <= FRESH_DAYS
-        e["strength"] = STRENGTH.get(e.get("type"), 1)
-    return sorted(ev, key=lambda e: (not e["fresh"], -e["strength"], e["age_days"] if e["age_days"] is not None else 999))
+def events(name: str, c: dict | None = None, jobs: dict | None = None, stored: dict | None = None) -> list[dict]:
+    """An account's events from data/events.json, fresh and strong first. `c` and `jobs` are accepted for older callers."""
+    return E.for_account(name, read(EVENTS, {}) if stored is None else stored)
 
 
 def last_touch(account: str, moves: dict):
@@ -116,31 +90,41 @@ def last_touch(account: str, moves: dict):
 def brief() -> dict:
     """Everything the weekly planner needs, already filtered to what's actionable."""
     from radar.network import distances
-    companies, people, jobs, moves = read(COMPANIES, {}), read(PEOPLE, {}), read(JOBS, {}), read(MOVES, {})
+    E.sync()
+    companies, people, moves, stored = read(COMPANIES, {}), read(PEOPLE, {}), read(MOVES, {}), read(EVENTS, {})
     dist = distances(people)
     out = []
     for name, c in companies.items():
         t = tier(c)
         if t not in ("A", "B"):
             continue
-        fresh = [e for e in events(name, c, jobs) if e["fresh"]]
+        fresh = [e for e in events(name, stored=stored) if e["fresh"]]
         if not fresh:
             continue
         touched = last_touch(name, moves)
         ppl = [dict(p, id=pid) for pid, p in people.items() if p.get("company") == name and p.get("stage") != "closed"]
         out.append({
             "account": name, "tier": t, "fit": c.get("fit"), "why_it_fits": c.get("fit_why"),
-            "fresh_signals": fresh[:5],
+            "fresh_events": fresh[:5],
             "people": [{**{k: p.get(k) for k in ("id", "name", "role", "kind", "warm", "evidence", "url", "stage", "confidence")},
                         "distance": dist[p["id"]]} for p in ppl],
             "last_contacted": str(touched) if touched else None,
             "cooling_down": bool(touched and (today() - touched).days < COOLDOWN_DAYS),
         })
-    out.sort(key=lambda a: (a["tier"], -max(e["strength"] for e in a["fresh_signals"]), -(a["fit"] or 0)))
+    out.sort(key=lambda a: (a["tier"], -max(e["strength"] for e in a["fresh_events"]), -(a["fit"] or 0)))
     return {"week": week_id(), "accounts": out}
 
 
-def validate(m: dict, companies, people, jobs, moves) -> list[str]:
+def resolve_event(m: dict, stored: dict) -> dict | None:
+    """The stored event a proposed move points at: by `event_id`, or by the url of an older `signal` dict."""
+    if m.get("event_id") in stored:
+        return dict(stored[m["event_id"]], id=m["event_id"])
+    url = (m.get("signal") or {}).get("url")
+    eid = E.by_url(stored, m.get("account"), url) if url else None
+    return dict(stored[eid], id=eid) if eid else None
+
+
+def validate(m: dict, companies, people, stored, moves) -> list[str]:
     errs = []
     acct = m.get("account")
     c = companies.get(acct)
@@ -153,17 +137,18 @@ def validate(m: dict, companies, people, jobs, moves) -> list[str]:
         errs.append("person isn't mapped at this account")
     elif not (p.get("url") and (p.get("evidence") or p.get("warm"))):
         errs.append("person has no evidence link")
-    sig = m.get("signal") or {}
-    d = parse_date(sig.get("date"))
-    if not sig.get("url"):
-        errs.append("signal has no link")
-    if not d:
-        errs.append("signal has no date")
+    ev = resolve_event(m, stored)
+    d = parse_date(ev.get("date")) if ev else None
+    if not ev:
+        errs.append("event_id isn't one of this account's recorded events (record it in data/events.json first)")
+    elif ev.get("account") != acct:
+        errs.append(f"event belongs to {ev.get('account')!r}, not {acct!r}")
+    elif ev.get("closed"):
+        errs.append("that role has closed")
+    elif not d:
+        errs.append("event has no date")
     elif (today() - d).days > FRESH_DAYS:
-        errs.append(f"signal is {(today() - d).days} days old (limit {FRESH_DAYS})")
-    known = {e["url"] for e in events(acct, c, jobs)}
-    if sig.get("url") and sig["url"] not in known:
-        errs.append("signal isn't one of this account's recorded events (add it to the account first)")
+        errs.append(f"event is {(today() - d).days} days old (limit {FRESH_DAYS})")
     touched = last_touch(acct, moves)
     if touched and (today() - touched).days < COOLDOWN_DAYS and not (d and d > touched):
         errs.append(f"contacted {(today() - touched).days} days ago and nothing new since")
@@ -175,7 +160,8 @@ def validate(m: dict, companies, people, jobs, moves) -> list[str]:
 
 def plan(path) -> None:
     proposed = json.loads(open(path).read())
-    companies, people, jobs = read(COMPANIES, {}), read(PEOPLE, {}), read(JOBS, {})
+    E.sync()
+    companies, people, stored = read(COMPANIES, {}), read(PEOPLE, {}), read(EVENTS, {})
     wk = week_id()
     with locked(MOVES) as moves:
         open_this_week = [m for m in moves.values() if m.get("week") == wk and m.get("status") == "todo"]
@@ -183,7 +169,7 @@ def plan(path) -> None:
         used_accounts = {m["account"] for m in open_this_week}
         kept = 0
         for m in proposed:
-            errs = validate(m, companies, people, jobs, moves)
+            errs = validate(m, companies, people, stored, moves)
             if m.get("account") in used_accounts:
                 errs.append("already a move for this account this week")
             if errs:
@@ -192,11 +178,10 @@ def plan(path) -> None:
             if kept >= room:
                 print(f"  – {m['account']}: valid, but this week already has {MAX_MOVES} moves")
                 continue
-            sig = m["signal"]
+            ev = resolve_event(m, stored)
             mid = f"{wk}:{m['person_id']}"
             moves[mid] = {
-                "id": mid, "week": wk, "account": m["account"], "person_id": m["person_id"],
-                "signal": {k: sig.get(k) for k in ("type", "summary", "url", "date")},
+                "id": mid, "week": wk, "account": m["account"], "person_id": m["person_id"], "event_id": ev["id"],
                 "why_now": m["why_now"].strip(), "angle": m["angle"].strip(), "draft": m["draft"].strip(),
                 "channel": m.get("channel") or people[m["person_id"]].get("platform") or "linkedin",
                 "give_first": (m.get("give_first") or "").strip(),
@@ -204,15 +189,15 @@ def plan(path) -> None:
             }
             used_accounts.add(m["account"])
             kept += 1
-            print(f"  ✓ {m['account']} → {people[m['person_id']]['name']}: {sig.get('summary', '')[:70]}")
+            print(f"  ✓ {m['account']} → {people[m['person_id']]['name']}: {ev.get('summary', '')[:70]}")
     print(f"{kept} moves added for {wk}")
 
 
 def funnel(days=90) -> dict:
     since = today() - timedelta(days=days)
     moves = [m for m in read(MOVES, {}).values() if (parse_date(m.get("created")) or today()) >= since]
-    jobs, companies = read(JOBS, {}), read(COMPANIES, {})
-    fresh = sum(1 for n, c in companies.items() if tier(c) in ("A", "B") for e in events(n, c, jobs) if e["fresh"])
+    jobs, companies, stored = read(JOBS, {}), read(COMPANIES, {}), read(EVENTS, {})
+    fresh = sum(1 for n, c in companies.items() if tier(c) in ("A", "B") for e in events(n, stored=stored) if e["fresh"])
     reached = {"replied", "conversation", "interview", "referral"}
     conv = {"conversation", "interview", "referral"}
     return {

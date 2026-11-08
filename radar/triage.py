@@ -70,6 +70,8 @@ def score_batch(profile_path, todo):
                 j["stage"] = "skipped"
             if score >= threshold:
                 alerts.append((f"{score}/10 · {j['company']}", j["title"], r["why"], j["url"]))
+    from radar import events
+    events.sync()
     for a in alerts:
         notify(*a)
 

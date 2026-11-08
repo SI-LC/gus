@@ -69,12 +69,9 @@ def mentions():
         text = f"{lead.get('title', '')} {lead.get('text', '')}"
         for name, pat in pats.items():
             if pat.search(text):
-                sig = c[name].setdefault("pending_signals", [])
-                if lead.get("url") not in [s["url"] for s in sig]:
-                    sig.append({"title": (lead.get("title") or lead.get("text", ""))[:160],
-                                "url": lead.get("url"), "source": lead.get("source")})
-                    c[name]["reassess"] = True
-                    flagged += 1
+                lead.setdefault("company", name)  # the watchlist agent reads new signals by company
+                c[name]["reassess"] = True
+                flagged += 1
         lead["mention_checked"] = True
     save(c)
     SIGNALS.write_text(json.dumps(signals, indent=2, ensure_ascii=False))

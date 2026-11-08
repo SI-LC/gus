@@ -7,7 +7,7 @@
     ↓
  ACCOUNTS    target companies, tiered A/B/C, with the people who matter
     ↓
- MOVES       at most 5 a week: one person, one fresh signal, one draft
+ MOVES       at most 5 a week: one person, one fresh event, one draft
     ↓
  YOU         edit it, send it, log what happened
     ↓

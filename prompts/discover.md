@@ -11,7 +11,8 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 
 a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's, Exponential View),
    funding news (Sifted, TechCrunch, EU-Startups, UKTN), HN job posts, Reddit, X and Bluesky. For each one,
-   work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company` and `job_id` if known.
+   work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company`, `job_id` and
+   `event_id` for whatever it turned out to be.
    Signals of kind `jobs` can list many roles in one post, with links in brackets. Go through every listing and follow up only target
    roles open to the candidate's locations. If a remote role doesn't state its region, check before adding it.
 b. **Board sweep** (web search, every run): find target roles in the candidate's locations on *any* company's board, not
@@ -35,9 +36,12 @@ f. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 simi
 
 ## 1b. Events
 When a signal concerns an account in `data/companies.json` (funding, a new local office, a new leader in the candidate's area,
-a launch in the candidate's area, or someone posting about hiring), add it to that account's `events`:
-`{"type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url", "date": "YYYY-MM-DD"}`.
-Only with a link and a real date. These events are what weekly moves are built on.
+a launch in the candidate's area, or someone posting about hiring), record it in `data/events.json`, keyed
+`<account slug>:<type>:<YYYY-MM-DD>` (add `-2`, `-3` if that day already has one):
+`{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url",
+"date": "YYYY-MM-DD", "source": "signal:<signal id>"}`. Only with a link and a real date, and never twice for the same link at the same
+account. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
+`role_posted` event); don't record them. These events are what weekly moves are built on.
 
 ## 2. Companies
 Company research and fit assessment belong to the watchlist loop (`prompts/watchlist.md`).
@@ -54,7 +58,7 @@ mark the record `status: "candidate", "fast_tracked": true`. The loop assesses i
 - For every role in `data/jobs.json` with `score: null`, score it exactly as `prompts/triage.md`
   describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
   `stage` to `skipped`.
-- For A/B accounts with a fresh signal and fewer than 2 people mapped, run `python3 -m radar.people "<Company>"` (at most 3 per run).
+- For A/B accounts with a fresh event and fewer than 2 people mapped, run `python3 -m radar.people "<Company>"` (at most 3 per run).
 - Run `python3 -m radar.dashboard`.
 
 ## 4. Report
