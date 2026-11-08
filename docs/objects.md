@@ -9,7 +9,11 @@ Records may carry extra fields: the research agents keep what they find. What's 
 ## Role (`data/jobs.json`)
 
 A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `lever:…`, `hn:…`, `adzuna:…`,
-`email:<message id>:<n>` for roles pulled from the inbox.
+`email:<message id>:<n>` for roles pulled from the inbox. One ad is one record however many places list it: before
+adding a role, every writer asks `radar.jobs.find_match` whether Gus has it already (by id, by address without tracking
+tags, or by company and title among live roles found through another source) and, if so, records the sighting under
+`also` instead. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
+copy furthest along and moving its events and moves across.
 
 | Field | Meaning |
 |---|---|
@@ -21,6 +25,7 @@ A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed |
+| `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
 
