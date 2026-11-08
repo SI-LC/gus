@@ -27,7 +27,7 @@ from datetime import date, datetime, timedelta, timezone
 from radar import events as E
 from radar.events import EVENTS, FRESH_DAYS, parse_date
 from radar.scan import DATA, JOBS
-from radar.store import locked
+from radar.store import locked, read
 
 COMPANIES = DATA / "companies.json"
 PEOPLE = DATA / "people.json"
@@ -57,12 +57,6 @@ def slug(s):
 def person_id(name, company):
     return f"{slug(name)}@{slug(company)}"
 
-
-def read(path, default):
-    try:
-        return json.loads(path.read_text())
-    except (FileNotFoundError, ValueError):
-        return default
 
 
 def tier(c: dict) -> str:

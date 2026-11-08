@@ -18,6 +18,7 @@ import traceback
 from datetime import date, datetime
 
 from radar.scan import DATA, ROOT, load_config
+from radar.store import read
 
 STATE = DATA / "schedule_state.json"
 _lock = threading.Lock()
@@ -27,18 +28,9 @@ last: dict[str, dict] = {}     # job -> {"at", "ok", "summary", "steps"}
 progress: dict = {}            # the job running now, step by step
 
 
-def read_json(path):
-    try:
-        return json.loads(path.read_text())
-    except (FileNotFoundError, ValueError):
-        return {}
-
 
 def _state():
-    try:
-        return json.loads(STATE.read_text())
-    except (FileNotFoundError, ValueError):
-        return {}
+    return read(STATE)
 
 
 def _save(s):
@@ -86,17 +78,17 @@ def _command(*modules):
 
 
 def _counts():
-    jobs = read_json(DATA / "jobs.json")
+    jobs = read(DATA / "jobs.json")
     return {"roles": len(jobs), "strong": sum((j.get("score") or 0) >= 8 and j.get("stage") == "new" for j in jobs.values())}
 
 
 def _emails_waiting():
-    return sum(e.get("status") == "new" for e in read_json(DATA / "emails.json").values())
+    return sum(e.get("status") == "new" for e in read(DATA / "emails.json").values())
 
 
 def _moves_this_week():
     from radar.accounts import week_id
-    return sum(m.get("week") == week_id() for m in read_json(DATA / "moves.json").values())
+    return sum(m.get("week") == week_id() for m in read(DATA / "moves.json").values())
 
 
 def _watchlist_due(cfg, s):

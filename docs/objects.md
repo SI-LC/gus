@@ -142,6 +142,7 @@ The funnel's first step counts fresh events, not signals.
 - `data/network.json`: your LinkedIn connections (name, link, company, position, date; emails dropped).
 - `watchlist.csv`: the boards to scan; `companies sync` mirrors it into each account's `board`. An optional `only` column holds a pattern a role's title must match, for a company whose roles sit on its parent's board (Base44 on Wix's).
 - `data/*_state.json`, `board_errors.json`, `feed_errors.json`, `heartbeat.log`: state for the scheduler, sources, feeds and X.
+- `data/archive/signals.json`, `data/archive/events.json`: what `radar.prune` moved out after `prune_after_days` (ignored signals that became nothing, closed events no move points at). A closed or skipped role that old loses its `description` instead and gains `pruned`; the record stays so the role can't come back as new. Roles with a note, a folder or a stage past `new` are never pruned.
 
 ## How they connect
 

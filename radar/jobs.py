@@ -9,7 +9,6 @@ on the record Gus already has. `dedupe` merges what slipped through before.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -211,7 +210,8 @@ def main():
         return
     apply = "--apply" in sys.argv
     from radar.scan import JOBS
-    store = json.loads(JOBS.read_text()) if JOBS.exists() else {}
+    from radar.store import read
+    store = read(JOBS)
     for keep, group in dedupe(apply):
         j = store.get(keep) or {}
         others = [i for i in group if i != keep]
