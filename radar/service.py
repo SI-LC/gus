@@ -68,6 +68,17 @@ def _sources_on(cfg) -> bool:
     return bool(cfg.get("source_adzuna") or cfg.get("source_jsearch"))
 
 
+def _boards():
+    """Boards for companies that arrived with a role or a careers address, then a scan so their roles are scored this run."""
+    from radar import resolve
+    _command("links")  # a role from a job site or a web search: find the employer's board and watch it
+    out = resolve.auto()
+    if out["added"]:
+        _command("scan")
+    n, g = len(out["added"]), len(out["guesses"])
+    return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {g} to look at in Companies" if g else "")
+
+
 def _command(*modules):
     for m in modules:
         subprocess.run([sys.executable, "-m", f"radar.{m}"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
@@ -109,6 +120,7 @@ def steps():
         ("Job sources", _sources, lambda: None if _sources_on(cfg) else "Turned off"),
         ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
         ("Discover", _agent_step("discover"), lambda: None),
+        ("Find boards", _boards, lambda: None),
         ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
         ("Score what's new", lambda: _command("triage", "people", "dashboard"), lambda: None),
         ("Plan moves", _agent_step("moves"), lambda: "Already planned this week" if _moves_this_week() else None),

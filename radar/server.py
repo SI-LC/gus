@@ -85,7 +85,9 @@ def state():
                       "stage": c.get("stage"), "board": c.get("board"), "board_broken": c.get("board_broken"),
                       "added": c.get("added"), "previous_fit": c.get("previous_fit"), "favourite": bool(c.get("favourite")),
                       "events": ev[:6], "fresh": sum(e["fresh"] for e in ev),
+                      "careers_url_broken": bool(c.get("careers_url_broken")),
                       "last_contacted": str(touched) if touched else None})
+    guesses = [{"name": n, **c["board_guess"]} for n, c in companies.items() if c.get("board_guess") and not c.get("vetoed")]
     shown = sorted(moves.values(), key=lambda m: m.get("created", ""), reverse=True)[:60]
     for m in shown:  # always show a signal's current, corrected date, not the one stored at planning time
         live = next((e for e in A.events(m["account"], companies.get(m["account"], {}), raw_jobs)
@@ -100,6 +102,7 @@ def state():
         "jobs": jobs,
         "companies": companies,
         "accounts": accts,
+        "board_guesses": guesses,
         "people": {pid: dict(p, id=pid, distance=dist[pid]) for pid, p in people.items()},
         "moves": shown,
         "week": A.week_id(),
@@ -341,6 +344,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {"error": "No such account"})
             veto(str(body["name"]))
             return self.send(200, {"ok": True})
+        if path == "/api/company/board":
+            from radar.companies import accept_board, reject_board
+            if body.get("name") not in read(COMPANIES, {}):
+                return self.send(200, {"error": "No such account"})
+            return self.send(200, {"ok": (accept_board if body.get("accept") else reject_board)(str(body["name"]))})
         try:
             if path == "/api/settings":
                 settings.save(body.get("changes") or {})

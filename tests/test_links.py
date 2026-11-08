@@ -41,9 +41,16 @@ class Finding(unittest.TestCase):
 
 
 class Choosing(unittest.TestCase):
-    def test_only_strong_open_unchecked_source_roles(self):
-        store = {"a": role(), "b": role(score=4), "c": role(source="board"), "d": role(stage="skipped"), "e": role(ad_closed="x"), "f": role(link_checked="x")}
-        self.assertEqual(links.waiting(store), [store["a"]])
+    def test_every_unchecked_role_from_off_the_boards_whatever_it_scored(self):
+        """A summary on a job site can score badly while the company is worth watching: its board is looked up anyway."""
+        store = {"a": role(), "b": role(score=4), "c": role(source="board"), "d": role(stage="skipped", score=3), "e": role(ad_closed="x"),
+                 "f": role(link_checked="x"), "g": role(source="web", score=None), "h": role(source="hn")}
+        self.assertEqual(links.waiting(store), [store["a"], store["b"], store["d"], store["g"]])
+
+    def test_best_first_so_the_limit_falls_on_the_weak_ones(self):
+        store = {str(n): role(id=str(n), score=n) for n in range(1, links.PER_RUN + 3)}
+        chosen = links.waiting(store)
+        self.assertEqual((len(chosen), chosen[0]["score"], chosen[-1]["score"]), (links.PER_RUN, links.PER_RUN + 2, 3))
 
 
 class AiSearch(unittest.TestCase):
@@ -91,7 +98,11 @@ class Saving(unittest.TestCase):
         self.jobs = Path(d.name) / "jobs.json"
         self.list = Path(d.name) / "watchlist.csv"
         self.list.write_text("company,ats,slug,sector\nOther,ashby,other,ai\n")
-        for p in (mock.patch.object(links, "JOBS", self.jobs), mock.patch.object(links, "watchlist_path", lambda: self.list)):
+        self.companies = Path(d.name) / "companies.json"
+        from radar import companies
+        for p in (mock.patch.object(links, "JOBS", self.jobs), mock.patch.object(links, "watchlist_path", lambda: self.list),
+                  mock.patch.object(links, "COMPANIES", self.companies), mock.patch.object(companies, "COMPANIES", self.companies),
+                  mock.patch.object(companies, "watchlist_path", lambda: self.list)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -104,6 +115,22 @@ class Saving(unittest.TestCase):
             links.main()
         j = self.saved()
         self.assertEqual((j["url"], j["source_url"], j["link_kind"]), ("https://acme.example/1", "https://jobsite.example/1", "company"))
+
+    def test_a_found_board_is_watched_and_reaches_the_companies_screen(self):
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=4, stage="skipped")}))
+        with mock.patch.object(links, "find", return_value={"url": "https://acme.example/1", "ats": "ashby", "slug": "acme"}):
+            links.main()
+        self.assertIn("Acme Ltd,ashby,acme,discovered", self.list.read_text())
+        self.assertEqual(json.loads(self.companies.read_text())["Acme Ltd"]["board"], "ashby:acme")
+
+    def test_a_known_careers_address_is_used_before_guessing(self):
+        self.companies.write_text(json.dumps({"Acme Ltd": {"status": "candidate", "careers_url": "https://acme.example/careers"},
+                                              "Gone": {"status": "candidate", "careers_url": "https://gone.example", "careers_url_broken": True}}))
+        self.jobs.write_text(json.dumps({"jsearch:1": role()}))
+        with mock.patch.object(links, "resolve", return_value=None) as look:
+            links.main()
+        look.assert_called_once_with("acme", "https://acme.example/careers")
+        self.assertEqual(links.careers_addresses(), {"acme": "https://acme.example/careers"})
 
     def test_a_fault_is_tried_again_next_time(self):
         self.jobs.write_text(json.dumps({"jsearch:1": role()}))

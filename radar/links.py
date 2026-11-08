@@ -1,9 +1,12 @@
-"""Point roles from job search sources at the employer's own ad, so you don't land on a job site's login.
+"""Point roles from job search sources at the employer's own ad, so you don't land on a job site's login, and watch the
+employer's board once a role has been found on it.
 
-    python3 -m radar.links     # check roles in your inbox that haven't been checked yet (run after each sources job)
+    python3 -m radar.links     # check roles that haven't been checked yet (run after each sources job and in the full run)
 
-Public job boards are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes
-when the same title is found on the company's board. Otherwise the role keeps its link and the cockpit offers a web search.
+Every role that didn't come from a board scan is checked, whatever it scored: a summary on a job site can score badly
+while the company behind it is worth watching, and finding the board is what gets its real ads read. Public job boards
+are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes when the same
+title is found on the company's board. Otherwise the role keeps its link and the cockpit offers a web search.
 
 With "Find employer pages with AI" on in Settings, strong roles still without a link get a Claude web search. That uses
 your Claude allowance, so it's limited per run and stops at your daily AI limit.
@@ -18,12 +21,13 @@ from datetime import date
 from urllib.parse import urlparse
 
 from radar import ai
+from radar.companies import COMPANIES
 from radar.resolve import resolve
 from radar.scan import JOBS, ROOT, SOURCES, fetch_bytes, load_config, watchlist_path
 from radar.sources import LABEL, same_company, same_title
 from radar.store import locked
 
-MIN_SCORE = 5  # the same line as the Role Inbox: anything you might open
+LOOKUP_SOURCES = set(LABEL) | {"web", "email", "x"}  # found somewhere other than the employer's board
 PER_RUN = 40  # each company tries several boards and names, so keep a run polite
 
 
@@ -85,11 +89,17 @@ def run_ai(cfg) -> None:
     print(f"AI searched {len(done)} roles, found {sum(bool(u) for u in done.values())} employer pages")
 
 
-def find(company, title, boards):
+def careers_addresses() -> dict:
+    """Each known company's careers address, by its cleaned-up name: the surest way to its board."""
+    companies = json.loads(COMPANIES.read_text()) if COMPANIES.exists() else {}
+    return {same_company(n): r["careers_url"] for n, r in companies.items() if r.get("careers_url") and not r.get("careers_url_broken")}
+
+
+def find(company, title, boards, careers=None):
     """The employer's own ad for this title, or None. `boards` remembers each company's board for this run."""
     name = same_company(company)
     if name not in boards:
-        boards[name] = resolve(name) if name else None
+        boards[name] = resolve(name, (careers or {}).get(name)) if name else None
     if not boards[name]:
         return None
     ats, slug, _ = boards[name]
@@ -101,8 +111,9 @@ def find(company, title, boards):
 
 
 def waiting(store) -> list:
-    return [j for j in store.values() if j.get("source") in LABEL and (j.get("score") or 0) >= MIN_SCORE
-            and j.get("stage") != "skipped" and not j.get("ad_closed") and not j.get("link_checked")][:PER_RUN]
+    """Unchecked roles from anywhere but a board scan, best first, so the strong ones are covered within a run's limit."""
+    todo = [j for j in store.values() if j.get("source") in LOOKUP_SOURCES and not j.get("ad_closed") and not j.get("link_checked")]
+    return sorted(todo, key=lambda j: j.get("score") or 0, reverse=True)[:PER_RUN]
 
 
 def watched() -> set:
@@ -121,13 +132,14 @@ def watch(job) -> bool:
 
 def main():
     todo = waiting(json.loads(JOBS.read_text()) if JOBS.exists() else {})
-    boards, found = {}, {}
+    boards, found, careers = {}, {}, careers_addresses()
     for j in todo:  # network outside the lock
         try:
-            found[j["id"]] = find(j["company"], j["title"], boards)
+            found[j["id"]] = find(j["company"], j["title"], boards, careers)
         except Exception as e:  # one bad board shouldn't stop the rest; this role is tried again next time
             print(f"{j['company']}: {type(e).__name__}")
             found[j["id"]] = False
+    added = []
     with locked(JOBS) as store:
         for jid, hit in found.items():
             j = store.get(jid)
@@ -136,7 +148,13 @@ def main():
             j["link_checked"] = str(date.today())
             if hit:
                 j.update(source_url=j["url"], url=hit["url"], link_kind="company", board={"ats": hit["ats"], "slug": hit["slug"]})
-    print(f"Checked {len(found)} roles, found {sum(bool(h) for h in found.values())} on company sites")
+                if watch(j):  # the board is confirmed to be theirs: from now on every role on it is read at source
+                    added.append(j["company"])
+    if added:
+        from radar.companies import sync
+        sync()
+    print(f"Checked {len(found)} roles, found {sum(bool(h) for h in found.values())} on company sites"
+          + (f", now watching {', '.join(added)}" if added else ""))
     cfg = load_config()
     if cfg.get("links_ai_search"):
         run_ai(cfg)

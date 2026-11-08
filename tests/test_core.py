@@ -146,7 +146,7 @@ class FullRun(unittest.TestCase):
                 calls.append(name)
                 return True, ""
             return go
-        with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _command=lambda *a: step("score")(),
+        with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _boards=step("boards"), _command=lambda *a: step("score")(),
                                   _emails_waiting=lambda: emails, _moves_this_week=lambda: moves,
                                   _watchlist_due=lambda c, s: watchlist_due, _counts=lambda: {"roles": 0, "strong": 0},
                                   _state=lambda: {}, _save=lambda s: None, load_config=lambda: {}):
@@ -156,11 +156,11 @@ class FullRun(unittest.TestCase):
 
     def test_runs_in_order(self):
         _, _, calls, _ = self.run_with(emails=1)
-        self.assertEqual(calls, ["scan", "inbox", "discover", "watchlist", "score", "moves"])
+        self.assertEqual(calls, ["scan", "inbox", "discover", "boards", "watchlist", "score", "moves"])
 
     def test_skips_what_it_doesnt_need(self):
         _, _, calls, steps = self.run_with(moves=5, watchlist_due=False)
-        self.assertEqual(calls, ["scan", "discover", "score"])
+        self.assertEqual(calls, ["scan", "discover", "boards", "score"])
         self.assertEqual(steps["Plan moves"], "skipped")
 
     def test_one_failure_doesnt_lose_the_rest(self):
