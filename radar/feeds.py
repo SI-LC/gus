@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from radar.scan import DATA, ROOT, fetch_bytes, strip_html
+from radar.store import read
 
 SIGNALS = DATA / "signals.json"
 FULL_TEXT = 15_000  # job lists name dozens of roles, so they keep far more than the teaser
@@ -164,13 +165,13 @@ def all_feeds():
 
 def main():
     state_path = DATA / "feeds_state.json"
-    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    state = read(state_path)
     t = datetime.now(timezone.utc).timestamp()
     feeds = [f for f in all_feeds() if f["enabled"]
              and t - state.get(f["name"], 0) >= int(f.get("every_min") or 10) * 60 - 30]
-    signals = json.loads(SIGNALS.read_text()) if SIGNALS.exists() else {}
+    signals = read(SIGNALS)
     errors_path = DATA / "feed_errors.json"
-    errors = json.loads(errors_path.read_text()) if errors_path.exists() else {}
+    errors = read(errors_path)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def run(f):

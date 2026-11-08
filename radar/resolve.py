@@ -22,6 +22,7 @@ from datetime import date, timedelta
 from urllib.parse import urlparse
 
 from radar.scan import DATA, SITE_BOARDS, board_size, fetch_bytes, gem_posts, get_json, github_count, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.store import read
 
 GUESS_DAYS = 14  # how long before a company with no board is guessed at again
 # Where a person can look at a board found by name, to see whose it really is
@@ -140,7 +141,7 @@ def resolve(name: str, careers: str = None):
 def missing() -> dict:
     """Active companies with no board, each with its careers address if it has one."""
     path = DATA / "companies.json"
-    companies = json.loads(path.read_text()) if path.exists() else {}
+    companies = read(path)
     return {n: r.get("careers_url") for n, r in companies.items() if r.get("status") in ("watched", "maybe", "candidate") and not r.get("board")}
 
 
@@ -188,7 +189,7 @@ def auto() -> dict:
     accept or reject in the cockpit, because a name can match another company's board. A careers address that has
     gone is marked `careers_url_broken` so the watchlist agent finds a new one."""
     path = DATA / "companies.json"
-    companies = json.loads(path.read_text()) if path.exists() else {}
+    companies = read(path)
     todo = {n: companies[n] for n in missing()}
     out = {"added": [], "guesses": [], "broken": []}
     with ThreadPoolExecutor(max_workers=6) as pool:

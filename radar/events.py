@@ -23,7 +23,7 @@ import sys
 from datetime import date, datetime, timedelta
 
 from radar.scan import DATA, JOBS
-from radar.store import locked
+from radar.store import locked, read
 
 EVENTS = DATA / "events.json"
 COMPANIES = DATA / "companies.json"
@@ -63,12 +63,6 @@ def parse_date(s):
         m = re.match(r"(\d{4})-(\d{2})(?:-(\d{2}))?", str(s))
         return date(int(m[1]), int(m[2]), int(m[3] or 1)) if m else None
 
-
-def read(path, default):
-    try:
-        return json.loads(path.read_text())
-    except (FileNotFoundError, ValueError):
-        return default
 
 
 def event_id(account: str, type_: str, when, existing: dict | None = None, url: str | None = None) -> str:

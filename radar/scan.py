@@ -28,7 +28,7 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse
 
 from radar.settings import group_of, groups, load
 from radar import jobs as J
-from radar.store import locked
+from radar.store import locked, read
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -144,7 +144,7 @@ def known_jobs() -> dict:
     """Roles already saved. Read once per scan."""
     global _known
     if _known is None:
-        _known = json.loads(JOBS.read_text()) if JOBS.exists() else {}
+        _known = read(JOBS)
     return _known
 
 
@@ -152,7 +152,7 @@ def looked_up() -> dict:
     """Where Greenhouse roles we've already fetched are based. Read once per scan. A role edited since is fetched again."""
     global _looked_up
     if _looked_up is None:
-        _looked_up = json.loads(LOOKED_UP.read_text()) if LOOKED_UP.exists() else {}
+        _looked_up = read(LOOKED_UP)
     return _looked_up
 
 
@@ -783,10 +783,7 @@ def read_daily(slug: str, address: str, state_file, reader) -> list:
     """A saved search read at most once a day, whatever else runs. Between reads nothing is asked for, and a read that failed
     stays on the Health page until the next one."""
     _cut_short.add(slug)  # nothing can be called closed unless this read finishes
-    try:
-        state = json.loads(state_file.read_text())
-    except (OSError, ValueError):
-        state = {}
+    state = read(state_file)
     if state.get("address") == address and time.time() - state.get("read", 0) < GOOGLE_EVERY:
         if state.get("error"):
             raise Refused(state["error"])

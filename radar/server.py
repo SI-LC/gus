@@ -22,7 +22,7 @@ from radar.companies import COMPANIES, veto
 from radar.scan import DATA, JOBS, ROOT, role_type, where
 from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
-from radar.store import locked
+from radar.store import locked, read
 
 CLI_HOSTS: set = set()
 PAGE = ROOT / "radar" / "cockpit.html"
@@ -45,12 +45,6 @@ STAGES = set(ROLE_STAGES)
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-
-def read(path, default):
-    try:
-        return json.loads(path.read_text())
-    except (FileNotFoundError, ValueError):
-        return default
 
 
 def last_agent_run():

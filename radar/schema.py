@@ -36,7 +36,7 @@ SIGNAL_STATUS = ["new", "processed", "ignored"]
 OBJECTS = {
     "jobs": ("jobs.json", r"^[a-z]+:", ["company", "title", "url", "stage"],
              {"company": STR, "title": STR, "url": STR, "location": STR, "description": STR, "score": INT, "why": STR,
-              "flags": LIST, "history": LIST, "contacts": DICT, "note": STR, "folder": STR, "missed": INT, "also": DICT},
+              "flags": LIST, "history": LIST, "contacts": DICT, "note": STR, "folder": STR, "missed": INT, "also": DICT, "pruned": STR},
              {"stage": JOB_STAGES, "source": JOB_SOURCES, "text_kind": TEXT_KINDS}),
     "companies": ("companies.json", r".", ["status"],
                   {"fit": NUM, "fit_why": STR, "source": STR, "signal": STR, "investors": LIST,

@@ -25,7 +25,7 @@ from radar.companies import COMPANIES
 from radar.resolve import resolve
 from radar.scan import JOBS, ROOT, SOURCES, fetch_bytes, load_config, watchlist_path
 from radar.sources import LABEL, same_company, same_title
-from radar.store import locked
+from radar.store import locked, read
 
 LOOKUP_SOURCES = set(LABEL) | {"web", "email", "x"}  # found somewhere other than the employer's board
 PER_RUN = 40  # each company tries several boards and names, so keep a run polite
@@ -70,7 +70,7 @@ def ai_waiting(store, cfg) -> list:
 
 def run_ai(cfg) -> None:
     done = {}
-    for j in ai_waiting(json.loads(JOBS.read_text()) if JOBS.exists() else {}, cfg):
+    for j in ai_waiting(read(JOBS), cfg):
         try:
             done[j["id"]] = ai_find(j)
         except (ai.BudgetReached, ai.NeedsTools) as e:
@@ -91,7 +91,7 @@ def run_ai(cfg) -> None:
 
 def careers_addresses() -> dict:
     """Each known company's careers address, by its cleaned-up name: the surest way to its board."""
-    companies = json.loads(COMPANIES.read_text()) if COMPANIES.exists() else {}
+    companies = read(COMPANIES)
     return {same_company(n): r["careers_url"] for n, r in companies.items() if r.get("careers_url") and not r.get("careers_url_broken")}
 
 
@@ -131,7 +131,7 @@ def watch(job) -> bool:
 
 
 def main():
-    todo = waiting(json.loads(JOBS.read_text()) if JOBS.exists() else {})
+    todo = waiting(read(JOBS))
     boards, found, careers = {}, {}, careers_addresses()
     for j in todo:  # network outside the lock
         try:

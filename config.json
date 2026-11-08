@@ -24,6 +24,7 @@
   "run_time": "08:00",
   "watchlist_every_days": 3,
   "agent_max_searches": 60,
+  "prune_after_days": 60,
 
   "source_hn": true,
   "hn_title_include": "",

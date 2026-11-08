@@ -25,7 +25,7 @@ from radar import jobs as J
 from radar.jobs import same_company, same_title  # one definition, shared with scan and links
 from radar.scan import DATA, JOBS, left_out, load_config, matches, strip_html, ua
 from radar.settings import secret
-from radar.store import locked
+from radar.store import locked, read
 
 STATE = DATA / "sources_state.json"
 LABEL = {"adzuna": "Adzuna", "jsearch": "JSearch"}
@@ -62,7 +62,7 @@ def call(url, headers=None):
 
 def load_state() -> dict:
     try:
-        return json.loads(STATE.read_text())
+        return read(STATE)
     except (FileNotFoundError, ValueError):
         return {}
 

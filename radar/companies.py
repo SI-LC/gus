@@ -19,6 +19,7 @@ import sys
 from datetime import date, timedelta
 
 from radar.scan import DATA, WATCHLIST, watchlist_path
+from radar.store import read
 
 COMPANIES = DATA / "companies.json"
 SIGNALS = DATA / "signals.json"
@@ -28,7 +29,7 @@ NEIGHBOUR_DAYS = 28
 
 
 def load():
-    return json.loads(COMPANIES.read_text()) if COMPANIES.exists() else {}
+    return read(COMPANIES)
 
 
 def save(c):
@@ -58,7 +59,7 @@ def sync():
 def mentions():
     """Free, runs every scan: a watched company named in a new signal gets flagged."""
     c = load()
-    signals = json.loads(SIGNALS.read_text()) if SIGNALS.exists() else {}
+    signals = read(SIGNALS)
     watched = [n for n, r in c.items() if r.get("status") in ("watched", "maybe")]
     # case-sensitive whole word, so "Wise" the company doesn't match "otherwise"
     pats = {n: re.compile(rf"(?<![\w-]){re.escape(n)}(?![\w-])") for n in watched}
@@ -80,7 +81,7 @@ def mentions():
 
 def health():
     """Boards that errored on the last scan, e.g. the company switched ATS."""
-    errs = json.loads(BOARD_ERRORS.read_text()) if BOARD_ERRORS.exists() else {}
+    errs = read(BOARD_ERRORS)
     c = load()
     for name, rec in c.items():
         if name in errs:
