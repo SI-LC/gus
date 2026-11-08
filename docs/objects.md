@@ -19,11 +19,13 @@ A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `
 | `score`, `why`, `flags` | Triage: 1–10 against the profile, null until scored; under 5 goes straight to `skipped` |
 | `score_before_salary` | When a stated salary lowered the score |
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
+| `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed |
 | `note`, `folder` | Yours: a note and where the application files are |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
 
-A role scoring 7+ that's still open becomes a `role_posted` event on its account, derived at read time, never stored.
+A role scoring 7+ that's still open is a `role_posted` event on its account (`role:<job id>` in `data/events.json`), written by
+`radar.events sync` after every scoring run and closed when the ad goes or you skip the role.
 
 ## Account (`data/companies.json`)
 
@@ -34,16 +36,35 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `status` | `candidate` → `watched` or `maybe` or `rejected`. `vetoed: true` means never re-add |
 | `tier` | `A`, `B`, `C`. Set by the watchlist agent, or derived from `fit` (8+ A, 7 B, else C). `tier_locked` when you set it |
 | `fit`, `fit_why`, `assessed`, `previous_fit`, `recheck_after` | The agent's assessment and when to look again |
-| `events` | `[{type, summary, url, date}]`. What makes the account worth acting on now. See below |
-| `pending_signals`, `reassess` | A watched company named in a new signal; cleared when the agent reassesses it |
+| `source`, `signal` | How the company was found: which agent or source, and the one-line signal that surfaced it |
+| `reassess` | Set when a new signal names a watched company (the signal carries `company`); cleared when the agent reassesses it |
 | `product`, `stage`, `london`, `headcount`, `customers`, `investors`, `product_leaders`, `careers_url` | Research. `careers_url_broken` when the address no longer opens |
 | `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed |
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
 | `favourite`, `neighbour_of`, `neighbours_checked` | Companies you love and the ones found next to them |
 | `added`, `people_checked` | Housekeeping dates |
 
-Event types: `post_hiring`, `role_posted`, `leader_hire`, `funding`, `london_office`, `launch`, `mention`. Every event needs a
-link and a real date. Only **fresh** events (30 days) at **A or B** accounts reach the weekly planner.
+What happened at the account lives in `data/events.json`, below. An older record's inline `events` and `pending_signals` are
+migrated off it by the next scan.
+
+## Event (`data/events.json`)
+
+Something that happened at an account which makes it worth acting on now: the reason behind a move. Key:
+`<account slug>:<type>:<YYYY-MM-DD>` (`-2`, `-3`… when a day has several), or `role:<job id>` for a role.
+
+| Field | Meaning |
+|---|---|
+| `account` | The account's name, as in `companies.json` |
+| `type` | `post_hiring`, `role_posted`, `leader_hire`, `funding`, `london_office`, `launch`, `mention` |
+| `summary`, `url`, `date` | One line, the link, and the real date (`YYYY-MM-DD`). All three required |
+| `source` | Where it came from: `signal:<id>`, `job:<id>`, `agent`, `account` (migrated), `move` (migrated), `manual` |
+| `job_id`, `closed` | On a `role_posted` event: the role, and the date its ad closed, after which it stops counting |
+| `added` | |
+
+Events are written by the discover agent (from a signal), the watchlist agent (from research), `radar.events sync` (from
+roles scoring 7+, the threshold being `ROLE_EVENT_SCORE`) or you (`python3 -m radar.events add`). The same link at the same
+account is one event. Age, freshness (30 days) and strength are worked out at read time. Only **fresh** events at **A or B**
+accounts reach the weekly planner.
 
 ## Person (`data/people.json`)
 
@@ -67,34 +88,36 @@ Network distance (1st, ~2nd, 3rd+) is worked out at read time from `data/network
 
 ## Move (`data/moves.json`)
 
-One outreach for the week: one person, one fresh signal, an angle and a draft. Key: `<ISO week>:<person_id>`.
+One outreach for the week: one person, one fresh event, an angle and a draft. Key: `<ISO week>:<person_id>`.
 
 | Field | Meaning |
 |---|---|
 | `week`, `account`, `person_id` | |
-| `signal` | `{type, summary, url, date}`: the event the message is anchored on |
+| `event_id` | The event the message is anchored on, in `events.json` |
 | `why_now`, `angle`, `draft`, `channel`, `give_first` | The message and its reasoning |
 | `status` | `todo`, `done`, `skipped`; `done_at` |
 | `outcome` | `no_reply`, `replied`, `conversation`, `interview`, `referral`, `not_now`; `outcome_at` |
 
-Only `python3 -m radar.accounts plan` writes moves, and it refuses any without a fresh, dated, linked signal at an A/B
+Only `python3 -m radar.accounts plan` writes moves, and it refuses any without a fresh, recorded event at an A/B
 account to a person mapped there with evidence; at most 5 a week, one per account, and a 21-day cooldown per account
 unless something new happened. Agents can't edit this file. Marking a move done moves its person to `contacted`; an
 outcome moves them further along.
 
 ## Signal (`data/signals.json`)
 
-A raw item from a feed or social search, before anyone has looked at it. Key: a feed hash or `bsky:` / `mastodon:` /
-`reddit:` / `x:` id.
+The inbox: a raw item from a feed or social search, before anyone has looked at it. Key: a feed hash or `bsky:` /
+`mastodon:` / `reddit:` / `x:` id.
 
 | Field | Meaning |
 |---|---|
 | `source`, `kind` | Where from; `newsletter`, `signals`, `jobs`, `social`, `social-bot` |
 | `title`, `text`, `url`, `date`, `name`, `handle` | The item |
 | `status` | `new` until the discover agent sets `processed` or `ignored` |
-| `first_seen`, `mention_checked`, `company`, `job_id` | Housekeeping and what it turned out to be about |
+| `first_seen`, `mention_checked` | Housekeeping |
+| `company`, `job_id`, `event_id` | What it turned out to be about: the account it names, the role or the event it became |
 
-A signal about an account is promoted into that account's `events`. "Signal" in the funnel means a fresh event.
+A signal is never acted on itself. One that matters becomes an event (or a role) and points at it; the rest are ignored.
+The funnel's first step counts fresh events, not signals.
 
 ## Everything else
 
@@ -106,10 +129,10 @@ A signal about an account is promoted into that account's `events`. "Signal" in 
 ## How they connect
 
 ```
-signals.json ──agent──▶ companies.json.events ◀──derived── jobs.json (score 7+)
-                              │
-                              ▼ fresh, A/B
-                        accounts plan ──▶ moves.json ──done──▶ people.json.stage
-                                               ▲                     ▲
-                              people.json ─────┘      network.json ──┘ (warm, distance)
+signals.json ──agent──▶ events.json ◀──events sync── jobs.json (score 7+)
+                            │  (account = companies.json key)
+                            ▼ fresh, A/B
+                      accounts plan ──▶ moves.json ──done──▶ people.json.stage
+                                             ▲                     ▲
+                            people.json ─────┘      network.json ──┘ (warm, distance)
 ```

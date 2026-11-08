@@ -17,6 +17,7 @@ python3 -m radar.people >>data/people.log 2>&1
 python3 -m radar.companies sync >>data/companies.log 2>&1  # new boards reach the Companies screen straight away
 python3 -m radar.companies mentions >>data/companies.log 2>&1
 python3 -m radar.companies health >>data/companies.log 2>&1
+python3 -m radar.events sync >>data/companies.log 2>&1  # roles scoring 7+ become events; closed ones stop counting
 python3 -c "from radar.notify import release_held; release_held()"
 python3 -m radar.dashboard >/dev/null
 echo "$(date -u +%FT%TZ) ok" >> data/heartbeat.log

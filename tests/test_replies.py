@@ -119,32 +119,44 @@ class Moves(unittest.TestCase):
         self.fresh = str(A.today() - timedelta(days=3))
         self.companies = {"Acme": self.company()}
         self.people = {"p1": self.person("Acme")}
+        self.events = {"acme:funding:" + self.fresh: self.event("Acme")}
 
     def company(self):
-        return {"tier": "A", "events": [{"type": "funding", "url": "https://example.com/news", "date": self.fresh}]}
+        return {"tier": "A"}
+
+    def event(self, account, **changes):
+        return {"account": account, "type": "funding", "summary": "Raised", "url": "https://example.com/news", "date": self.fresh, **changes}
 
     def person(self, account):
         return {"name": "Pat Example", "company": account, "url": "https://example.com/pat", "evidence": "https://example.com/talk"}
 
     def move(self, **changes):
         return {"account": "Acme", "person_id": "p1", "why_now": "Just raised.", "angle": "Shared domain.", "draft": "Hello",
-                "signal": {"type": "funding", "summary": "Raised", "url": "https://example.com/news", "date": self.fresh}, **changes}
+                "event_id": "acme:funding:" + self.fresh, **changes}
 
     def errors(self, m, moves=None):
-        return A.validate(m, self.companies, self.people, {}, moves or {})
+        return A.validate(m, self.companies, self.people, self.events, moves or {})
 
     def test_a_good_move_passes(self):
         self.assertEqual(self.errors(self.move()), [])
 
+    def test_an_older_proposal_naming_the_signal_url_still_passes(self):
+        self.assertEqual(self.errors(self.move(event_id=None, signal={"url": "https://example.com/news"})), [])
+
     def test_bad_moves_are_refused(self):
         stale = str(A.today() - timedelta(days=A.FRESH_DAYS + 1))
+        self.events.update({"acme:funding:undated": self.event("Acme", date=None, url="https://example.com/undated"),
+                            "acme:funding:" + stale: self.event("Acme", date=stale, url="https://example.com/old"),
+                            "other:funding:" + self.fresh: self.event("Other", url="https://example.com/other"),
+                            "role:gh:acme:1": self.event("Acme", type="role_posted", url="https://example.com/job", closed="2026-11-01")})
         for name, m, expected in (
             ("unknown account", self.move(account="Nobody"), "unknown account"),
             ("unmapped person", self.move(person_id="p2"), "isn't mapped"),
-            ("no date", self.move(signal={"url": "https://example.com/news"}), "no date"),
-            ("no link", self.move(signal={"date": self.fresh}), "no link"),
-            ("stale", self.move(signal={"url": "https://example.com/news", "date": stale}), "days old"),
-            ("invented signal", self.move(signal={"url": "https://example.com/made-up", "date": self.fresh}), "recorded events"),
+            ("no date", self.move(event_id="acme:funding:undated"), "no date"),
+            ("stale", self.move(event_id="acme:funding:" + stale), "days old"),
+            ("invented event", self.move(event_id="acme:funding:made-up"), "recorded events"),
+            ("someone else's event", self.move(event_id="other:funding:" + self.fresh), "belongs to"),
+            ("closed role", self.move(event_id="role:gh:acme:1"), "has closed"),
             ("empty draft", self.move(draft="  "), "missing draft"),
         ):
             with self.subTest(name):
@@ -162,17 +174,22 @@ class Moves(unittest.TestCase):
         companies = {n: self.company() for n in names}
         humans = {f"p{n}": self.person(names[n]) for n in range(7)}
         humans["extra"] = self.person("Co0")
-        proposed = [self.move(account=n, person_id=f"p{i}") for i, n in enumerate(names)]
-        proposed.insert(1, self.move(account="Co0", person_id="extra"))
+        events = {f"co{n}:funding:{self.fresh}": self.event(names[n]) for n in range(7)}
+        proposed = [self.move(account=n, person_id=f"p{i}", event_id=f"co{i}:funding:{self.fresh}") for i, n in enumerate(names)]
+        proposed.insert(1, self.move(account="Co0", person_id="extra", event_id=f"co0:funding:{self.fresh}"))
         d = Path(tempfile.mkdtemp())
-        files = {"COMPANIES": d / "c.json", "PEOPLE": d / "p.json", "JOBS": d / "j.json", "MOVES": d / "m.json"}
+        files = {"COMPANIES": d / "c.json", "PEOPLE": d / "p.json", "JOBS": d / "j.json", "MOVES": d / "m.json", "EVENTS": d / "e.json"}
         files["COMPANIES"].write_text(json.dumps(companies))
         files["PEOPLE"].write_text(json.dumps(humans))
+        files["EVENTS"].write_text(json.dumps(events))
         (d / "proposed.json").write_text(json.dumps(proposed))
-        with mock.patch.multiple(A, **files), contextlib.redirect_stdout(io.StringIO()):
+        from radar import events as E
+        with mock.patch.multiple(A, **files), mock.patch.multiple(E, EVENTS=d / "e.json", COMPANIES=d / "c.json", MOVES=d / "m.json", JOBS=d / "j.json"), \
+                contextlib.redirect_stdout(io.StringIO()):
             A.plan(d / "proposed.json")
         saved = list(json.loads(files["MOVES"].read_text()).values())
         self.assertEqual(len(saved), A.MAX_MOVES)
+        self.assertTrue(all(m["event_id"] in events and "signal" not in m for m in saved))
         self.assertEqual(len({m["account"] for m in saved}), A.MAX_MOVES)
         self.assertNotIn("extra", [m["person_id"] for m in saved])
 

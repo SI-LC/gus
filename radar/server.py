@@ -72,13 +72,14 @@ def state():
     from radar import accounts as A
     from radar.network import distances, summary as net_summary
     companies, people, moves, raw_jobs = read(COMPANIES, {}), read(A.PEOPLE, {}), read(A.MOVES, {}), read(JOBS, {})
+    stored_events = read(A.EVENTS, {})
     dist = distances(people)
     accts = []
     for name, c in companies.items():
         t = A.tier(c)
         if t == "-":
             continue
-        ev = A.events(name, c, raw_jobs)
+        ev = A.events(name, stored=stored_events)
         touched = A.last_touch(name, moves)
         accts.append({"name": name, "tier": t, "tier_locked": bool(c.get("tier_locked")), "fit": c.get("fit"),
                       "why": c.get("fit_why"), "product": c.get("product"), "london": c.get("london"),
@@ -89,11 +90,9 @@ def state():
                       "last_contacted": str(touched) if touched else None})
     guesses = [{"name": n, **c["board_guess"]} for n, c in companies.items() if c.get("board_guess") and not c.get("vetoed")]
     shown = sorted(moves.values(), key=lambda m: m.get("created", ""), reverse=True)[:60]
-    for m in shown:  # always show a signal's current, corrected date, not the one stored at planning time
-        live = next((e for e in A.events(m["account"], companies.get(m["account"], {}), raw_jobs)
-                     if e["url"] == m["signal"].get("url")), None)
-        if live:
-            m["signal"] = {**m["signal"], "date": live["date"]}
+    for m in shown:  # the event a move is built on, as it is now
+        ev = stored_events.get(m.get("event_id") or "")
+        m["signal"] = {k: ev.get(k) for k in ("type", "summary", "url", "date")} if ev else m.get("signal") or {}
     return {
         "setup": firstrun.setup_state(),
         "places": list(dict.fromkeys(p[0] for p in places)),

@@ -32,8 +32,9 @@ Aim for 10–30 candidates per run; quality over volume.
 ## 2. Enrich (candidates, flagged, stale, and rejected companies due a recheck)
 Fill or refresh (field names are in `docs/objects.md`): `stage`, `last_round`, `investors`, `headcount`, `london` (HQ|office|remote-UK|none),
 `product` (one line), `customers` (B2B / B2B2C / B2C / enterprise), `product_leaders`
-[{name, role, url}], `careers_url`. Dated things that happened (launches, rounds, exec hires, layoffs) go in `events`, see 3b.
-For flagged companies, read their `pending_signals` first, then clear `pending_signals` and `reassess`.
+[{name, role, url}], `careers_url`. Dated things that happened (launches, rounds, exec hires, layoffs) go in `data/events.json`, see 3b.
+For flagged companies (`reassess: true`), first read the signals in `data/signals.json` whose `company` is this account, then
+clear `reassess`.
 
 ## 3. Assess fit (1–10)
 Score against the candidate profile:
@@ -56,8 +57,10 @@ Then by score:
 ## 3b. Tier, events and people (A and B accounts)
 - Set `tier` on every watched or maybe account: **A** = fit 8+ and you'd move for it, **B** = fit 7,
   **C** = maybe. Keep A to about 15 accounts. Never change a tier with `tier_locked: true` (the candidate set it).
-- Record **events** found while enriching in `events` (keep old ones), each one dated and linked:
-  `{"type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary": "one line", "url": "...", "date": "YYYY-MM-DD"}`.
+- Record **events** found while enriching in `data/events.json`, keyed `<account slug>:<type>:<YYYY-MM-DD>` (add `-2`, `-3` if that
+  day already has one), each one dated and linked:
+  `{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary": "one line",
+  "url": "...", "date": "YYYY-MM-DD", "source": "agent"}`. Never the same link twice at one account.
   `launch` only counts if it's in the candidate's area (see profile). Roles are added automatically; don't record them.
 - For A accounts with fewer than 2 people mapped, run `python3 -m radar.people "<Company>"`.
 - For mapped people at A and B accounts with no `past_companies`, fill it from their public bio, team page

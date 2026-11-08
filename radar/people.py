@@ -1,6 +1,6 @@
 """Map the people who matter at target accounts (prompts/people.md).
 
-    python3 -m radar.people                 # A/B accounts with fresh signals and fewer than 2 people mapped
+    python3 -m radar.people                 # A/B accounts with fresh events and fewer than 2 people mapped
     python3 -m radar.people "Acme"          # one account
 
 Sources: Bluesky's open search here, then Claude with web search. No messages are
