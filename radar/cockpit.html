@@ -811,7 +811,7 @@ const SETTINGS_TABS = [
       <div class="field"><label>Connection</label><div class="row"><button onclick="testGmail()">Test Gmail</button><span id="gmail-test" class="sub"></span></div></div></section>
       <section class="group"><h2>What gets read</h2>${SET.schema.filter(f => ["inbox_days", "inbox_senders", "inbox_subjects"].includes(f.key)).map(fieldRow).join("")}</section>`;
   }],
-  ["notifications", "Notifications", () => `<section class="group"><h2>Notifications</h2><p class="sub">Get a phone alert for strong roles. Install ntfy, then add your topic name under Keys.</p>${fieldsOf("Notifications")}</section>`],
+  ["notifications", "Notifications", () => `<section class="group"><h2>Notifications</h2><p class="sub">Get a phone alert for strong roles and hiring news at your target companies. Install ntfy, then add your topic name under Keys.</p>${fieldsOf("Notifications")}</section>`],
   ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git. Your AI connection is under AI.</p>` +
     Object.entries(SET.secret_keys).filter(([k]) => !Object.values(AI_KEYS).includes(k)).map(secretField).join("") + `</section>`],
   ["profile", "Profile", () => {

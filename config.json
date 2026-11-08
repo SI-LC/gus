@@ -6,6 +6,7 @@
   "where_groups": "Remote: remote, anywhere\nElsewhere: *",
   "role_kinds": "",
   "notify_min_score": 8,
+  "notify_news": true,
   "people_min_score": 7,
   "salary_floor": 0,
   "salary_symbol": "",

@@ -63,12 +63,16 @@ Something that happened at an account which makes it worth acting on now: the re
 | `summary`, `url`, `date` | One line, the link, and the real date (`YYYY-MM-DD`). All three required |
 | `source` | Where it came from: `signal:<id>`, `job:<id>`, `agent`, `account` (migrated), `move` (migrated), `manual` |
 | `job_id`, `closed` | On a `role_posted` event: the role, and the date its ad closed, after which it stops counting |
+| `notified` | When `radar.events alert` pushed it to your phone, or `role alert` if the role's own alert covered it |
 | `added` | |
 
 Events are written by the discover agent (from a signal), the watchlist agent (from research), `radar.events sync` (from
 roles scoring 7+, the threshold being `ROLE_EVENT_SCORE`) or you, with `python3 -m radar.events add` or from the account's
 card in the cockpit (POST `/api/event`). The same link at the same account is one event. Age, freshness (30 days) and strength
 are worked out at read time. Only **fresh** events at **A or B** accounts reach the weekly planner.
+
+`radar.events alert`, run after every scoring run, pushes a phone alert for a `post_hiring`, `leader_hire` or `role_posted` event at
+an A or B account, once per event and only for news recorded in the last 2 days, at most 5 a run. Off with the `notify_news` setting.
 
 Dismissing an event in the cockpit sets `closed`: it stops counting but stays on record, as a move may cite it. A
 `role_posted` event can't be dismissed, since it follows its role: skip the role instead.

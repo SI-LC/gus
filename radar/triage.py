@@ -74,6 +74,7 @@ def score_batch(profile_path, todo):
     events.sync()
     for a in alerts:
         notify(*a)
+    events.alert()  # after the role alerts, so a role event whose role was just pushed isn't pushed twice
 
 
 def main():
