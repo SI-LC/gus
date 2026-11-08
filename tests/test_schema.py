@@ -41,7 +41,8 @@ class Schema(unittest.TestCase):
         self.assertIn("gh:acme:1: score must be 1-10", out["jobs"])
 
     def test_fields_the_next_scan_migrates_are_not_flagged(self):
-        out = self.run_check(**{"companies.json": {"Acme": {"why_it_fits": "x", "events": [{"type": "funding"}], "pending_signals": []}}})
+        out = self.run_check(**{"companies.json": {"Acme": {"why_it_fits": "x", "events": [{"type": "funding"}], "pending_signals": []}},
+                                "moves.json": {"2026-W45:sam-jones@acme": {"event_id": None, "signal": {"type": "funding", "url": "https://x/1"}}}})
         self.assertEqual(out, {})
 
     def test_bad_event_is_named(self):
