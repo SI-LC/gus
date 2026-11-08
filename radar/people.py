@@ -42,6 +42,21 @@ def bluesky(company: str, limit: int = 25):
     ]
 
 
+def first_list(text: str) -> list:
+    """The first JSON list in the model's reply, ignoring any prose or further JSON around it."""
+    dec = json.JSONDecoder()
+    i = text.find("[")
+    while i != -1:
+        try:
+            found, _ = dec.raw_decode(text, i)
+        except ValueError:
+            found = None
+        if isinstance(found, list) and all(isinstance(p, dict) for p in found):
+            return found
+        i = text.find("[", i + 1)
+    return []
+
+
 def map_account(name: str) -> list:
     c = read(COMPANIES, {}).get(name, {})
     jobs = [{k: j[k] for k in ("title", "url", "location", "score")} | {"description": j.get("description", "")[:3000]}
@@ -54,7 +69,7 @@ def map_account(name: str) -> list:
               .replace("{{KNOWN}}", json.dumps(known, ensure_ascii=False))
               .replace("{{BLUESKY}}", json.dumps(bluesky(name) if load_config().get("source_bluesky", True) else [], ensure_ascii=False)))
     text = ai.run(prompt, task="people", tools=["WebSearch", "WebFetch"])
-    found = json.loads(text[text.index("["): text.rindex("]") + 1]) if "[" in text else []
+    found = first_list(text)
     added = []
     with locked(PEOPLE) as people:
         for p in found:

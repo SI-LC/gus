@@ -58,6 +58,10 @@ Someone mapped at an account. Key: `<name slug>@<company slug>`, e.g. `sam-jones
 | `stage` | `mapped` → `contacted` → `replied` → `conversation` → `referred` → `closed` |
 | `history`, `note`, `added`, `source` | |
 
+People come from the people search (`source: people search`) or are added by hand (`source: manual`), with
+`python3 -m radar.accounts add-person "Name" "Company"` or POST `/api/person` with `name` and `company` and no `id`.
+The company must already be an account.
+
 Network distance (1st, ~2nd, 3rd+) is worked out at read time from `data/network.json`, never stored.
 
 ## Move (`data/moves.json`)

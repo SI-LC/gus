@@ -393,6 +393,63 @@ class RoleContact(unittest.TestCase):
             self.assertEqual((moves["m"]["status"], people["p"]["stage"], jobs["j"]["contacts"]), ("todo", "mapped", {}))
 
 
+class PeopleSearchReply(unittest.TestCase):
+    def test_reads_the_list_when_more_follows(self):
+        from radar.people import first_list
+        text = 'Found two.\n[{"name": "A"}]\n\nSources: [1] x\n```json\n[{"name": "B"}]\n```'
+        self.assertEqual(first_list(text), [{"name": "A"}])
+
+    def test_skips_brackets_that_are_not_the_list(self):
+        from radar.people import first_list
+        self.assertEqual(first_list('See [1] and [the site].\n[{"name": "A"}] done ]'), [{"name": "A"}])
+
+    def test_no_list_is_empty(self):
+        from radar.people import first_list
+        self.assertEqual((first_list("nobody found"), first_list("[oops")), ([], []))
+
+
+class AddPerson(unittest.TestCase):
+    def setUp(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from radar import accounts as A
+        d = Path(tempfile.mkdtemp())
+        self.people, companies = d / "people.json", d / "companies.json"
+        companies.write_text(json.dumps({"Acme Ltd": {"status": "active"}}))
+        for target, f in ((A, "PEOPLE"), (A, "COMPANIES")):
+            patcher = mock.patch.object(target, f, self.people if f == "PEOPLE" else companies)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_adds_a_person_by_hand(self):
+        import json
+        from radar import accounts as A, schema
+        pid, created = A.add_person("Jo Bloggs", "acme ltd", role="VP Product", url="https://example.com/jo", kind="hiring_manager")
+        self.assertEqual((pid, created), ("jo-bloggs@acme-ltd", True))
+        p = json.loads(self.people.read_text())[pid]
+        self.assertEqual((p["company"], p["stage"], p["source"], p["kind"]), ("Acme Ltd", "mapped", "manual", "hiring_manager"))
+        self.assertEqual(schema.check_record("people", pid, p, {"Acme Ltd": {}}, {}), [])
+
+    def test_adding_again_keeps_what_is_there(self):
+        import json
+        from radar import accounts as A
+        A.add_person("Jo Bloggs", "Acme Ltd", role="VP Product")
+        pid, created = A.add_person("Jo Bloggs", "Acme Ltd", role="CEO", url="https://example.com/jo")
+        p = json.loads(self.people.read_text())[pid]
+        self.assertEqual((created, p["role"], p["url"]), (False, "VP Product", "https://example.com/jo"))
+
+    def test_refuses_unknown_account_or_bad_kind(self):
+        from radar import accounts as A
+        for args in (("Jo", "Nowhere"), ("", "Acme Ltd")):
+            with self.assertRaises(ValueError):
+                A.add_person(*args)
+        with self.assertRaises(ValueError):
+            A.add_person("Jo", "Acme Ltd", kind="friend")
+
+
 class Service(unittest.TestCase):
     def test_buttons_and_worker_share_one_queue(self):
         """Started the way the Pi starts it, a job queued by the cockpit must actually run."""
