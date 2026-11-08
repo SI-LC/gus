@@ -86,3 +86,52 @@ class Sync(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Alert(unittest.TestCase):
+    """Fresh hiring news at an A or B account is pushed once; the rest is left alone."""
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.events, self.companies, self.jobs = self.d / "events.json", self.d / "companies.json", self.d / "jobs.json"
+        self.companies.write_text(json.dumps({"Acme": {"status": "watched", "tier": "A"}, "Tiny": {"status": "watched", "tier": "C"}}))
+        self.today, self.pushed = str(date.today()), []
+        self.patches = [mock.patch.multiple(E, EVENTS=self.events, COMPANIES=self.companies, JOBS=self.jobs),
+                        mock.patch("radar.notify.notify", lambda *a: self.pushed.append(a)),
+                        mock.patch("radar.settings.load", lambda: {"notify_news": True, "notify_min_score": 8})]
+        for p in self.patches:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in self.patches])
+
+    def ev(self, account, type_, added=None, **extra):
+        return {"account": account, "type": type_, "summary": f"{type_} at {account}", "url": f"https://x/{account}/{type_}",
+                "date": self.today, "added": added or self.today, **extra}
+
+    def test_hiring_news_at_an_a_or_b_account_is_pushed_once(self):
+        self.events.write_text(json.dumps({"a": self.ev("Acme", "post_hiring"), "b": self.ev("Acme", "funding"),
+                                           "c": self.ev("Tiny", "leader_hire"),
+                                           "d": self.ev("Acme", "leader_hire", added=str(date.today() - timedelta(days=10)))}))
+        self.assertEqual(E.alert(), ["a"])
+        self.assertEqual(len(self.pushed), 1)
+        self.assertIn("Posted about hiring · Acme", self.pushed[0][0])
+        self.assertEqual(json.loads(self.events.read_text())["a"]["notified"], self.today)
+        self.assertEqual(E.alert(), [])  # not twice
+
+    def test_a_role_event_already_covered_by_the_role_alert_is_not_pushed_again(self):
+        self.jobs.write_text(json.dumps({"gh:acme:1": {"score": 9}, "gh:acme:2": {"score": 7}}))
+        self.events.write_text(json.dumps({"role:gh:acme:1": self.ev("Acme", "role_posted", job_id="gh:acme:1"),
+                                           "role:gh:acme:2": self.ev("Acme", "role_posted", job_id="gh:acme:2")}))
+        self.assertEqual(E.alert(), ["role:gh:acme:2"])
+        self.assertEqual(json.loads(self.events.read_text())["role:gh:acme:1"]["notified"], "role alert")
+
+    def test_off_in_settings_pushes_nothing(self):
+        self.events.write_text(json.dumps({"a": self.ev("Acme", "post_hiring")}))
+        with mock.patch("radar.settings.load", lambda: {"notify_news": False}):
+            self.assertEqual(E.alert(), [])
+        self.assertEqual(self.pushed, [])
+
+    def test_a_flood_becomes_five_pushes_and_one_summary(self):
+        self.events.write_text(json.dumps({f"e{i}": self.ev("Acme", "post_hiring") | {"url": f"https://x/{i}"} for i in range(8)}))
+        self.assertEqual(len(E.alert()), 8)
+        self.assertEqual(len(self.pushed), 6)
+        self.assertIn("3 more hiring signals", self.pushed[-1][0])

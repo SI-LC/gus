@@ -5,6 +5,7 @@ An event comes from a signal the discover agent promoted, from the watchlist age
 that scored ROLE_EVENT_SCORE or more, or from you. Every one needs a link and a real date.
 
     python3 -m radar.events sync          # housekeeping: role events from jobs, migrate older shapes
+    python3 -m radar.events alert         # push fresh hiring news at A/B accounts to your phone, once each
     python3 -m radar.events list "Acme"   # an account's events, fresh first
 
 `sync` runs on every scan and before the planner reads. It's idempotent:
@@ -19,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from radar.scan import DATA, JOBS
 from radar.store import locked
@@ -38,6 +39,9 @@ STRENGTH = {"post_hiring": 5, "role_posted": 4, "leader_hire": 4, "funding": 3, 
 LABEL = {"post_hiring": "Posted about hiring", "role_posted": "Role posted", "leader_hire": "New product leader",
          "funding": "Funding", "london_office": "London office", "launch": "Launch in your area", "mention": "In the news"}
 FIELDS = ["account", "type", "summary", "url", "date"]
+ALERT_TYPES = ["post_hiring", "leader_hire", "role_posted"]  # the news that most often means a role is coming
+ALERT_WINDOW_DAYS = 2  # only news recorded this recently is pushed, so a backlog never floods the phone
+ALERT_MAX = 5  # pushes per run; the rest go in one summary
 
 
 def today():
@@ -175,10 +179,45 @@ def sync(jobs: dict | None = None) -> dict:
     return out
 
 
+def alert(stored: dict | None = None, jobs: dict | None = None) -> list[str]:
+    """Push a phone alert for fresh hiring news at an A or B account, once per event. Returns the ids alerted.
+    A role event whose role already earned a role alert (score at or above `notify_min_score`) isn't pushed again."""
+    from radar import accounts as A
+    from radar.notify import notify
+    from radar.settings import load as load_settings
+    cfg = load_settings()
+    if not cfg.get("notify_news", True):
+        return []
+    role_threshold = cfg.get("notify_min_score") or 10
+    companies = read(COMPANIES, {})
+    jobs = read(JOBS, {}) if jobs is None else jobs
+    since = str(today() - timedelta(days=ALERT_WINDOW_DAYS))
+    sent = []
+    with locked(EVENTS) as events:
+        for eid, e in events.items():
+            if e.get("notified") or e.get("closed") or e.get("type") not in ALERT_TYPES or (e.get("added") or "") < since:
+                continue
+            if A.tier(companies.get(e.get("account")) or {}) not in ("A", "B") or not decorate(dict(e))["fresh"]:
+                continue
+            if e.get("type") == "role_posted" and (jobs.get(e.get("job_id") or "", {}).get("score") or 0) >= role_threshold:
+                e["notified"] = "role alert"  # triage already pushed this one
+                continue
+            e["notified"] = str(today())
+            sent.append(eid)
+            if len(sent) <= ALERT_MAX:
+                notify(f"{LABEL.get(e['type'], e['type'])} · {e['account']}", "", (e.get("summary") or "")[:300], e.get("url") or "")
+        if len(sent) > ALERT_MAX:
+            more = [events[i]["account"] for i in sent[ALERT_MAX:]]
+            notify(f"Gus: {len(more)} more hiring signals", "", ", ".join(dict.fromkeys(more))[:900])
+    return sent
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "sync"
     if cmd == "sync":
         print(json.dumps(sync()))
+    elif cmd == "alert":
+        print(json.dumps(alert()))
     elif cmd == "list":
         for e in for_account(sys.argv[2], read(EVENTS, {})):
             print(f"{'●' if e['fresh'] else '○'} {e['date']}  {e['type']:<14} {e.get('summary', '')[:70]}  {e['url']}")

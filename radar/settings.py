@@ -116,6 +116,8 @@ SCHEMA = [
     ("my_employers", "Your employers", "lines", "Network",
      "One per line. Used to spot people who worked where you did."),
 
+    ("notify_news", "Alert on hiring news", "bool", "Notifications",
+     "A push when an A or B company posts about hiring, hires a product leader or lists a strong role. Once per event."),
     ("notify_ntfy_server", "ntfy server", "text", "Notifications", "https://ntfy.sh, or your own server."),
     ("quiet_hours", "Quiet hours", "text", "Notifications", "e.g. 22:00-07:00. Notifications are held until it ends. Empty for none."),
     ("cockpit_url", "Cockpit address", "text", "Notifications", "Where notifications link to, e.g. http://raspberrypi:8484 or your Tailscale name."),
