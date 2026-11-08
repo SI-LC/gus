@@ -13,6 +13,7 @@ import os
 import re
 import stat
 from pathlib import Path
+from radar.store import read
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS = ROOT / "config.json"
@@ -57,6 +58,8 @@ SCHEMA = [
     ("run_time", "Daily run time", "times", "Schedule", "When the full run starts each day, 24h, e.g. 08:00. Leave empty to run it only from the button."),
     ("watchlist_every_days", "Refresh accounts every (days)", "int:1-30", "Schedule", "The heaviest step of the run, so it's skipped until this many days have passed."),
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
+    ("prune_after_days", "Tidy old records after (days)", "int:14-365", "Schedule",
+     "A closed or skipped role you never touched loses its saved advert text after this long, and ignored signals and closed events move to data/archive/. Roles you prepared or applied for are never touched."),
 
     ("source_hn", "HN Who is hiring", "bool", "Feeds", "Monthly thread, scanned with the job boards."),
     ("hn_title_include", "HN: words to look for", "lines", "Feeds", "A post must mention one of these. Leave empty to use your titles to include."),
@@ -187,15 +190,8 @@ LEGACY = {"x_bearer_token": ".x_token", "ntfy_topic": ".ntfy_topic", "cockpit_to
 ENV = {"anthropic_api_key": "ANTHROPIC_API_KEY", "x_bearer_token": "X_BEARER_TOKEN", "ntfy_topic": "NTFY_TOPIC"}
 
 
-def _read(path: Path) -> dict:
-    try:
-        return json.loads(path.read_text())
-    except (FileNotFoundError, ValueError):
-        return {}
-
-
 def load() -> dict:
-    return {**_read(DEFAULTS), **_read(USER)}
+    return {**read(DEFAULTS), **read(USER)}
 
 
 def validate(key: str, value):
@@ -248,8 +244,8 @@ def _checked(key, row, value):
 
 
 def save(changes: dict) -> dict:
-    user = _read(USER)
-    defaults = _read(DEFAULTS)
+    user = read(USER)
+    defaults = read(DEFAULTS)
     for k, v in changes.items():
         v = validate(k, v)
         if defaults.get(k) == v:
@@ -262,7 +258,7 @@ def save(changes: dict) -> dict:
 
 def remember(key: str, value) -> None:
     """Gus's own notes, like first run being finished. Kept with your settings so a deploy can't lose them, but not on the form."""
-    user = _read(USER)
+    user = read(USER)
     user[key] = value
     tmp = USER.with_suffix(".tmp")
     tmp.write_text(json.dumps(user, indent=2, ensure_ascii=False))
@@ -272,7 +268,7 @@ def remember(key: str, value) -> None:
 def secret(key: str) -> str:
     if ENV.get(key) and os.environ.get(ENV[key]):
         return os.environ[ENV[key]]
-    v = _read(SECRETS).get(key)
+    v = read(SECRETS).get(key)
     if v:
         return v
     legacy = LEGACY.get(key)
@@ -284,7 +280,7 @@ def secret(key: str) -> str:
 def set_secret(key: str, value: str) -> None:
     if key not in SECRET_KEYS:
         raise ValueError("Unknown secret")
-    s = _read(SECRETS)
+    s = read(SECRETS)
     if value:
         s[key] = value.strip()
     else:

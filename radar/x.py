@@ -17,6 +17,7 @@ from datetime import date
 from radar import usage
 from radar.scan import DATA, load_config
 from radar.settings import load as settings_load
+from radar.store import read
 
 SIGNALS = DATA / "signals.json"
 STATE = DATA / "x_state.json"
@@ -52,7 +53,7 @@ def main():
         print("X: no titles or locations set yet; skipping")
         return
     cap = load_config().get("x_daily_post_cap", 150)
-    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    state = read(STATE)
     if state.get("day") != str(date.today()):
         state.update(day=str(date.today()), used=0)
     if state["used"] >= cap:
@@ -76,7 +77,7 @@ def main():
 
     posts = d.get("data", [])
     users = {u["id"]: u for u in d.get("includes", {}).get("users", [])}
-    signals = json.loads(SIGNALS.read_text()) if SIGNALS.exists() else {}
+    signals = read(SIGNALS)
     for p in posts:
         u = users.get(p["author_id"], {})
         signals[f"x:{p['id']}"] = {

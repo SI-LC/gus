@@ -1,5 +1,7 @@
-"""Locked read-modify-write for the JSON data files, so the scanner, the scoring
-steps and the cockpit never overwrite each other's changes."""
+"""The one way to the JSON data files: `read` for a look, `locked` for a change.
+
+Every module reads through `read`, so a missing or half-written file means the same thing everywhere (the default), and
+the scanner, the scoring steps and the cockpit never overwrite each other's changes."""
 from __future__ import annotations
 
 import fcntl
@@ -19,3 +21,11 @@ def locked(path: Path, default=None):
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         tmp.replace(path)
+
+
+def read(path: Path, default=None):
+    """The file's contents, or the default ({} unless given) when it's missing or not yet valid JSON."""
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return {} if default is None else default

@@ -11,7 +11,7 @@ import sys
 from radar import ai, salary
 from radar.notify import notify
 from radar.scan import JOBS, ROOT, load_config
-from radar.store import locked
+from radar.store import locked, read
 
 PROMPT = (ROOT / "prompts" / "triage.md").read_text()
 
@@ -83,7 +83,7 @@ def main():
         sys.exit("profile/profile.md missing: copy profile/profile.example.md and fill it in")
     seen = set()
     for _ in range(MAX_BATCHES):  # score everything waiting, not just what this scan found
-        store = json.loads(JOBS.read_text())
+        store = read(JOBS)
         todo = [j for j in store.values() if j.get("score") is None and j["id"] not in seen]
         if not todo:
             return

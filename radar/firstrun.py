@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 from radar import ai, resolve, scan, settings, triage
 from radar.scan import DATA, JOBS, ROOT
-from radar.store import locked
+from radar.store import locked, read
 
 STARTER = ROOT / "starter-boards.csv"
 PROFILE = ROOT / "profile" / "profile.md"
@@ -79,7 +79,7 @@ def set_up() -> bool:
     except OSError:
         pass
     try:
-        return bool(json.loads(JOBS.read_text()))
+        return bool(read(JOBS))
     except (OSError, ValueError):
         return False
 

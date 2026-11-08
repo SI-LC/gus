@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import urllib.request
 from pathlib import Path
+from radar.store import read
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -75,16 +76,15 @@ HELD = ROOT / "data" / "held_notifications.json"
 
 def _hold(*n):
     import json
-    held = json.loads(HELD.read_text()) if HELD.exists() else []
+    held = read(HELD, [])
     HELD.write_text(json.dumps(held + [list(n)]))
 
 
 def release_held():
     """Send what was held during quiet hours, as one summary."""
-    import json
     if quiet_now() or not HELD.exists():
         return
-    held = json.loads(HELD.read_text())
+    held = read(HELD, [])
     HELD.unlink()
     if held:
         notify(f"Gus: {len(held)} while you were away", "", "; ".join(f"{h[0]} {h[1]}".strip() for h in held)[:900])
