@@ -26,6 +26,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse
 
 from radar.settings import group_of, groups, load
+from radar import jobs as J
 from radar.store import locked
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -818,23 +819,14 @@ def matches(job, cfg, hn=False) -> bool:
 _boards_answered: set = set()
 
 
-def title_key(title: str) -> str:
-    return re.sub(r"\W+", " ", (title or "").lower()).strip()
-
-
-def google_titles(store: dict) -> set:
-    """Google roles Gus already holds under another source, so reading Google itself doesn't bring them in twice."""
-    return {title_key(j.get("title")) for j in store.values() if re.search("google|deepmind", j.get("company") or "", re.I)}
-
-
 def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
     """Roles gone from a board that answered, two scans running, are marked closed; if one returns, it's reopened."""
     closed = []
     for jid, j in store.items():
-        board = ":".join(jid.split(":")[:2])
-        if board not in answered:
+        ids = [jid] + list(j.get("also") or {})
+        if not any(":".join(i.split(":")[:2]) in answered for i in ids):
             continue
-        if jid in live:
+        if any(i in live for i in ids):
             j.pop("missed", None)
             j.pop("ad_closed", None)
         elif not j.get("ad_closed"):
@@ -894,7 +886,7 @@ def main():
     live = {j["id"] for j in jobs} | _listed
     with locked(JOBS) as store:
       mark_closed(store, _boards_answered, live, now)
-      google_has = google_titles(store)
+      alias = J.aliases(store)
       for j in jobs:
         hn = j.pop("_hn", False)
         if not matches(j, cfg, hn):
@@ -902,7 +894,9 @@ def main():
         if j["id"] in store:
             store[j["id"]]["last_seen"] = now
             continue
-        if j["id"].startswith("gc:") and title_key(j["title"]) in google_has:  # already found on a job search site
+        if (have := J.find_match(store, j, alias)) is not None:  # the same ad, found before through another source
+            J.absorb(store[have], {**j, "source": "hn" if hn else "board"}, now)
+            alias[j["id"]] = have
             continue
         j.update(first_seen=now, last_seen=now, stage="new", score=None, why=None, source="hn" if hn else "board")
         store[j["id"]] = j

@@ -21,6 +21,8 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
+from radar import jobs as J
+from radar.jobs import same_company, same_title  # one definition, shared with scan and links
 from radar.scan import DATA, JOBS, UA, left_out, load_config, matches, strip_html
 from radar.settings import secret
 from radar.store import locked
@@ -259,19 +261,6 @@ FETCH = {"adzuna": adzuna, "jsearch": jsearch}
 
 # --- the same clean-up for every source -----------------------------------------
 
-def same_company(s) -> str:
-    s = re.sub(r"[(),.'’]", " ", (s or "").lower().replace("&", "and"))
-    s = re.sub(r"\b(limited|ltd|plc|inc|llc|llp|sarl|gmbh|group|holdings?|uk|europe|emea|careers|company|the|corp|corporation)\b", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
-
-
-def same_title(s) -> str:
-    s = re.sub(r"\(.*?\)|\[.*?\]", " ", (s or "").lower())
-    s = re.sub(r"\bjob in .*$|\s[-–—|]\s*(london|uk|remote|hybrid|united kingdom).*$", " ", s)
-    s = re.sub(r"\bsr\b\.?", "senior", s)
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", s)).strip()
-
-
 def ad_text(j) -> str:
     """The same advert under a slightly different title. Short extracts are too alike to compare."""
     text = re.sub(r"\W+", " ", (j.get("description") or "").lower())[:400]
@@ -282,15 +271,20 @@ def hits(pattern, text) -> bool:
     return bool(pattern and pattern.pattern and pattern.search(text))  # an empty setting must not match everything
 
 
-def clean(rows, store, cfg, today=None):
+def clean(rows, store, cfg, today=None, now=None):
     """Keep real, fresh, wanted roles that Gus doesn't already have. Returns the roles and why others went."""
     cutoff = str((today or date.today()) - timedelta(days=int(cfg.get("sources_max_age_days", 14))))
     seen = {(same_company(j.get("company")), same_title(j.get("title"))) for j in store.values()}
     texts = {ad_text(j) for j in store.values()} - {""}
+    alias = J.aliases(store)
     kept, dropped = [], dict.fromkeys(("old", "no employer", "agency", "repeat", "not a match"), 0)
     for j in rows:
         key = (same_company(j["company"]), same_title(j["title"]))
         if j["id"] in store:
+            continue
+        if (have := J.find_match(store, j, alias)) is not None:
+            J.absorb(store[have], j, now or datetime.now(timezone.utc).isoformat(timespec="seconds"))
+            dropped["repeat"] += 1
             continue
         if not j.get("posted") or str(j["posted"])[:10] < cutoff:
             why = "old"
@@ -371,7 +365,7 @@ def run_source(name, cfg, st):
     with locked(JOBS) as store:
         for jid in rows.keys() & store.keys():
             store[jid]["last_seen"] = now
-        kept, dropped = clean(rows.values(), store, cfg)
+        kept, dropped = clean(rows.values(), store, cfg, now=now)
         for j in kept:
             j.update(first_seen=now, last_seen=now, stage="new", score=None, why=None, source=name)
             store[j["id"]] = j
