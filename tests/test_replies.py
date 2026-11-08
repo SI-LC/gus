@@ -25,8 +25,11 @@ class Scoring(unittest.TestCase):
         self.jobs, self.profile = d / "jobs.json", d / "profile.md"
         self.profile.write_text("Made-up candidate")
         self.notify = mock.Mock()
+        from radar import events as E  # scoring syncs events afterwards: keep that in the temp dir, never the real data/
         for target, attr, value in ((triage, "JOBS", self.jobs), (triage, "notify", self.notify),
-                                    (triage, "load_config", lambda: {"notify_min_score": 8})):
+                                    (triage, "load_config", lambda: {"notify_min_score": 8}),
+                                    (E, "JOBS", self.jobs), (E, "EVENTS", d / "events.json"), (E, "COMPANIES", d / "companies.json"),
+                                    (E, "MOVES", d / "moves.json"), (E, "SIGNALS", d / "signals.json")):
             patcher = mock.patch.object(target, attr, value)
             patcher.start()
             self.addCleanup(patcher.stop)

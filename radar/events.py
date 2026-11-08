@@ -10,7 +10,8 @@ that scored ROLE_EVENT_SCORE or more, or from you. Every one needs a link and a 
 `sync` runs on every scan and before the planner reads. It's idempotent:
 - a role scoring 7+ that's still open has a `role_posted` event (`role:<job id>`); when the ad closes or
   you skip the role, the event gets `closed` and stops counting
-- events an older agent wrote inline on an account (`companies.json` → `events`) move here
+- events an older agent wrote inline on an account (`companies.json` → `events`) move here, and an account's
+  `pending_signals` become `company` on the signals themselves
 - a move still carrying a copied `signal` dict gets an `event_id` instead
 """
 from __future__ import annotations
@@ -26,6 +27,7 @@ from radar.store import locked
 EVENTS = DATA / "events.json"
 COMPANIES = DATA / "companies.json"
 MOVES = DATA / "moves.json"
+SIGNALS = DATA / "signals.json"
 
 ROLE_EVENT_SCORE = 7  # the one place the "a role this good is a signal" threshold lives
 FRESH_DAYS = 30
@@ -115,10 +117,11 @@ def for_account(name: str, events: dict) -> list[dict]:
 def sync(jobs: dict | None = None) -> dict:
     """Housekeeping, safe to run any time. Returns counts of what it changed."""
     jobs = read(JOBS, {}) if jobs is None else jobs
-    out = {"migrated": 0, "role_events": 0, "closed": 0, "moves": 0}
+    out = {"migrated": 0, "role_events": 0, "closed": 0, "moves": 0, "signals": 0}
     with locked(EVENTS) as events:
-        # 1. events an older agent wrote inline on the account
-        with locked(COMPANIES) as companies:
+        # 1. events an older agent wrote inline on the account, and the signals it was flagged for
+        with locked(COMPANIES) as companies, locked(SIGNALS) as signals:
+            by_link = {s.get("url"): s for s in signals.values() if s.get("url")}
             for name, c in companies.items():
                 for e in c.pop("events", None) or []:
                     if not isinstance(e, dict) or not e.get("url"):
@@ -129,7 +132,11 @@ def sync(jobs: dict | None = None) -> dict:
                                        "summary": (e.get("summary") or "")[:300], "url": e["url"],
                                        "date": str(parse_date(e.get("date")) or ""), "source": "account", "added": str(today())}
                         out["migrated"] += 1
-                c.pop("pending_signals", None)  # the signal itself now carries `company`; the account keeps `reassess`
+                for ps in c.pop("pending_signals", None) or []:  # the signal itself now carries `company`; the account keeps `reassess`
+                    lead = by_link.get(ps.get("url") if isinstance(ps, dict) else None)
+                    if lead is not None and not lead.get("company"):
+                        lead["company"] = name
+                        out["signals"] += 1
         # 2. role events: a role this good is a signal while it's open
         for jid, j in jobs.items():
             good = (j.get("score") or 0) >= ROLE_EVENT_SCORE and j.get("company")

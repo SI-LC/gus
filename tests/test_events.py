@@ -13,7 +13,7 @@ class Sync(unittest.TestCase):
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
         self.files = {"EVENTS": self.d / "events.json", "COMPANIES": self.d / "companies.json", "MOVES": self.d / "moves.json",
-                      "JOBS": self.d / "jobs.json"}
+                      "JOBS": self.d / "jobs.json", "SIGNALS": self.d / "signals.json"}
         self.fresh = str(date.today() - timedelta(days=2))
 
     def write(self, name, data):
@@ -44,7 +44,8 @@ class Sync(unittest.TestCase):
         self.assertEqual(ev, {})
 
     def test_inline_account_events_and_pending_signals_move_off_the_account(self):
-        self.write("COMPANIES", {"Acme": {"status": "watched", "pending_signals": [{"url": "x"}],
+        self.write("SIGNALS", {"feed:1": {"source": "Sifted", "url": "https://x/s", "status": "new"}})
+        self.write("COMPANIES", {"Acme": {"status": "watched", "reassess": True, "pending_signals": [{"url": "https://x/s", "title": "Acme raises"}],
                                           "events": [{"type": "funding", "summary": "Series B", "url": "https://x/1", "date": "2026-11-01"},
                                                      {"type": "funding", "summary": "dupe", "url": "https://x/1", "date": "2026-11-01"},
                                                      {"type": "launch", "summary": "no link"}]}})
@@ -52,7 +53,9 @@ class Sync(unittest.TestCase):
         self.assertEqual(out["migrated"], 1)
         self.assertEqual(list(ev), ["acme:funding:2026-11-01"])
         self.assertEqual(ev["acme:funding:2026-11-01"]["source"], "account")
-        self.assertEqual(json.loads(self.files["COMPANIES"].read_text()), {"Acme": {"status": "watched"}})
+        self.assertEqual(json.loads(self.files["COMPANIES"].read_text()), {"Acme": {"status": "watched", "reassess": True}})
+        self.assertEqual(out["signals"], 1)
+        self.assertEqual(json.loads(self.files["SIGNALS"].read_text())["feed:1"]["company"], "Acme")
 
     def test_a_move_carrying_a_copied_signal_gets_an_event_id(self):
         self.write("MOVES", {"2026-W45:p": {"account": "Acme", "person_id": "p",
