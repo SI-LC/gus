@@ -15,7 +15,7 @@ import re
 import urllib.parse
 import urllib.request
 
-from radar.scan import DATA, UA, get_json, load_config, strip_html
+from radar.scan import DATA, get_json, load_config, strip_html, ua
 from radar.settings import secret
 from radar.store import locked
 
@@ -58,12 +58,12 @@ def reddit(subs):
         return
     auth = base64.b64encode(f"{cid}:{csec}".encode()).decode()
     req = urllib.request.Request("https://www.reddit.com/api/v1/access_token", data=b"grant_type=client_credentials",
-                                 headers={**UA, "Authorization": f"Basic {auth}"})
+                                 headers={**ua(), "Authorization": f"Basic {auth}"})
     with urllib.request.urlopen(req, timeout=30) as r:
         tok = json.load(r)["access_token"]
     for sub in subs:
         req = urllib.request.Request(f"https://oauth.reddit.com/r/{urllib.parse.quote(sub)}/new?limit=50",
-                                     headers={**UA, "Authorization": f"Bearer {tok}"})
+                                     headers={**ua(), "Authorization": f"Bearer {tok}"})
         with urllib.request.urlopen(req, timeout=30) as r:
             for c in json.load(r)["data"]["children"]:
                 p = c["data"]
