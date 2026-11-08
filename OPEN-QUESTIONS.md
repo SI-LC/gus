@@ -8,6 +8,14 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 - **What the Pi's Claude login can reach.** Logging in with a Claude account brings that account's connectors (mail, files, calendar) to the Pi, and only Gus's own agents are limited. Options: use an Anthropic API key on the Pi (pay per use), or a separate Claude account with nothing connected.
 - **What should depend on the laptop.** Today deploys run from it, evals copy role data to it, and application status is sent from it. Proposed rule: the Pi runs everything and the laptop is only a screen, plus whatever local apps documents need.
 - **Scoring evals.** Decide what evals should cover before more labelling. The job-first labelling change is on a branch (closed PR #17). Labels are incomplete, and the pass marks haven't been checked against a real run.
+- **Evals for what the agent prompts do.** `evals/cases/` checks the cockpit in a browser and `radar.evals` checks role
+  scoring, but nothing checks the agent playbooks (`prompts/watchlist.md`, `discover.md`, `moves.md`, `inbox.md`): whether
+  a run adds the records it was told to, with the fields it was told to set. The neighbour step is an example:
+  it could save a neighbour with no board and no careers address, so nothing watched it, and no check would have noticed. Options:
+  replay each playbook against a fixed `data/` and assert on the records it writes (slow, costs tokens, non-deterministic),
+  check the data after each real run against `docs/objects.md` rules such as "a watched company has a board or a
+  careers address" (cheap, catches the result not the cause), or both. Decide what a failing run should do: block the
+  merge, or show in Health.
 - **How much should a company's name count?** If brand is a real reason to apply, list preferred companies in the profile and have `prompts/triage.md` weigh them openly. If not, keep labels and scoring on fit alone. Comparing old labels with a relabelled set should help.
 - **Separate company fit score?** One score mixes company fit and role fit, so a good role type at a strong company can still score low, and thresholds at 7 and 8 hide it. Options: keep one score, or score company and role separately and let the candidate choose which matters for each role type. Decide after a few weeks of real decisions. Relates to the company name question above and to replacing the A/B/C tiers.
 
