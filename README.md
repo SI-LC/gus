@@ -129,6 +129,7 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 - **Web agents** can read this repo and search the web, but can only write to `data/` and `watchlist.csv`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
 - **Email** is off until you connect it. It's then read-only and filtered before opening, and a separate agent with no internet access processes it, so a crafted email can't send your data out.
 - **The cockpit** has no login unless you set an access token. It listens on this machine only by default, and won't listen on a network without a token. Keep it behind a private network such as Tailscale, never on the public internet. The Pi install publishes it to your Tailscale devices, so anything on your tailnet can open it.
+- **On other people's sites** Gus is a guest: it says who it is (`gus/<version>` with a link to this repo), follows each site's `robots.txt`, waits between pages and between requests to one host, and reads the large sites once a day. If you run a site and would rather it didn't visit, open an issue here.
 - **Known limits:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way. A Claude login can also bring that account's connectors to the machine, such as mail, files and calendar, so check what your account has connected.
 
 ## Principles

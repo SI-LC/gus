@@ -580,3 +580,38 @@ class SharedBoard(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(sorted(j["title"] for j in jobs if j["company"] == "Base44"), ["Product Manager - Base44"])
         self.assertEqual(len([j for j in jobs if j["company"] == "Wix"]), 2)
+
+
+class BotIdentity(unittest.TestCase):
+    """Sites see who is asking: a name, the release and a link to this repo; and no host gets a burst of requests from one address."""
+
+    def test_user_agent_names_the_repo_and_release(self):
+        from radar import scan
+        self.assertRegex(scan.UA["User-Agent"], r"^gus/(\d+\.\d+\.\d+|dev) \(\+https://github\.com/SI-LC/gus; .+\)$")
+
+    def test_version_without_git_is_dev(self):
+        import subprocess
+        from unittest import mock
+        from radar import scan
+        with mock.patch.object(subprocess, "run", side_effect=OSError("no git")):
+            self.assertEqual(scan.version(), "dev")
+
+    def test_requests_to_one_host_are_paced(self):
+        import io
+        from unittest import mock
+        from radar import scan
+
+        class Reply(io.BytesIO):
+            headers = {}
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        slept = []
+        with mock.patch("urllib.request.urlopen", lambda req, timeout=30: Reply(b"ok")), mock.patch.object(scan.time, "sleep", slept.append), \
+             mock.patch.dict(scan._hosts, clear=True):
+            scan.fetch_bytes("https://boards.example.com/a/jobs")
+            scan.fetch_bytes("https://other.example.com/jobs")
+            self.assertEqual(slept, [], "different hosts run side by side")
+            scan.fetch_bytes("https://boards.example.com/b/jobs")
+        self.assertEqual(len(slept), 1)
+        self.assertAlmostEqual(slept[0], scan.HOST_PAUSE, delta=0.2)

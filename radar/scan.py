@@ -13,6 +13,7 @@ import http.client
 import json
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -34,7 +35,26 @@ DATA = ROOT / "data"
 JOBS = DATA / "jobs.json"
 LOOKED_UP = DATA / "board_locations.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
-UA = {"User-Agent": "gus/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
+REPO = "https://github.com/SI-LC/gus"
+
+
+def version() -> str:
+    """The release this code is from, read from its git tag, so a site operator seeing Gus in their logs knows which one asked.
+    "dev" when there is no tag or no git."""
+    try:
+        out = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    return out.lstrip("v") or "dev"
+
+
+# Who is asking: the convention is name/version and, in brackets, a link where the site's owner can read what the bot is
+# and reach whoever runs it. A bot that can be identified and is plainly small is the kind nobody bothers to block.
+UA = {"User-Agent": f"gus/{version()} (+{REPO}; a personal job-search radar)", "Accept-Encoding": "gzip"}
+HOST_PAUSE = 1.5  # seconds between any two requests to one host, whichever threads send them
+_hosts: dict = {}  # host -> the moment it may next be asked
+_hosts_lock = threading.Lock()
 
 
 MAX_RESPONSE = 50_000_000
@@ -63,11 +83,23 @@ def _fetch_by(req, deadline) -> bytes:
     return data
 
 
+def _pace(host: str) -> None:
+    """Requests to one host come at least HOST_PAUSE apart, whichever thread sends them. The scan reads six boards at once, and
+    many of them live on the same vendor's host: paced, they arrive one at a time rather than as a burst from one address."""
+    with _hosts_lock:
+        now = time.monotonic()
+        turn = max(now, _hosts.get(host, 0))
+        _hosts[host] = turn + HOST_PAUSE
+    if turn > now:
+        time.sleep(turn - now)
+
+
 def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict = None) -> bytes:
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory."""
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
     req = urllib.request.Request(url, data=body, headers={**UA, **(headers or {})})
+    _pace(urlparse(url).netloc.lower())
     if getattr(_limit, "deadline", None) is not None:
         return _fetch_by(req, _limit.deadline)
     for attempt in range(3):  # wifi connections drop now and then; a 4xx won't change, so don't retry those
