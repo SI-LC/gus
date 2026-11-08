@@ -556,3 +556,27 @@ class Distance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedBoard(unittest.TestCase):
+    """A company whose roles sit on its parent's board (Base44 on Wix's) keeps only the titles its `only` pattern matches."""
+
+    def test_only_keeps_matching_titles(self):
+        import csv, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from radar import scan
+        d = tempfile.TemporaryDirectory(); self.addCleanup(d.cleanup)
+        path = Path(d.name) / "watchlist.csv"
+        with path.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerows([["company", "ats", "slug", "sector", "only"], ["Base44", "fake", "wix", "ai-apps", "base44"], ["Wix", "fake", "wix", "web", ""]])
+        board = lambda company, slug: [{"id": f"{company}:1", "company": company, "title": "Product Manager - Base44"},
+                                       {"id": f"{company}:2", "company": company, "title": "Full Stack Engineer"}]
+        with mock.patch.dict(scan.SOURCES, fake=board, clear=True), mock.patch.object(scan, "watchlist_path", lambda: path), \
+             mock.patch.object(scan, "load_config", lambda: {"source_hn": False}), mock.patch.object(scan, "save_looked_up", lambda a: None), \
+             mock.patch.object(scan, "DATA", Path(d.name)):
+            jobs, errors = scan.fetch_all()
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(j["title"] for j in jobs if j["company"] == "Base44"), ["Product Manager - Base44"])
+        self.assertEqual(len([j for j in jobs if j["company"] == "Wix"]), 2)

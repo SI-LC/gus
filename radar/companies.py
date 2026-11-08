@@ -118,7 +118,7 @@ def veto(name: str):
     rows = watchlist()
     keep = [r for r in rows if r["company"].lower() != name.lower()]
     with WATCHLIST.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["company", "ats", "slug", "sector"])
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ["company", "ats", "slug", "sector"])
         w.writeheader()
         w.writerows(keep)
     match = next((k for k in c if k.lower() == name.lower()), name)

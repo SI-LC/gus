@@ -123,7 +123,7 @@ The funnel's first step counts fresh events, not signals.
 
 - `data/emails.json`, `data/meetings.json`: filtered inbox snippets and calendar invites, processed by an agent with no internet access.
 - `data/network.json`: your LinkedIn connections (name, link, company, position, date; emails dropped).
-- `watchlist.csv`: the boards to scan; `companies sync` mirrors it into each account's `board`.
+- `watchlist.csv`: the boards to scan; `companies sync` mirrors it into each account's `board`. An optional `only` column holds a pattern a role's title must match, for a company whose roles sit on its parent's board (Base44 on Wix's).
 - `data/*_state.json`, `board_errors.json`, `feed_errors.json`, `heartbeat.log`: state for the scheduler, sources, feeds and X.
 
 ## How they connect

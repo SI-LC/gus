@@ -78,7 +78,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Make it yours
 
-- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of ten job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address.
+- **Add a company:** ask the watchlist loop to find it, or run `python3 -m radar.resolve --add "Acme"`, which works out which of ten job board systems it uses. Adding `--careers <its careers address>` is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address. A company whose roles sit on its parent's board (Base44 on Wix's) takes the parent's slug and a pattern its titles must match in the `only` column of `watchlist.csv`.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources. Google has no job board to read, so paste a Google Careers search there too: Gus reads its first page once a day.
