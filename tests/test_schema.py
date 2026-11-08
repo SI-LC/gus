@@ -39,10 +39,9 @@ class Schema(unittest.TestCase):
         self.assertIn("gh:acme:1: stage='open' isn't one of ['new', 'shortlisted', 'preparing', 'applied', 'interviewing', 'closed', 'skipped']", out["jobs"])
         self.assertIn("gh:acme:1: score must be 1-10", out["jobs"])
 
-    def test_old_company_field_and_bad_event(self):
+    def test_bad_event_is_named_but_a_field_sync_migrates_is_not(self):
         out = self.run_check(**{"companies.json": {"Acme": {"why_it_fits": "x", "events": [{"type": "funding", "summary": "no link"}]}}})
-        self.assertEqual(out["companies"], ["Acme: why_it_fits should be fit_why (companies sync renames it)",
-                                           "Acme: events[0] needs type, summary, url, date"])
+        self.assertEqual(out["companies"], ["Acme: events[0] needs type, summary, url, date"])
 
     def test_move_must_point_at_known_account_and_person(self):
         out = self.run_check(**{"moves.json": {"2026-W45:sam-jones@acme": {"account": "Nope", "person_id": "who@nope"}}})

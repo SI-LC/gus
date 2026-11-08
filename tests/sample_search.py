@@ -19,7 +19,9 @@ SEARCH = {
 
 
 def loaded() -> dict:
-    return {**settings.load(), **SEARCH}
+    """The shipped defaults plus the sample, never the candidate's own settings.json: a test must run the same on
+    the Mac, the Pi and GitHub, and a switch turned on in the real search (e.g. Google Careers) mustn't leak in."""
+    return {**settings._read(settings.DEFAULTS), **SEARCH}
 
 
 def use_sample(test) -> None:
