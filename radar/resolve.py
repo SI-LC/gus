@@ -21,13 +21,14 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, board_size, fetch_bytes, gem_posts, get_json, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, board_size, fetch_bytes, gem_posts, get_json, github_count, polite_fetch, site_rules, teamtailor_items, watchlist_path
 from radar.store import read
 
 GUESS_DAYS = 14  # how long before a company with no board is guessed at again
 # Where a person can look at a board found by name, to see whose it really is
 BOARD_URL = {"greenhouse": "https://job-boards.greenhouse.io/{s}", "ashby": "https://jobs.ashbyhq.com/{s}", "lever": "https://jobs.lever.co/{s}",
-             "workable": "https://apply.workable.com/{s}", "smartrecruiters": "https://jobs.smartrecruiters.com/{s}", "recruitee": "https://{s}.recruitee.com"}
+             "workable": "https://apply.workable.com/{s}", "smartrecruiters": "https://jobs.smartrecruiters.com/{s}", "recruitee": "https://{s}.recruitee.com",
+             "githubcareers": "https://www.github.careers/careers-home"}
 
 # ats -> (url for a slug, function that counts jobs in the response)
 PROBES = {
@@ -51,6 +52,8 @@ BOARD_LINKS = {
     # the slug is the whole host. These names are Teamtailor's own, and most careers pages mention at least one of them
     "teamtailor": re.compile(r"\b((?!(?:app|www|api|docs|support|career|integrations)\.)[\w-]+(?:\.na)?\.teamtailor\.com)", re.I),
     "gem": re.compile(r"\b(?:jobs\.gem\.com|api\.gem\.com/job_board/v0)/([\w-]+)", re.I),
+    # GitHub's own site: one list for the whole company, so the slug is just its name
+    "githubcareers": re.compile(r"\b(?:www\.)?(github)\.careers(?![\w.-])", re.I),
 }
 WORKDAY_LINK = re.compile(r"([\w-]+\.wd\d+)\.myworkdayjobs\.com(?:/[a-z]{2}-[A-Z]{2})?(?:/([\w-]+))?")
 CAREERS_HOSTS = re.compile(r"https://((?:careers?|jobs)\.[a-z0-9.-]+)", re.I)
@@ -72,6 +75,8 @@ def probe(ats: str, slug: str):
             n = len(teamtailor_items(slug))
         elif ats == "gem":
             n = len(gem_posts(slug))
+        elif ats == "githubcareers":
+            n = github_count()
         elif ats in SITE_BOARDS:
             n = board_size(ats, slug)
         else:

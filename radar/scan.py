@@ -13,6 +13,7 @@ import http.client
 import json
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -34,7 +35,36 @@ DATA = ROOT / "data"
 JOBS = DATA / "jobs.json"
 LOOKED_UP = DATA / "board_locations.json"
 WATCHLIST = ROOT / "watchlist.csv"  # yours, git-ignored; starts as a copy of watchlist.example.csv
-UA = {"User-Agent": "gus/0.1 (+https://github.com/)", "Accept-Encoding": "gzip"}
+REPO = "https://github.com/SI-LC/gus"
+VERSION_KEEP = 3600  # seconds before the release tag is read again
+_version = (0.0, "")  # (good until, release)
+
+
+def version() -> str:
+    """The release this code is from, read from its git tag, so a site operator seeing Gus in their logs knows which one asked.
+    "dev" when there is no tag or no git. Read again every hour, because the release is tagged after the Pi has started the
+    new code: the service picks the tag up without a restart."""
+    global _version
+    if _version[0] > time.monotonic():
+        return _version[1]
+    try:
+        out = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    _version = (time.monotonic() + VERSION_KEEP, out.lstrip("v") or "dev")
+    return _version[1]
+
+
+def ua() -> dict:
+    """Who is asking: the convention is name/version and, in brackets, a link where the site's owner can read what the bot is
+    and reach whoever runs it. A bot that can be identified and is plainly small is the kind nobody bothers to block."""
+    return {"User-Agent": f"gus/{version()} (+{REPO}; a personal job-search radar)", "Accept-Encoding": "gzip"}
+
+
+HOST_PAUSE = 1.5  # seconds between any two requests to one host, whichever threads send them
+_hosts: dict = {}  # host -> the moment it may next be asked
+_hosts_lock = threading.Lock()
 
 
 MAX_RESPONSE = 50_000_000
@@ -63,11 +93,23 @@ def _fetch_by(req, deadline) -> bytes:
     return data
 
 
+def _pace(host: str) -> None:
+    """Requests to one host come at least HOST_PAUSE apart, whichever thread sends them. The scan reads six boards at once, and
+    many of them live on the same vendor's host: paced, they arrive one at a time rather than as a burst from one address."""
+    with _hosts_lock:
+        now = time.monotonic()
+        turn = max(now, _hosts.get(host, 0))
+        _hosts[host] = turn + HOST_PAUSE
+    if turn > now:
+        time.sleep(turn - now)
+
+
 def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict = None) -> bytes:
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory."""
     if not url.lower().startswith(("https://", "http://")):
         raise ValueError(f"Not a web address: {url[:60]}")
-    req = urllib.request.Request(url, data=body, headers={**UA, **(headers or {})})
+    req = urllib.request.Request(url, data=body, headers={**ua(), **(headers or {})})
+    _pace(urlparse(url).netloc.lower())
     if getattr(_limit, "deadline", None) is not None:
         return _fetch_by(req, _limit.deadline)
     for attempt in range(3):  # wifi connections drop now and then; a 4xx won't change, so don't retry those
@@ -94,7 +136,7 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz", "githubcareers": "ghc"}
 MISSES_TO_CLOSE = 2
 
 
@@ -281,6 +323,10 @@ GOOGLE_NAMES = {"DeepMind": "Google DeepMind"}
 AMAZON_HOST = "https://www.amazon.jobs"
 AMAZON_PAGE = 100  # jobs per request, the most the site gives
 AMAZON_PAGES = 5  # requests per read, so 500 roles; a longer list is cut short
+GITHUB_HOST = "https://www.github.careers"
+GITHUB_PAGE = 100  # jobs per request, the most the site gives
+GITHUB_PAGES = 10  # requests per read, so 1,000 roles; a longer list is cut short
+GITHUB_PAUSE = 5  # seconds between pages: the crawl-delay its robots.txt asks for
 COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
              "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
 
@@ -811,6 +857,50 @@ def amazon_jobs(company: str, slug: str):
     return read_daily(slug, address, DATA / "amazon_jobs.json", read_amazon)
 
 
+def github_job(company: str, slug: str, j: dict) -> dict:
+    """One ad from the list on github.careers: the ad text is in three parts, which the job page shows one after another."""
+    place, country = j.get("location_name") or "", j.get("full_location") or ""
+    return {
+        "id": f"ghc:{slug}:{j['req_id']}",
+        "company": company,
+        "title": html.unescape(j["title"]).strip(),
+        "location": place if country in place else " / ".join(filter(None, (place, country))),
+        "url": f"{GITHUB_HOST}/careers-home/jobs/{j['slug']}",
+        "posted": j.get("posted_date") or None,
+        "description": strip_html("\n".join(filter(None, (j.get("description"), j.get("responsibilities"), j.get("qualifications"))))),
+    }
+
+
+def read_github(company: str, slug: str) -> list:
+    """Every page of the list, until a page comes back short or the page limit is reached. The site asks for five seconds between
+    requests, so a long list takes a while: this is why it's read once a day, like the Amazon and Google searches."""
+    jobs = []
+    for page in range(1, GITHUB_PAGES + 1):
+        if page > 1:
+            time.sleep(GITHUB_PAUSE)
+        try:
+            d = json.loads(polite_fetch(f"{GITHUB_HOST}/api/jobs?page={page}&limit={GITHUB_PAGE}"))
+            found = [github_job(company, slug, j["data"]) for j in d["jobs"]]
+        except (ValueError, KeyError, TypeError) as e:
+            raise Refused("The site no longer answers with job results Gus can read") from e
+        jobs += found
+        if len(found) < GITHUB_PAGE:
+            return jobs
+    _cut_short.add(slug)  # more pages than Gus reads: a role missing from these may just be further down
+    return jobs
+
+
+def github_count() -> int:
+    """How many roles github.careers lists, for the resolver: the smallest page carries the total."""
+    return int(json.loads(polite_fetch(f"{GITHUB_HOST}/api/jobs?page=1&limit=1")).get("totalCount") or 0)
+
+
+def github_careers(company: str, slug: str):
+    """GitHub hires on its own site, github.careers, which isn't one of the job board systems. There is one list for the whole
+    company, so the slug is only its name in `watchlist.csv`; the list is read once a day."""
+    return read_daily(slug, GITHUB_HOST, DATA / "github_careers.json", lambda address: read_github(company, slug))
+
+
 def hn_who_is_hiring():
     """Latest 'Ask HN: Who is hiring?' thread: top-level comments, each filtered by matches()."""
     s = get_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring")
@@ -836,7 +926,8 @@ def hn_who_is_hiring():
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
-           "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs}
+           "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs,
+           "githubcareers": github_careers}
 
 
 # --- pipeline ----------------------------------------------------------------

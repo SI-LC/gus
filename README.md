@@ -85,7 +85,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 - **Add a company:** type its name under Companies in the cockpit, or run `python3 -m radar.resolve --add "Acme"`. Either way Gus works out which of ten job board systems it uses. Giving its careers address is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address. A company whose roles sit on its parent's board (Base44 on Wix's) takes the parent's slug and a pattern its titles must match in the `only` column of `watchlist.csv`.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
-- **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources. Google and Amazon have no job board to read, so paste a Google Careers or amazon.jobs search there too: Gus reads it once a day, newest first. Add the company under Companies as well, so its roles roll up to an account.
+- **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources. Google and Amazon have no job board to read, so paste a Google Careers or amazon.jobs search there too: Gus reads it once a day, newest first. Add the company under Companies as well, so its roles roll up to an account. GitHub also hires on its own site, github.careers: give that as its careers address under Companies and Gus reads the whole list once a day.
 
 ## Checking it still works
 
@@ -129,6 +129,7 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 - **Web agents** can read this repo and search the web, but can only write to `data/` and `watchlist.csv`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
 - **Email** is off until you connect it. It's then read-only and filtered before opening, and a separate agent with no internet access processes it, so a crafted email can't send your data out.
 - **The cockpit** has no login unless you set an access token. It listens on this machine only by default, and won't listen on a network without a token. Keep it behind a private network such as Tailscale, never on the public internet. The Pi install publishes it to your Tailscale devices, so anything on your tailnet can open it.
+- **On other people's sites** Gus is a guest: it says who it is (`gus/<version>` with a link to this repo), follows each site's `robots.txt`, waits between pages and between requests to one host, and reads the large sites once a day. If you run a site and would rather it didn't visit, open an issue here.
 - **Known limits:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way. A Claude login can also bring that account's connectors to the machine, such as mail, files and calendar, so check what your account has connected.
 
 ## Principles

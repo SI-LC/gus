@@ -37,5 +37,7 @@ else
   fi
   gh release create "$next" --target "$(git rev-parse HEAD)" --title "$next" --generate-notes >/dev/null
   git fetch -q --tags origin
+  # The Pi names its release to the sites it reads, and reads the tag again every hour: give it the new one
+  ssh -o BatchMode=yes "$PI" git -C gus fetch -q --tags origin
   echo "Released $next"
 fi
