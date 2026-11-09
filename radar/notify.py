@@ -25,7 +25,7 @@ def _topic():
     return secret("ntfy_topic")
 
 
-def _cockpit_url():
+def cockpit_url():
     return os.environ.get("GUS_URL") or _cfg().get("cockpit_url", "")
 
 
@@ -41,13 +41,14 @@ def quiet_now(spec=None) -> bool:
     return (a <= now < b) if a < b else (now >= a or now < b)
 
 
-def notify(title: str, subtitle: str, message: str, url: str = "") -> None:
+def notify(title: str, subtitle: str, message: str, url: str = "", click: str = "") -> None:
+    """url is the role to open; click is where a tap on the push goes (the cockpit by default)."""
     if quiet_now():
-        return _hold(title, subtitle, message, url)
+        return _hold(title, subtitle, message, url, click)
     topic = _topic()
     if topic:
         server = os.environ.get("NTFY_SERVER") or _cfg().get("notify_ntfy_server") or "https://ntfy.sh"
-        click = _cockpit_url() or url
+        click = click or cockpit_url() or url
         headers = {"Title": f"{title}: {subtitle}".encode("utf-8"), "Tags": "briefcase"}
         if click:
             headers["Click"] = click

@@ -463,7 +463,7 @@ function roleCard(j, actions) {
       <div class="co">${esc(j.company)}</div>
       <div class="title"><a href="${link(titleLink(j))}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
-      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
+      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
     </div></article>`;
@@ -496,6 +496,7 @@ async function finishSignIn(box) {
   if (!d) return;
   $(box).innerHTML = d.ok ? '<p class="ok">Signed in to Claude</p>' : `<p class="bad">${esc(d.reply)}</p>`;
   if (d.ok && box === "fr-login") frSend({ recheck: true });
+  else if (d.ok) load();  // the expired-sign-in warning comes down
 }
 async function frConnect() { const d = await post("/api/first-run/connect", { key: $("fr-key").value }); if (d) { F = d; frDraw(); } }
 async function frSkip() { if (await post("/api/first-run/skip", {})) { $("main").innerHTML = ""; location.hash = "#pipeline"; await load(); } }
@@ -714,7 +715,10 @@ const V = {
         <div class="stat"><div class="v">${S.jobs.length}</div><div class="l">Roles tracked</div></div>
         <div class="stat"><div class="v">${h.signals_waiting}</div><div class="l">Signals waiting</div></div>
         <div class="stat"><div class="v">${h.x && h.x.day ? (h.x.used || 0) : "off"}</div><div class="l">X posts today</div></div>
+        <div class="stat"><div class="v">${signedOut() ? "Sign-in expired" : S.ai.paused ? "Paused" : "Ready"}</div><div class="l">AI</div></div>
       </div>
+      ${signedOut() ? `<div class="section">AI</div><p class="bad">Your Claude sign-in expired ${ago(S.ai.signed_out_since)}. Nothing that needs AI has worked since, and roles found since then have no score.</p>
+      <div class="row"><button class="primary" onclick="signIn('health-login')">Sign in with Claude</button></div><div id="health-login"></div>` : ""}
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       <div class="section">Board errors</div>
       ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every job board worked on the last check.</div>`}
@@ -742,7 +746,7 @@ const SETTINGS_TABS = [
     return `<section class="group"><h2>AI connection</h2>${fieldRow(SET.schema.find(f => f.key === "ai_provider"))}
       ${key ? secretField([key, SET.secret_keys[key]]) : ""}
       <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button>${SET.values.ai_provider === "claude_subscription" ? `<button onclick="signIn('ai-login')">Sign in with Claude</button>` : ""}<span id="ai-test" class="sub"></span></div>
-      <div id="ai-login"></div><div class="help">${help}</div></div></section>
+      <div id="ai-login">${signedOut() ? `<p class="bad">Your Claude sign-in has expired. Sign in again to carry on.</p>` : ""}</div><div class="help">${help}</div></div></section>
       <section class="group"><h2>Models and limits</h2>${fieldsOf("AI", [...skip, "ai_provider"])}</section>`;
   }],
   ["matching", "Matching", () => `<section class="group"><h2>What counts as a match</h2>${fieldsOf("Matching")}</section>`],
@@ -901,14 +905,16 @@ const themeField = () => `<div class="field"><label>Theme</label>
   <div class="theme" role="group" aria-label="Theme">${THEMES.map(([k, l]) => `<button class="${theme() === k ? "on" : ""}" onclick="setTheme('${k}')" aria-pressed="${theme() === k}">${l}</button>`).join("")}</div>
   <div class="help">System follows your device. This is saved in this browser, so each device keeps its own.</div></div>`;
 const unscored = () => S.jobs.filter(j => j.score == null).length;
+const signedOut = () => !!(S.ai && S.ai.paused === "signed_out");
 function aiMessage() {
   if (!S.ai || !S.ai.paused) return "";
+  if (signedOut()) return `Your Claude sign-in expired ${ago(S.ai.signed_out_since)}, so new roles aren't being scored.`;
   return S.ai.paused === "off" ? "AI is off, so new roles aren't being scored." : `Today's AI limit of ${usd(S.ai.limit)} is used up, so scoring resumes tomorrow.`;
 }
 function drawBanner() {
   const m = aiMessage(), el = $("banner"), n = unscored();
   el.hidden = !m;
-  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} roles are waiting. ` : ""}<a href="#settings/ai">Change the limit</a>`;
+  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} role${n === 1 ? " is" : "s are"} waiting. ` : ""}<a href="#settings/ai">${signedOut() ? "Sign in with Claude" : "Change the limit"}</a>`;
 }
 function drawTicker() {
   drawBanner();
