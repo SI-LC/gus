@@ -280,6 +280,10 @@ const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
+async function refreshState() {
+  const r = await fetch("/api/state", { cache: "no-store" });
+  if (r.ok) { S = await r.json(); drawTicker(); }
+}
 async function load() {
   const r = await fetch("/api/state", { cache: "no-store" });
   if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
@@ -496,7 +500,7 @@ async function finishSignIn(box) {
   if (!d) return;
   $(box).innerHTML = d.ok ? '<p class="ok">Signed in to Claude</p>' : `<p class="bad">${esc(d.reply)}</p>`;
   if (d.ok && box === "fr-login") frSend({ recheck: true });
-  else if (d.ok) load();  // the expired-sign-in warning comes down
+  else if (d.ok) refreshState();  // the expired-sign-in banner comes down, and the message above stays put
 }
 async function frConnect() { const d = await post("/api/first-run/connect", { key: $("fr-key").value }); if (d) { F = d; frDraw(); } }
 async function frSkip() { if (await post("/api/first-run/skip", {})) { $("main").innerHTML = ""; location.hash = "#pipeline"; await load(); } }

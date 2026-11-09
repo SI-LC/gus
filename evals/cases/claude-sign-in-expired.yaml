@@ -2,8 +2,8 @@ id: claude-sign-in-expired
 requirement: When the Claude sign-in Gus uses expires, every screen tells me, and signing in again from the warning clears it.
 given: scanned, signed out
 check:
-  - see "Your Claude sign-in expired"
-  - see "Sign in with Claude"
+  - banner says "Your Claude sign-in expired"
+  - banner says "Sign in with Claude"
   - open Usage
   - see "Sign-in expired"
   - click "Sign in with Claude"
@@ -11,5 +11,8 @@ check:
   - type "made-up-code" into "Code from Claude"
   - click "Finish signing in"
   - see "Signed in to Claude"
-  - not see "Your Claude sign-in expired"
+  - no banner
+  - open Pipeline
+  - open Usage
+  - not see "Sign-in expired"
 judge: Would I know within a day that scoring had stopped, and could I fix it from my phone?
