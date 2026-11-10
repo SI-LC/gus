@@ -1274,3 +1274,117 @@ class GitHubCareers(Base):
         with self.fetch(site), mock.patch.object(resolve, "get_json", lambda _: {}):
             resolve.resolve("GitHub")
         self.assertFalse(any("github.careers" in u for u in site.asked))
+
+
+MTP = "www.mindtheproduct.com"
+MTP_JOB = "/jobs/listing/"
+
+
+def mtp_site(**more):
+    return Site({f"{MTP}/robots.txt": sample("mindtheproduct_robots.txt"), f"{MTP}/sitemap-jobs.xml": sample("mindtheproduct_sitemap.xml"),
+                 f"{MTP}{MTP_JOB}": sample("mindtheproduct_job.html")}, **more)
+
+
+def mtp_page(**job):
+    """The sample job page with some of its job's fields changed."""
+    text = sample("mindtheproduct_job.html").decode()
+    data = json.loads(re.search(r'type="application/json">(.*?)</script>', text, re.S)[1])
+    data["props"]["pageProps"]["job"].update(job)
+    return re.sub(r'(type="application/json">).*?(</script>)', lambda m: m[1] + json.dumps(data) + m[2], text, flags=re.S).encode()
+
+
+class MindTheProduct(Base):
+    """A board of many companies' ads. Its list and filters run through /api/, which robots.txt rules out, so the sitemap is the list."""
+
+    def setUp(self):
+        super().setUp()
+        self.watch()  # no company boards, just this one
+
+    def run_scan(self, site, on=True):
+        self.clear()
+        cfg = {**scan.load_config(), "source_hn": False, "source_mindtheproduct": on}
+        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg):
+            jobs, _ = scan.fetch_all()
+        return jobs, json.loads((self.dir / "board_errors.json").read_text())
+
+    def pages(self, site):
+        return [u for u in site.asked if MTP_JOB in u]
+
+    def test_addresses(self):
+        self.assertEqual(scan.mtp_job(f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/"), ("b704f3b80c7aeaaf", "group product manager"))
+        self.assertEqual(scan.mtp_job(f"https://{MTP}/jobs/listing/head-of-product-kn6ur1/"), ("kn6ur1", "head of product"))
+        self.assertIsNone(scan.mtp_job(f"https://{MTP}/jobs/role/product-management/"))
+        self.assertIsNone(scan.mtp_job("https://elsewhere.example/jobs/listing/product-manager-abc123/"))
+
+    def test_a_page_gives_company_title_and_place(self):
+        row = scan.mtp_page(sample("mindtheproduct_job.html").decode())
+        self.assertEqual((row["company"], row["title"], row["location"]), ("Acme", "Group Product Manager", "London, United Kingdom"))
+        self.assertIn("Five years in product", row["description"])
+        self.assertNotIn("<p>", row["description"])
+
+    def test_an_expired_ad_has_gone_and_a_page_without_a_job_is_unreadable(self):
+        self.assertEqual(scan.mtp_page(mtp_page(expiresAt="2020-01-01T00:00:00.000Z").decode()), scan.GONE)
+        self.assertIsNone(scan.mtp_page("<html><body>Not found</body></html>"))
+        self.assertIsNone(scan.mtp_page(mtp_page(company="").decode()))
+
+    def test_off_means_nothing_is_asked(self):
+        site = mtp_site()
+        self.run_scan(site, on=False)
+        self.assertFalse([u for u in site.asked if MTP in u])
+
+    def test_reads_wanted_titles_only_and_each_role_is_its_own_company(self):
+        site = mtp_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(len(self.pages(site)), 3)  # not the designer
+        self.assertFalse([u for u in self.pages(site) if "designer" in u])
+        self.assertFalse([u for u in site.asked if "/api/" in u])
+        self.assertTrue(all(j["company"] == "Acme" and j["id"].startswith("mtp:jobs:") for j in jobs))
+        self.assertTrue(all(scan.matches(j, scan.load_config()) for j in jobs))
+
+    def test_a_role_already_read_isnt_read_again(self):
+        self.run_scan(mtp_site(**{f"{MTP}{MTP_JOB}": mtp_page(location="Berlin", country="Germany")}))
+        site = mtp_site()
+        self.run_scan(site)
+        self.assertEqual(self.pages(site), [])
+
+    def test_a_recruiters_ad_is_left_out_and_not_read_again(self):
+        jobs, _ = self.run_scan(mtp_site(**{f"{MTP}{MTP_JOB}": mtp_page(company="Hays")}))
+        self.assertEqual(jobs, [])
+        site = mtp_site()
+        self.run_scan(site)
+        self.assertEqual(self.pages(site), [])
+
+    def test_an_ad_saved_from_the_companys_own_board_needs_no_page_and_counts_as_live(self):
+        jid = "mtp:jobs:b704f3b80c7aeaaf"
+        saved = {"gh:acme:1": {"id": "gh:acme:1", "company": "Acme", "title": "Group Product Manager", "location": "London",
+                               "description": "", "url": "https://boards.greenhouse.io/acme/jobs/1", "also": {jid: {"url": "u"}}}}
+        scan.JOBS.write_text(json.dumps(saved))
+        site = mtp_site()
+        jobs, _ = self.run_scan(site)
+        self.assertNotIn("b704f3b80c7aeaaf", " ".join(self.pages(site)))
+        self.assertIn(jid, {j["id"] for j in jobs})
+        self.assertEqual(next(j for j in jobs if j["id"] == jid)["url"], f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/")
+
+    def test_reads_more_pages_per_scan_than_a_company_board(self):
+        with mock.patch.object(scan, "PAGES_PER_SCAN", 1), mock.patch.object(scan, "MTP_PAGES_PER_SCAN", 2):
+            elsewhere = {f"{MTP}{MTP_JOB}": mtp_page(location="Berlin", country="Germany")}
+            first, second = mtp_site(**elsewhere), mtp_site(**elsewhere)
+            self.run_scan(first)
+            self.run_scan(second)
+        self.assertEqual((len(self.pages(first)), len(self.pages(second))), (2, 1))
+
+    def test_the_sitemap_lists_everything_so_a_missing_role_closes(self):
+        jid = "mtp:jobs:gone1"
+        scan.JOBS.write_text(json.dumps({jid: {"id": jid, "company": "A", "title": "Product Manager", "location": "London", "description": "", "url": "u"}}))
+        for _ in range(2):
+            self.run_scan(mtp_site())
+            store = json.loads(scan.JOBS.read_text())
+            scan.mark_closed(store, scan._boards_answered, set(scan._listed), "now")
+            scan.JOBS.write_text(json.dumps(store))
+        self.assertEqual(store[jid].get("ad_closed"), "now")
+
+    def test_a_blocked_sitemap_is_recorded_and_closes_nothing(self):
+        _, errors = self.run_scan(mtp_site(**{f"{MTP}/sitemap-jobs.xml": refused(MTP)}))
+        self.assertIn("Mind the Product", errors)
+        self.assertNotIn("mtp:jobs", scan._boards_answered)

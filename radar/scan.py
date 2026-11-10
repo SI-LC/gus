@@ -136,7 +136,8 @@ _looked_up = None
 _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
-          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz", "githubcareers": "ghc"}
+          "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz", "githubcareers": "ghc",
+          "mindtheproduct": "mtp"}
 MISSES_TO_CLOSE = 2
 
 
@@ -327,6 +328,9 @@ GITHUB_HOST = "https://www.github.careers"
 GITHUB_PAGE = 100  # jobs per request, the most the site gives
 GITHUB_PAGES = 10  # requests per read, so 1,000 roles; a longer list is cut short
 GITHUB_PAUSE = 5  # seconds between pages: the crawl-delay its robots.txt asks for
+MTP_HOST = "www.mindtheproduct.com"
+MTP_PAGES_PER_SCAN = 100  # its sitemap lists a few thousand ads, hundreds with product titles; the rest wait for the next scan
+NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
 COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
              "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
 
@@ -531,10 +535,51 @@ def workday_job_data(url: str) -> str:
     return re.sub(r"^(https://([^.]+)\.[^/]+/)", r"\1wday/cxs/\2/", url)
 
 
+def mtp_job(url: str):
+    """(job id, words to test) from an address like /jobs/listing/group-product-manager-b704f3b80c7aeaaf/. The words are the
+    title, sometimes with the place, and the id is the code the site puts at the end."""
+    m = re.fullmatch(r"/jobs/listing/([a-z0-9-]+)-([a-z0-9]+)/?", urlparse(url).path)
+    return (m[2], m[1].replace("-", " ")) if m and urlparse(url).netloc == MTP_HOST else None
+
+
+def mtp_list(slug: str) -> dict:
+    """{job id: (address, words to test)} from the jobs sitemap. The board's own list and filters run through /api/, which its
+    robots.txt rules out, and its page shows only the first 20 jobs whatever is asked: the sitemap is the one full list."""
+    found = {}
+    for url in sitemap_urls(f"https://{MTP_HOST}/sitemap-jobs.xml"):
+        if hit := mtp_job(url):
+            found[hit[0]] = (url, hit[1])
+    if not found:  # an empty list is an error, or every saved role would look closed
+        raise Refused("Its sitemap lists no jobs")
+    return found
+
+
+def mtp_page(text: str):
+    """Company, title, place, date and description from the data in a job page, GONE once the ad has expired, or None if the
+    page holds no job. Anyone can post an ad here, so what an ad says is only ever data."""
+    m = NEXT_DATA.search(text)
+    try:
+        j = json.loads(m[1])["props"]["pageProps"]["job"]
+        company, title = j["company"].strip(), html.unescape(j["title"]).strip()
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    if not company or not title:
+        return None
+    if (j.get("expiresAt") or "9") < datetime.now(timezone.utc).isoformat():
+        return GONE
+    place = j.get("location") or ""
+    if j.get("country") and j["country"].lower() not in place.lower():
+        place = ", ".join(filter(None, (place, j["country"])))
+    extra = [x for x in (j.get("requirements") or []) + (j.get("benefits") or []) if isinstance(x, str)]
+    return {"company": company, "title": title, "location": place, "posted": j.get("publishedAt") or None,
+            "description": strip_html("\n".join([j.get("description") or "", *extra]))}
+
+
 # ats -> (id prefix, list every job, where a job's details are, what they say)
 SITE_BOARDS = {
     "successfactors": ("sf", successfactors_list, lambda url: url, successfactors_page),
     "workday": ("wd", workday_list, workday_job_data, workday_page),
+    "mindtheproduct": ("mtp", mtp_list, lambda url: url, mtp_page),
 }
 
 
@@ -563,11 +608,18 @@ def job_page(url: str, read_page):
     return row
 
 
+def excluded(row: dict, cfg) -> bool:
+    """A role whose page names a company on the leave-out list: recruiters and job sites, as for the other job sources."""
+    return bool(row.get("company")) and left_out(row["company"], cfg, "source_company_exclude")
+
+
 def read_site(company: str, ats: str, slug: str) -> list:
     """Titles come from the board's list. A job's details are read only for wanted titles, once per address, so a big board stays cheap.
     An ad the site says has gone is never asked for again. A page that made no sense is tried again after a week, as it may be a
-    one-off, and while several are unreadable and none readable the board is reported as broken on every scan."""
+    one-off, and while several are unreadable and none readable the board is reported as broken on every scan.
+    On a board of many companies (Mind the Product) each page names its company, and one on your leave-out list is skipped."""
     cfg, known, out = load_config(), known_jobs(), []
+    alias = J.aliases(known)
     read = readable = unread = 0
     today = date.today()
     listed = listed_jobs(ats, slug)
@@ -578,17 +630,17 @@ def read_site(company: str, ats: str, slug: str) -> list:
         looked = looked_up().get(jid)
         if looked and looked["updated"] != url:
             looked = None
-        if jid in known:  # already saved: only needs to count as still live
-            out.append(dict(known[jid]))
+        if jid in alias:  # already saved, maybe as a sighting of the same ad elsewhere: only needs to count as still live
+            out.append({**known[alias[jid]], "id": jid, "url": url} if alias[jid] != jid else dict(known[jid]))
             continue
         if looked and looked.get("unread"):
             if date.fromisoformat(looked["unread"]) + timedelta(days=RETRY_UNREAD_DAYS) > today:
                 unread += 1
                 continue
-        elif looked and (looked.get("gone") or not matches(looked, cfg)):
+        elif looked and (looked.get("gone") or not matches(looked, cfg) or excluded(looked, cfg)):
             readable += not looked.get("gone")
             continue
-        if read >= PAGES_PER_SCAN:
+        if read >= (MTP_PAGES_PER_SCAN if ats == "mindtheproduct" else PAGES_PER_SCAN):
             continue
         time.sleep(PAGE_PAUSE if read else 0)
         read += 1
@@ -600,8 +652,10 @@ def read_site(company: str, ats: str, slug: str) -> list:
             looked_up()[jid] = {"updated": url, "unread": str(today)}
         else:
             readable += 1
-            looked_up()[jid] = {"updated": url, "title": row["title"], "location": row["location"]}
-            out.append({"id": jid, "company": company, "url": url, **row})
+            looked_up()[jid] = {"updated": url, "title": row["title"], "location": row["location"],
+                                **({"company": row["company"]} if row.get("company") else {})}
+            if not excluded(row, cfg):
+                out.append({"id": jid, "company": company, "url": url, **row})
     if unread >= UNREAD_TO_FLAG and not readable:
         raise Refused(f"None of its job pages could be read ({unread} tried)")
     return out
@@ -623,6 +677,12 @@ def workday(company: str, slug: str):
                 continue
         _listed.add(j["id"])
     return out
+
+
+def mind_the_product(company: str, slug: str):
+    """Mind the Product's jobs board: many companies' ads, listed in full in its sitemap. Each role carries the company its ad
+    names, so it rolls up to that account, and the same ad found on the company's own board is kept as one role."""
+    return read_site(company, "mindtheproduct", slug)
 
 
 def teamtailor_items(slug: str) -> list:
@@ -927,7 +987,7 @@ def hn_who_is_hiring():
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
            "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs,
-           "githubcareers": github_careers}
+           "githubcareers": github_careers, "mindtheproduct": mind_the_product}
 
 
 # --- pipeline ----------------------------------------------------------------
@@ -991,6 +1051,8 @@ def fetch_all():
         tasks.append(("Google", "googlecareers", "search", None))
     if load_config().get("amazon_jobs_search"):
         tasks.append(("Amazon", "amazonjobs", "amazon", None))
+    if load_config().get("source_mindtheproduct"):
+        tasks.append(("Mind the Product", "mindtheproduct", "jobs", None))
     errors, jobs = [], []
 
     def run(t):

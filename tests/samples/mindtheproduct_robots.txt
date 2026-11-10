@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /api/
+Disallow: /app/admin/
+Disallow: /_next/
+Disallow: /sign-in
+Disallow: /sign-up
+Allow: /
+
+Sitemap: https://www.mindtheproduct.com/sitemap.xml
