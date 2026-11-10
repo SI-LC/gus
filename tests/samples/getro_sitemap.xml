@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://careers.atomico.com/jobs</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://careers.atomico.com/companies/acme</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://careers.atomico.com/companies/acme/jobs/95290675-senior-product-manager-payments</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://careers.atomico.com/companies/acme/jobs/95290676-backend-engineer</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://careers.atomico.com/companies/acme/jobs/95290677</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://careers.atomico.com/companies/bolt-2/jobs/95290678-head-of-product</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://elsewhere.example/companies/acme/jobs/95290679-product-manager</loc><changefreq>daily</changefreq></url>
+</urlset>

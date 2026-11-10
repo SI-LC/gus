@@ -137,7 +137,7 @@ _listed: set = set()
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
           "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz", "githubcareers": "ghc",
-          "mindtheproduct": "mtp"}
+          "mindtheproduct": "mtp", "getro": "getro"}
 MISSES_TO_CLOSE = 2
 
 
@@ -329,7 +329,7 @@ GITHUB_PAGE = 100  # jobs per request, the most the site gives
 GITHUB_PAGES = 10  # requests per read, so 1,000 roles; a longer list is cut short
 GITHUB_PAUSE = 5  # seconds between pages: the crawl-delay its robots.txt asks for
 MTP_HOST = "www.mindtheproduct.com"
-MTP_PAGES_PER_SCAN = 100  # its sitemap lists a few thousand ads, hundreds with product titles; the rest wait for the next scan
+BIG_BOARD_PAGES = 100  # job pages read per scan on a board of many companies: thousands of ads, hundreds with wanted titles
 NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
 COUNTRIES = {"GB": "United Kingdom", "IE": "Ireland", "US": "United States", "FR": "France", "DE": "Germany", "NL": "Netherlands",
              "ES": "Spain", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland"}  # Teamtailor gives codes; others stay as codes
@@ -575,11 +575,51 @@ def mtp_page(text: str):
             "description": strip_html("\n".join([j.get("description") or "", *extra]))}
 
 
+def getro_job(url: str):
+    """(job id, words to test) from an address like /companies/acme/jobs/95290675-senior-product-manager. The words are the title
+    as the board shortened it, and some ads have none: those can't be told apart from any other job, so they're never read."""
+    m = re.fullmatch(r"/companies/[^/]+/jobs/(\d+)(?:-([a-z0-9-]+))?/?", urlparse(url).path)
+    return (m[1], (m[2] or "").replace("-", " ")) if m else None
+
+
+def getro_list(slug: str) -> dict:
+    """{job id: (address, words to test)} from a Getro board's sitemap. The slug is the board's host. Its page shows the first
+    20 jobs and the rest come from Getro's API, so the sitemap, which lists every job, is the polite way to the whole list."""
+    found = {}
+    for url in sitemap_urls(f"https://{slug}/sitemap.xml"):
+        if urlparse(url).netloc == slug and (hit := getro_job(url)):
+            found[hit[0]] = (url, hit[1])
+    if not found:
+        raise Refused("Its sitemap lists no jobs: it may not be a Getro board")
+    return found
+
+
+def getro_page(text: str):
+    """Company, title, places, date and text from the data in a Getro job page, GONE once the job has closed, or None if the
+    page holds no job. The link is the employer's own ad when the board gives one, so a role also on its own board is one role."""
+    m = NEXT_DATA.search(text)
+    try:
+        j = json.loads(m[1])["props"]["pageProps"]["initialState"]["jobs"]["currentJob"]
+        company, title = j["organization"]["name"].strip(), html.unescape(j["title"]).strip()
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    if not company or not title:
+        return None
+    if j.get("status", "active") != "active" or j.get("closedAt") or j.get("deactivatedAt"):
+        return GONE
+    row = {"company": company, "title": title, "posted": j.get("postedAt") or None, "description": strip_html(j.get("description") or ""),
+           "location": " / ".join(dict.fromkeys(p["name"] for p in j.get("locations") or [] if isinstance(p, dict) and p.get("name")))}
+    if str(j.get("url") or "").startswith("https://"):
+        row["url"] = j["url"]
+    return row
+
+
 # ats -> (id prefix, list every job, where a job's details are, what they say)
 SITE_BOARDS = {
     "successfactors": ("sf", successfactors_list, lambda url: url, successfactors_page),
     "workday": ("wd", workday_list, workday_job_data, workday_page),
     "mindtheproduct": ("mtp", mtp_list, lambda url: url, mtp_page),
+    "getro": ("getro", getro_list, lambda url: url, getro_page),
 }
 
 
@@ -640,7 +680,7 @@ def read_site(company: str, ats: str, slug: str) -> list:
         elif looked and (looked.get("gone") or not matches(looked, cfg) or excluded(looked, cfg)):
             readable += not looked.get("gone")
             continue
-        if read >= (MTP_PAGES_PER_SCAN if ats == "mindtheproduct" else PAGES_PER_SCAN):
+        if read >= (BIG_BOARD_PAGES if ats in ("mindtheproduct", "getro") else PAGES_PER_SCAN):
             continue
         time.sleep(PAGE_PAUSE if read else 0)
         read += 1
@@ -683,6 +723,17 @@ def mind_the_product(company: str, slug: str):
     """Mind the Product's jobs board: many companies' ads, listed in full in its sitemap. Each role carries the company its ad
     names, so it rolls up to that account, and the same ad found on the company's own board is kept as one role."""
     return read_site(company, "mindtheproduct", slug)
+
+
+def getro(company: str, slug: str):
+    """A VC's portfolio job board run on Getro: the companies it backs, each role under its own company."""
+    return read_site(company, "getro", slug)
+
+
+def getro_hosts(text: str) -> list:
+    """The boards in Settings, one address per line, as hosts. Anything that isn't a public web address is left out."""
+    hosts = [urlparse(line if "//" in line else f"https://{line}").netloc.lower() for line in (text or "").split() if line.strip()]
+    return list(dict.fromkeys(h for h in hosts if PUBLIC_HOST.fullmatch(h)))
 
 
 def teamtailor_items(slug: str) -> list:
@@ -987,7 +1038,8 @@ def hn_who_is_hiring():
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
            "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs,
-           "githubcareers": github_careers, "mindtheproduct": mind_the_product}
+           "githubcareers": github_careers, "mindtheproduct": mind_the_product,
+           "getro": getro}
 
 
 # --- pipeline ----------------------------------------------------------------
@@ -1053,6 +1105,7 @@ def fetch_all():
         tasks.append(("Amazon", "amazonjobs", "amazon", None))
     if load_config().get("source_mindtheproduct"):
         tasks.append(("Mind the Product", "mindtheproduct", "jobs", None))
+    tasks += [(host, "getro", host, None) for host in getro_hosts(load_config().get("getro_boards"))]
     errors, jobs = [], []
 
     def run(t):

@@ -1367,7 +1367,7 @@ class MindTheProduct(Base):
         self.assertEqual(next(j for j in jobs if j["id"] == jid)["url"], f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/")
 
     def test_reads_more_pages_per_scan_than_a_company_board(self):
-        with mock.patch.object(scan, "PAGES_PER_SCAN", 1), mock.patch.object(scan, "MTP_PAGES_PER_SCAN", 2):
+        with mock.patch.object(scan, "PAGES_PER_SCAN", 1), mock.patch.object(scan, "BIG_BOARD_PAGES", 2):
             elsewhere = {f"{MTP}{MTP_JOB}": mtp_page(location="Berlin", country="Germany")}
             first, second = mtp_site(**elsewhere), mtp_site(**elsewhere)
             self.run_scan(first)
@@ -1388,3 +1388,93 @@ class MindTheProduct(Base):
         _, errors = self.run_scan(mtp_site(**{f"{MTP}/sitemap-jobs.xml": refused(MTP)}))
         self.assertIn("Mind the Product", errors)
         self.assertNotIn("mtp:jobs", scan._boards_answered)
+
+
+GETRO = "careers.atomico.com"
+GETRO_JOB = "/companies/"
+
+
+def getro_site(**more):
+    return Site({f"{GETRO}/robots.txt": sample("getro_robots.txt"), f"{GETRO}/sitemap.xml": sample("getro_sitemap.xml"),
+                 f"{GETRO}{GETRO_JOB}": sample("getro_job.html")}, **more)
+
+
+def getro_page(**job):
+    """The sample job page with some of its job's fields changed."""
+    text = sample("getro_job.html").decode()
+    data = json.loads(re.search(r'type="application/json">(.*?)</script>', text, re.S)[1])
+    data["props"]["pageProps"]["initialState"]["jobs"]["currentJob"].update(job)
+    return re.sub(r'(type="application/json">).*?(</script>)', lambda m: m[1] + json.dumps(data) + m[2], text, flags=re.S).encode()
+
+
+class Getro(Base):
+    """A VC's portfolio job board on Getro: its page shows 20 jobs and the rest come from an API, so the sitemap is the list."""
+
+    def setUp(self):
+        super().setUp()
+        self.watch()
+
+    def run_scan(self, site, boards=f"https://{GETRO}/jobs"):
+        self.clear()
+        cfg = {**scan.load_config(), "source_hn": False, "getro_boards": boards}
+        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg):
+            jobs, _ = scan.fetch_all()
+        return jobs, json.loads((self.dir / "board_errors.json").read_text())
+
+    def pages(self, site):
+        return [u for u in site.asked if "/jobs/" in u]
+
+    def test_addresses(self):
+        self.assertEqual(scan.getro_job(f"https://{GETRO}/companies/acme/jobs/95290675-senior-product-manager"), ("95290675", "senior product manager"))
+        self.assertEqual(scan.getro_job(f"https://{GETRO}/companies/acme/jobs/95290677"), ("95290677", ""))
+        self.assertIsNone(scan.getro_job(f"https://{GETRO}/companies/acme"))
+
+    def test_boards_in_settings_become_hosts(self):
+        self.assertEqual(scan.getro_hosts("careers.atomico.com/jobs\nhttps://jobs.pointnine.com/jobs\n\nCAREERS.ATOMICO.COM\nlocalhost\n10.0.0.1"),
+                         ["careers.atomico.com", "jobs.pointnine.com"])
+
+    def test_a_page_gives_company_places_and_the_employers_ad(self):
+        row = scan.getro_page(sample("getro_job.html").decode())
+        self.assertEqual((row["company"], row["title"], row["location"]), ("Acme", "Senior Product Manager, Payments", "London, UK / Remote, Europe"))
+        self.assertEqual(row["url"], "https://boards.greenhouse.io/acme/jobs/4415182009")
+        self.assertNotIn("<p>", row["description"])
+
+    def test_a_closed_job_has_gone_and_a_page_without_one_is_unreadable(self):
+        self.assertEqual(scan.getro_page(getro_page(status="closed").decode()), scan.GONE)
+        self.assertEqual(scan.getro_page(getro_page(closedAt="2026-11-01T00:00:00Z").decode()), scan.GONE)
+        self.assertIsNone(scan.getro_page("<html><body>Not found</body></html>"))
+
+    def test_no_boards_means_nothing_is_asked(self):
+        site = getro_site()
+        self.run_scan(site, boards="")
+        self.assertFalse([u for u in site.asked if GETRO in u])
+
+    def test_reads_wanted_titles_on_its_own_host_only(self):
+        site = getro_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(len(self.pages(site)), 2)  # not the engineer, the untitled ad, or another host's
+        self.assertFalse([u for u in site.asked if "elsewhere.example" in u or "backend" in u])
+        self.assertEqual({j["id"] for j in jobs}, {f"getro:{GETRO}:95290675", f"getro:{GETRO}:95290678"})
+        self.assertTrue(all(j["company"] == "Acme" and scan.matches(j, scan.load_config()) for j in jobs))
+
+    def test_a_job_already_read_isnt_read_again(self):
+        self.run_scan(getro_site(**{f"{GETRO}{GETRO_JOB}": getro_page(locations=[{"name": "Berlin, Germany"}])}))
+        site = getro_site()
+        self.run_scan(site)
+        self.assertEqual(self.pages(site), [])
+
+    def test_the_sitemap_lists_everything_so_a_missing_role_closes(self):
+        jid = f"getro:{GETRO}:1"
+        scan.JOBS.write_text(json.dumps({jid: {"id": jid, "company": "A", "title": "Product Manager", "location": "London", "description": "", "url": "u"}}))
+        for _ in range(2):
+            self.run_scan(getro_site())
+            store = json.loads(scan.JOBS.read_text())
+            scan.mark_closed(store, scan._boards_answered, set(scan._listed), "now")
+            scan.JOBS.write_text(json.dumps(store))
+        self.assertEqual(store[jid].get("ad_closed"), "now")
+
+    def test_a_board_that_isnt_getro_is_reported(self):
+        empty = b'<?xml version="1.0"?><urlset><url><loc>https://careers.atomico.com/jobs</loc></url></urlset>'
+        _, errors = self.run_scan(getro_site(**{f"{GETRO}/sitemap.xml": empty}))
+        self.assertIn(GETRO, errors)
