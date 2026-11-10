@@ -1,6 +1,7 @@
 profile/profile.md
 data/
 watchlist.csv
+vcs.csv
 content/
 __pycache__/
 .venv/

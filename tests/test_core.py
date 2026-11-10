@@ -627,3 +627,35 @@ class BotIdentity(unittest.TestCase):
             scan.fetch_bytes("https://boards.example.com/b/jobs")
         self.assertEqual(len(slept), 1)
         self.assertAlmostEqual(slept[0], scan.HOST_PAUSE, delta=0.2)
+
+
+class YourOwnSearch(unittest.TestCase):
+    """Nothing in the code decides where or what you're looking for: places come from Settings, lists start as examples."""
+
+    def test_news_counts_when_it_names_your_places_not_gus_authors(self):
+        from radar import feeds
+        from radar.settings import to_pattern
+        berlin = re.compile(to_pattern("berlin\ngermany"), re.I)
+        self.assertTrue(feeds.is_signal("Acme opens in Berlin", berlin))
+        self.assertFalse(feeds.is_signal("Acme opens in London", berlin))
+        self.assertFalse(feeds.is_signal("Acme opens in London"))
+        self.assertTrue(feeds.is_signal("Acme raises a Series B"))
+
+    def test_your_vc_list_starts_as_a_copy_of_the_example_and_is_then_yours(self):
+        import tempfile
+        from unittest import mock
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "vcs.example.csv").write_text("vc,portfolio,focus,jobs\nA,https://a.example,x,\n")
+            with mock.patch.object(agent, "ROOT", root):
+                self.assertEqual(agent.vcs_path().read_text(), (root / "vcs.example.csv").read_text())
+                (root / "vcs.csv").write_text("vc,portfolio,focus,jobs\nMine,https://m.example,y,\n")
+                self.assertIn("Mine", agent.vcs_path().read_text())
+
+    def test_the_agents_are_told_no_region_or_role_of_gus_authors(self):
+        from pathlib import Path
+        prompts = Path(__file__).resolve().parent.parent / "prompts"
+        text = "\n".join(p.read_text() for p in prompts.glob("*.md")) + agent.PROMPT + agent.INBOX_PROMPT
+        for word in ("UK spelling", "European", "Sifted", "UKTN", "Balderton", "hires PMs"):
+            self.assertNotIn(word, text)

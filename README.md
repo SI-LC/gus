@@ -86,6 +86,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).
 - **Add a source:** paste any newsletter link under Settings → Newsletters, or add keys and turn on Adzuna and JSearch under Settings → Job sources. Google and Amazon have no job board to read, so paste a Google Careers or amazon.jobs search there too: Gus reads it once a day, newest first. Add the company under Companies as well, so its roles roll up to an account. GitHub also hires on its own site, github.careers: give that as its careers address under Companies and Gus reads the whole list once a day. Turn on **Mind the Product jobs** there too for product roles from many companies: each role arrives under its own company. Paste VC portfolio boards run on Getro (careers.atomico.com/jobs, jobs.pointnine.com/jobs) under **VC job boards** the same way.
+- **Follow your own VCs:** the research agents work from `vcs.csv`, which starts as a copy of `vcs.example.csv` and is yours to edit: one VC per line, with what it focuses on and its portfolio job board if it has one. Like `watchlist.csv`, it's never committed.
 
 ## Checking it still works
 

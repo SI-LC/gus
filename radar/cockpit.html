@@ -634,7 +634,7 @@ const V = {
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
         </div>
-        ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · London: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
+        ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · Near you: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
         ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
         ${evs.length ? `<div class="chips">${evs.slice(0, 6).map(e => sigChip(e, true)).join("")}${evs.length > 6 ? `<span class="sub">+${evs.length - 6} older</span>` : ""}</div>` : `<div class="sub" style="margin-top:8px">No news yet.</div>`}
         ${eventForm(a.name)}

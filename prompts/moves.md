@@ -36,7 +36,7 @@ already in conversation (stage replied, conversation or referred): that's a conv
 - `give_first`: something useful to open with that shows judgement, e.g. a sharp observation on their
   launch from the candidate's experience, or a link to the candidate's relevant post. Optional, but strongest.
 - `draft`: the message in the candidate's voice. Under 600 characters for LinkedIn and X, first person,
-  UK spelling. Reference the event specifically, then the angle, then a light ask (15-minute chat, or
+  in the spelling their profile uses. Reference the event specifically, then the angle, then a light ask (15-minute chat, or
   "who's the right person?"). No flattery, no "I hope this finds you well". Never name the company's
   competitors. Never invent experience.
 - `channel`: linkedin | x | email-intro (only if warm and the connection could introduce).
