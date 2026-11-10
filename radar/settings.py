@@ -66,6 +66,8 @@ SCHEMA = [
 
     ("source_adzuna", "Adzuna", "bool", "Job sources", "Job search across many sites, with short extracts of each ad. Needs the Adzuna keys (Keys tab)."),
     ("source_jsearch", "JSearch", "bool", "Job sources", "Google for Jobs results with full descriptions, including some LinkedIn roles. Needs the JSearch key (Keys tab)."),
+    ("source_mindtheproduct", "Mind the Product jobs", "bool", "Job sources",
+     "Product roles from many companies on mindtheproduct.com/jobs, read with the job boards. Up to 100 new ads are read per scan, so the first few scans work through its backlog."),
     ("google_careers_search", "Google Careers search", "text", "Job sources",
      "Paste the address of a search on Google's careers site. Gus reads its first page once a day, newest first, as that's all the site's rules allow. Leave empty to turn this off."),
     ("amazon_jobs_search", "Amazon Jobs search", "text", "Job sources",
