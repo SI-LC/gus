@@ -1321,6 +1321,24 @@ class MindTheProduct(Base):
         self.assertEqual((row["company"], row["title"], row["location"]), ("Acme", "Group Product Manager", "London, United Kingdom"))
         self.assertIn("Five years in product", row["description"])
         self.assertNotIn("<p>", row["description"])
+        self.assertEqual(row["url"], "https://acme.example/jobs/1")
+
+    def test_the_link_is_the_employers_ad_so_a_role_on_its_own_board_is_one_role(self):
+        ad = "https://jobs.lever.co/acme/e0ba7aee-1a0a-43ab-a4c0-d8856c6c2ce3"
+        self.assertEqual(scan.mtp_page(mtp_page(applicationUrl=ad + "/app").decode())["url"], ad)
+        self.assertEqual(scan.mtp_page(mtp_page(applicationUrl="https://jobs.ashbyhq.com/acme/1/application").decode())["url"], "https://jobs.ashbyhq.com/acme/1")
+        self.assertNotIn("url", scan.mtp_page(mtp_page(applicationUrl="mailto:jobs@acme.example").decode()))
+        saved = {"lever:acme:1": {"id": "lever:acme:1", "company": "Acme Ltd", "title": "Group Product Manager", "location": "London",
+                                  "description": "", "url": ad, "stage": "skipped"}}
+        scan.JOBS.write_text(json.dumps(saved))
+        self.clear()
+        cfg = {**scan.load_config(), "source_hn": False, "source_mindtheproduct": True}
+        site = mtp_site(**{f"{MTP}{MTP_JOB}": mtp_page(applicationUrl=ad + "/app")})
+        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(scan.sys, "argv", ["scan"]):
+            scan.main()
+        store = json.loads(scan.JOBS.read_text())
+        self.assertEqual(sorted(store), ["lever:acme:1"])  # a skipped role stays skipped, with these as sightings
+        self.assertTrue(any(k.startswith("mtp:jobs:") for k in store["lever:acme:1"]["also"]))
 
     def test_an_expired_ad_has_gone_and_a_page_without_a_job_is_unreadable(self):
         self.assertEqual(scan.mtp_page(mtp_page(expiresAt="2020-01-01T00:00:00.000Z").decode()), scan.GONE)

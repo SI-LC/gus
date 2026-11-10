@@ -535,6 +535,13 @@ def workday_job_data(url: str) -> str:
     return re.sub(r"^(https://([^.]+)\.[^/]+/)", r"\1wday/cxs/\2/", url)
 
 
+def employer_ad(url) -> str:
+    """The employer's own ad behind a job site's listing, without the apply-form ending some boards add (Lever's /apply or
+    /app, Ashby's /application), so it's the same address Gus has for that role from the company's own board. "" if none."""
+    url = str(url or "").strip()
+    return re.sub(r"/(?:apply|app|application)/?$", "", url) if url.startswith("https://") else ""
+
+
 def mtp_job(url: str):
     """(job id, words to test) from an address like /jobs/listing/group-product-manager-b704f3b80c7aeaaf/. The words are the
     title, sometimes with the place, and the id is the code the site puts at the end."""
@@ -556,7 +563,8 @@ def mtp_list(slug: str) -> dict:
 
 def mtp_page(text: str):
     """Company, title, place, date and description from the data in a job page, GONE once the ad has expired, or None if the
-    page holds no job. Anyone can post an ad here, so what an ad says is only ever data."""
+    page holds no job. The link is the employer's own ad when the board gives one. Anyone can post an ad here, so what an
+    ad says is only ever data."""
     m = NEXT_DATA.search(text)
     try:
         j = json.loads(m[1])["props"]["pageProps"]["job"]
@@ -571,8 +579,11 @@ def mtp_page(text: str):
     if j.get("country") and j["country"].lower() not in place.lower():
         place = ", ".join(filter(None, (place, j["country"])))
     extra = [x for x in (j.get("requirements") or []) + (j.get("benefits") or []) if isinstance(x, str)]
-    return {"company": company, "title": title, "location": place, "posted": j.get("publishedAt") or None,
-            "description": strip_html("\n".join([j.get("description") or "", *extra]))}
+    row = {"company": company, "title": title, "location": place, "posted": j.get("publishedAt") or None,
+           "description": strip_html("\n".join([j.get("description") or "", *extra]))}
+    if ad := employer_ad(j.get("applicationUrl")):  # the employer's ad, so a role also on its own board is one role
+        row["url"] = ad
+    return row
 
 
 def getro_job(url: str):
@@ -609,8 +620,8 @@ def getro_page(text: str):
         return GONE
     row = {"company": company, "title": title, "posted": j.get("postedAt") or None, "description": strip_html(j.get("description") or ""),
            "location": " / ".join(dict.fromkeys(p["name"] for p in j.get("locations") or [] if isinstance(p, dict) and p.get("name")))}
-    if str(j.get("url") or "").startswith("https://"):
-        row["url"] = j["url"]
+    if ad := employer_ad(j.get("url")):
+        row["url"] = ad
     return row
 
 
