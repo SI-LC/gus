@@ -9,7 +9,7 @@ good() { echo "  ✓ $1"; }
 
 echo "Code scan"
 # 1. Nothing personal in tracked files
-tracked=$(git ls-files | grep -E '^(data/|content/|profile/profile\.md$|watchlist\.csv$|settings\.json$|\.secrets\.json$|\.x_token$|\.ntfy_topic$|\.cockpit_token$|\.companies_house_key$|\.env)' || true)
+tracked=$(git ls-files | grep -E '^(data/|content/|profile/profile\.md$|watchlist\.csv$|vcs\.csv$|settings\.json$|\.secrets\.json$|\.x_token$|\.ntfy_topic$|\.cockpit_token$|\.companies_house_key$|\.env)' || true)
 [ -z "$tracked" ] && good "no personal files tracked" || bad "personal files tracked: $tracked"
 
 # 2. Everything that would be published: tracked files, plus every commit not yet on GitHub

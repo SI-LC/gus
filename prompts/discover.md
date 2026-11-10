@@ -9,8 +9,8 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 
 ## 1. Harvest: find companies and roles from every source
 
-a. **Signals** in `data/signals.json` with `status: "new"`: newsletters (Lenny's, Exponential View),
-   funding news (Sifted, TechCrunch, EU-Startups, UKTN), HN job posts, Reddit, X and Bluesky. For each one,
+a. **Signals** in `data/signals.json` with `status: "new"`: newsletters, funding news, HN job posts, Reddit, X and
+   Bluesky, from whichever feeds the candidate has turned on. For each one,
    work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company`, `job_id` and
    `event_id` for whatever it turned out to be.
    Signals of kind `jobs` can list many roles in one post, with links in brackets. Go through every listing and follow up only target
@@ -20,11 +20,10 @@ b. **Board sweep** (web search, every run): find target roles in the candidate's
    `site:job-boards.greenhouse.io "<target role>" <location>`, `site:jobs.lever.co "<target role>" <location>`,
    `site:apply.workable.com "<target role>" <location>`, `site:myworkdayjobs.com "<target role>" <location>`, for each role type and location in the profile. Every unwatched company you find is a candidate company.
 c. **Emails** are handled by a separate offline run. You can't read them, on purpose.
-d. **Market signals** (web search, last 7 days): UK and European AI/devtools/fintech funding
-   rounds (Series A+), a new office in a target location, new product launches with hiring,
-   Sifted and TechCrunch Europe, and VC portfolio job boards (Accel, Index, Balderton,
-   Atomico, LocalGlobe, Seedcamp, MMC, a16z, Sequoia, and the `jobs` column in `vcs.csv`) and topstartups.io for
-   target roles in the candidate's locations.
+d. **Market signals** (web search, last 7 days): funding rounds (Series A+) in the candidate's region and the domains
+   their profile wants, a new office in a target location, new launches with hiring, the startup press that covers
+   their region, and VC portfolio job boards (the `jobs` column in `vcs.csv`, for the VCs whose `focus` fits the
+   candidate's region and domains) and topstartups.io for target roles in the candidate's locations.
 e. **Established companies**: funding news only finds young companies, so also look for older ones. Each run, name up to 5
    later-stage or public B2B SaaS, developer and enterprise software companies with a real office in a target location, in the
    domains the profile wants, that aren't in `data/companies.json`. Good ways in: market-leader and analyst lists for those domains,
@@ -40,7 +39,7 @@ a launch in the candidate's area, or someone posting about hiring), record it in
 `<account slug>:<type>:<YYYY-MM-DD>` (add `-2`, `-3` if that day already has one):
 `{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url",
 "date": "YYYY-MM-DD", "source": "signal:<signal id>"}`. Only with a link and a real date, and never twice for the same link at the same
-account. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
+account. `london_office` is an old name: it means a new office in any of the candidate's target locations. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
 `role_posted` event); don't record them. These events are what weekly moves are built on.
 
 ## 2. Companies

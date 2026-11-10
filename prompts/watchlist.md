@@ -11,16 +11,17 @@ stale profiles (>30 days), broken boards, and rejected companies due a recheck.
 Add each new one to `data/companies.json` as `{"status": "candidate", "source": "...", "signal": "..."}`.
 Skip anything already present, whatever its status. Never re-add a company with `vetoed: true`.
 
-- **VCs** (`vcs.csv`): for each VC, look for companies added to its portfolio or announced in the
+- **VCs** (`vcs.csv`, the candidate's own list): for each VC whose `focus` fits the candidate's region and domains, look for
+  companies added to its portfolio or announced in the
   last ~3 weeks (portfolio page, the VC's news and blog, and "<VC> leads Series" searches). Where the
   `jobs` column has a portfolio job board, look there for companies hiring the candidate's target roles in their locations.
 - **New in a target location**: new offices, local launches and hubs, new regional
-  general managers, and local branches of overseas companies (Companies House when a key exists in
-  `.companies_house_key`, otherwise news).
-- **Funding**: Series A+ rounds for companies in, or hiring in, the candidate's region (Sifted, TechCrunch,
-  EU-Startups, UKTN, plus new signals in `data/signals.json`).
-- **Programmes and lists**: Entrepreneur First, YC companies with staff in a target location, Air Street's
-  State of AI, Sifted's lists.
+  general managers, and local branches of overseas companies (for the UK, Companies House when a key exists in
+  `.companies_house_key`; otherwise news).
+- **Funding**: Series A+ rounds for companies in, or hiring in, the candidate's region (the startup press that covers
+  it, plus new signals in `data/signals.json`).
+- **Programmes and lists**: accelerators and talent investors active in the candidate's region, YC companies with staff
+  in a target location, and the yearly lists and reports that cover the candidate's domains.
 - **Lookalikes**: 2 per top-5 company by fit score.
 - **Neighbours of favourites**: the `favourites` list from `due` holds companies the candidate loves that are due a look.
   For each, name up to 3 companies close to it: same buyer, same kind of product, or founded by its alumni. Find each
@@ -33,7 +34,7 @@ Skip anything already present, whatever its status. Never re-add a company with 
 Aim for 10–30 candidates per run; quality over volume.
 
 ## 2. Enrich (candidates, flagged, stale, and rejected companies due a recheck)
-Fill or refresh (field names are in `docs/objects.md`): `stage`, `last_round`, `investors`, `headcount`, `london` (HQ|office|remote-UK|none),
+Fill or refresh (field names are in `docs/objects.md`): `stage`, `last_round`, `investors`, `headcount`, `london` (an old name: the company's presence in the candidate's target locations, as HQ|office|remote|none),
 `product` (one line), `customers` (B2B / B2B2C / B2C / enterprise), `product_leaders`
 [{name, role, url}], `careers_url`. Dated things that happened (launches, rounds, exec hires, layoffs) go in `data/events.json`, see 3b.
 For flagged companies (`reassess: true`), first read the signals in `data/signals.json` whose `company` is this account, then
@@ -44,7 +45,7 @@ Score against the candidate profile:
 - **Domain**: the domains listed under "What I want" in the profile
 - **Location**: real presence in a target location where the target role sits (not just a sales office)
 - **Stage and health**: Series A+ with runway; recent layoffs or a down round count against
-- **PM demand**: has a product team and hires PMs at senior/staff level
+- **Demand for the role**: has a team doing the candidate's kind of work, and hires for their target roles at their level
 - **Edge**: would the candidate's strongest experience (the "Strongest edge" in their profile) be a
   differentiator here, not just relevant?
 
@@ -64,6 +65,7 @@ Then by score:
   day already has one), each one dated and linked:
   `{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary": "one line",
   "url": "...", "date": "YYYY-MM-DD", "source": "agent"}`. Never the same link twice at one account.
+  `london_office` is an old name: it means a new office in any of the candidate's target locations.
   `launch` only counts if it's in the candidate's area (see profile). Roles are added automatically; don't record them.
 - For A accounts with fewer than 2 people mapped, run `python3 -m radar.people "<Company>"`.
 - For mapped people at A and B accounts with no `past_companies`, fill it from their public bio, team page

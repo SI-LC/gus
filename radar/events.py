@@ -37,7 +37,7 @@ TYPES = ["post_hiring", "role_posted", "leader_hire", "funding", "london_office"
 # how strongly each kind of event says "act now"
 STRENGTH = {"post_hiring": 5, "role_posted": 4, "leader_hire": 4, "funding": 3, "london_office": 3, "launch": 2, "mention": 1}
 LABEL = {"post_hiring": "Posted about hiring", "role_posted": "Role posted", "leader_hire": "New product leader",
-         "funding": "Funding", "london_office": "London office", "launch": "Launch in your area", "mention": "In the news"}
+         "funding": "Funding", "london_office": "New office near you", "launch": "Launch in your area", "mention": "In the news"}
 FIELDS = ["account", "type", "summary", "url", "date"]
 ALERT_TYPES = ["post_hiring", "leader_hire", "role_posted"]  # the news that most often means a role is coming
 ALERT_WINDOW_DAYS = 2  # only news recorded this recently is pushed, so a backlog never floods the phone

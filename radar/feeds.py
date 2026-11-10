@@ -15,12 +15,12 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from radar.scan import DATA, ROOT, fetch_bytes, strip_html
+from radar.scan import DATA, ROOT, fetch_bytes, load_config, strip_html
 from radar.store import read
 
 SIGNALS = DATA / "signals.json"
 FULL_TEXT = 15_000  # job lists name dozens of roles, so they keep far more than the teaser
-SIGNAL = re.compile(r"rais|fund|series [a-e]|seed|london|\buk\b|britain|expan|launch|hiring|acqui|ai\b|agent", re.I)
+SIGNAL = re.compile(r"rais|fund|series [a-e]|seed|expan|launch|hiring|acqui|ai\b|agent", re.I)
 ATOM = "{http://www.w3.org/2005/Atom}"
 CONTENT = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
@@ -147,6 +147,11 @@ def remove_feed(name: str):
     save({"feeds_extra": "\n".join(lines)})
 
 
+def is_signal(text: str, places=None) -> bool:
+    """News worth an agent's look: funding, launches, hiring and the like, or anything naming one of your own locations."""
+    return bool(SIGNAL.search(text) or (places and places.search(text)))
+
+
 def all_feeds():
     """Built-in feeds (feeds.csv) plus yours from Settings, minus the ones you turned off."""
     from radar.settings import load
@@ -170,6 +175,7 @@ def main():
     feeds = [f for f in all_feeds() if f["enabled"]
              and t - state.get(f["name"], 0) >= int(f.get("every_min") or 10) * 60 - 30]
     signals = read(SIGNALS)
+    places = load_config().get("location_include")
     errors_path = DATA / "feed_errors.json"
     errors = read(errors_path)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -193,7 +199,7 @@ def main():
                 key = f"feed:{it['url']}"
                 if key in signals or not it["url"]:
                     continue
-                if f["kind"] == "signals" and not SIGNAL.search(it["title"] + " " + it["text"]):
+                if f["kind"] == "signals" and not is_signal(it["title"] + " " + it["text"], places):
                     continue
                 signals[key] = {"source": f["name"], "kind": f["kind"], **it, "first_seen": now, "status": "new"}
                 added += 1

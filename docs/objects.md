@@ -45,7 +45,7 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `fit`, `fit_why`, `assessed`, `previous_fit`, `recheck_after` | The agent's assessment and when to look again |
 | `source`, `signal` | How the company was found: which agent or source, and the one-line signal that surfaced it |
 | `reassess` | Set when a new signal names a watched company (the signal carries `company`); cleared when the agent reassesses it |
-| `product`, `stage`, `london`, `headcount`, `customers`, `investors`, `product_leaders`, `careers_url` | Research. `careers_url_broken` when the address no longer opens |
+| `product`, `stage`, `london` (its presence in your target locations: the name is from Gus's first search), `headcount`, `customers`, `investors`, `product_leaders`, `careers_url` | Research. `careers_url_broken` when the address no longer opens |
 | `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed |
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
 | `favourite`, `neighbour_of`, `neighbours_checked` | Companies you love and the ones found next to them |

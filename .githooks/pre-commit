@@ -2,7 +2,7 @@
 # Code only: refuse commits that contain personal data or secrets.
 # Enabled by: git config core.hooksPath .githooks
 set -euo pipefail
-blocked='^(data/|profile/profile\.md$|watchlist\.csv$|content/|settings\.json$|\.secrets\.json$|\.x_token$|\.ntfy_topic$|\.cockpit_token$|\.companies_house_key$|\.env)'
+blocked='^(data/|profile/profile\.md$|watchlist\.csv$|vcs\.csv$|content/|settings\.json$|\.secrets\.json$|\.x_token$|\.ntfy_topic$|\.cockpit_token$|\.companies_house_key$|\.env)'
 bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "$blocked" || true)
 if [[ -n "$bad" ]]; then
   echo "✋ pre-commit: these are personal data or secrets and must not be committed:"; echo "$bad" | sed 's/^/   /'
