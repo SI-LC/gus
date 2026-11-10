@@ -25,6 +25,46 @@ class BudgetReached(RuntimeError):
     """Today's AI limit is used up; runs resume tomorrow or when the limit is raised."""
 
 
+class LoginExpired(RuntimeError):
+    """The Claude sign-in Gus uses has expired; nothing that needs AI works until you sign in again from the cockpit."""
+
+
+SIGN_IN = "Sign in again from Settings → AI in the cockpit."
+EXPIRED_FLAG = DATA / "login_expired"  # {"since": ..., "notified": date}: there while the last Claude run failed for want of a login
+_EXPIRED = re.compile(r"oauth|authenticat|logged in|log in|/login|session expired", re.I)
+
+
+def login_expired() -> dict | None:
+    """When the last Claude run failed because the sign-in had expired, or None when AI last worked."""
+    try:
+        return json.loads(EXPIRED_FLAG.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _login_failed(detail: str) -> LoginExpired:
+    """Record that the sign-in has expired and push once a day until a run works again."""
+    from datetime import datetime
+    from radar.notify import notify, cockpit_url
+    state = login_expired() or {"since": datetime.now().astimezone().isoformat(timespec="seconds")}
+    today = str(date.today())
+    if state.get("notified") != today:
+        state["notified"] = today
+        notify("Claude sign-in expired", "", f"Gus can't score roles or run agents until you sign in again. {SIGN_IN}",
+               click=f"{cockpit_url().rstrip('/')}/#settings/ai" if cockpit_url() else "")
+    EXPIRED_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    EXPIRED_FLAG.write_text(json.dumps(state))
+    return LoginExpired(f"Claude sign-in has expired. {SIGN_IN} ({detail.strip()[:200]})")
+
+
+def login_works():
+    """A Claude run (or a fresh sign-in) worked, so the warning comes down."""
+    try:
+        EXPIRED_FLAG.unlink()
+    except OSError:
+        pass
+
+
 def _check_budget(cfg):
     limit = float(cfg.get("ai_daily_budget_usd") or 0)  # 0 means no AI runs at all, never "no limit"
     if usage.today_cost() >= limit:
@@ -92,8 +132,13 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
                      output_tokens=u.get("output_tokens"), searches=(u.get("server_tool_use") or {}).get("web_search_requests"),
                      duration_ms=d.get("duration_ms"), ok=not d.get("is_error"))
     if out.returncode != 0 or d.get("is_error"):
-        hint = " (run `claude` and /login)" if provider == "claude_subscription" else ""
-        raise RuntimeError(f"Claude Code failed{hint}: {(d.get('result') or out.stderr or out.stdout).strip()[:300]}")
+        detail = (d.get("result") or out.stderr or out.stdout).strip()[:300]
+        if provider == "claude_subscription" and _EXPIRED.search(detail):
+            raise _login_failed(detail)
+        hint = " (if it says you're not logged in, sign in again from Settings → AI)" if provider == "claude_subscription" else " (check Settings → AI)"
+        raise RuntimeError(f"Claude Code failed{hint}: {detail}")
+    if provider == "claude_subscription":
+        login_works()
     return d.get("result") or out.stdout
 
 
@@ -121,6 +166,8 @@ def status() -> dict:
         return {"ok": False, "reply": "Claude Code isn't installed on this machine."}
     if provider == "anthropic_api":
         return test() if secret("anthropic_api_key") else {"ok": False, "reply": "No API key yet."}
+    if login_expired():  # `claude auth status` still says yes with a saved login that no longer refreshes
+        return {"ok": False, "reply": f"Your Claude sign-in has expired. {SIGN_IN}"}
     try:
         out = subprocess.run(["claude", "auth", "status"], capture_output=True, text=True, timeout=8, env=_claude_env(provider))
         return {"ok": bool(json.loads(out.stdout).get("loggedIn")), "reply": "Not logged in to Claude yet."}
@@ -162,7 +209,10 @@ def login_finish(code: str) -> dict:
     except (OSError, subprocess.TimeoutExpired):
         _login.kill()
         return {"ok": False, "reply": "That didn't work. Start again and paste the new code."}
-    return status() if _login.returncode == 0 else {"ok": False, "reply": "Claude didn't accept that code. Start again to get a new one."}
+    if _login.returncode != 0:
+        return {"ok": False, "reply": "Claude didn't accept that code. Start again to get a new one."}
+    login_works()
+    return status()
 
 
 def test() -> dict:

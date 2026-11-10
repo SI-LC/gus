@@ -18,6 +18,9 @@ if sys.argv[1:3] == ["auth", "login"]:
     sys.exit()
 
 prompt = sys.stdin.read()
+if os.path.exists(SIGNED_OUT):
+    print(json.dumps({"is_error": True, "result": "Failed to authenticate: OAuth session expired and could not be refreshed"}))
+    sys.exit(1)
 with open(os.path.join(os.environ["HOME"], "claude-calls.log"), "a") as log:
     log.write("call\n")
 result = "[]"

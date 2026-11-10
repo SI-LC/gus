@@ -191,8 +191,10 @@ def follow_ups(jobs: dict, people: dict, moves: dict, today=None) -> list:
 def ai_state():
     """Whether AI runs can happen right now, so the cockpit can say so instead of looking broken."""
     limit, spent = float(settings.load().get("ai_daily_budget_usd") or 0), usage.today_cost()
-    reason = "off" if not limit else "limit" if spent >= limit else None
-    return {"limit": limit, "spent": round(spent, 2), "paused": reason,
+    from radar import ai
+    expired = ai.login_expired() if settings.load().get("ai_provider", "claude_subscription") == "claude_subscription" else None
+    reason = "off" if not limit else "signed_out" if expired else "limit" if spent >= limit else None
+    return {"limit": limit, "spent": round(spent, 2), "paused": reason, "signed_out_since": (expired or {}).get("since"),
             "on_plan": settings.load().get("ai_provider", "claude_subscription") == "claude_subscription"}
 
 

@@ -137,7 +137,7 @@ def full_run():
             if step["name"] == "Job sources":
                 step["detail"] = sources_note = detail
             ok = ok and good
-        except ai.BudgetReached as e:  # nothing after this can use AI either
+        except (ai.BudgetReached, ai.LoginExpired) as e:  # nothing after this can use AI either
             stop = f"Stopped: {e}"
             step.update(status="skipped", detail=stop)
         except Exception as e:  # one failed step shouldn't lose the rest of the run
