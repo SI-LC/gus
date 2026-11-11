@@ -1,8 +1,8 @@
 # The objects
 
-Everything Gus knows lives in `data/`, one JSON file per object, each a dict keyed by id. Files are written through
-`radar/store.py` (a lock, then a whole-file replace), so the scanner, the agents and the cockpit never overwrite each
-other. `python3 -m radar.schema check` confirms the files still match this page; the code scan runs it.
+Everything Gus knows lives in `data/`, one JSON file per object, each a dict keyed by id. Roles, events, people, moves and emails are written through
+`radar/store.py` (a lock, then a whole-file replace), so the scanner and the cockpit never overwrite each other;
+`companies.json` and an agent's own edits are whole-file writes without the lock. `python3 -m radar.schema check` confirms the files still match this page; the code scan runs it.
 
 Records may carry extra fields: the research agents keep what they find. What's listed here is what the code reads.
 
@@ -57,7 +57,8 @@ migrated off it by the next scan.
 
 Accounts come from `watchlist.csv` (`companies sync`), the watchlist agent, or you: `python3 -m radar.resolve --add` or the
 Companies page in the cockpit (POST `/api/company/add` with `name` and an optional `careers` address). Both look for its
-public job board first; a company with no board found is still an account (`source: manual`, no `board`) until one turns up.
+public job board first. From the Companies page a company with no board found is still an account (`source: manual`, no
+`board`) until one turns up; `radar.resolve --add` only adds one whose board it found.
 
 ## Event (`data/events.json`)
 
@@ -129,7 +130,7 @@ The inbox: a raw item from a feed or social search, before anyone has looked at 
 
 | Field | Meaning |
 |---|---|
-| `source`, `kind` | Where from; `newsletter`, `signals`, `jobs`, `social`, `social-bot` |
+| `source`, `kind` | Where from; `newsletter`, `signals`, `jobs`, `community`, `social`, `social-bot` |
 | `title`, `text`, `url`, `date`, `name`, `handle` | The item |
 | `status` | `new` until the discover agent sets `processed` or `ignored` |
 | `first_seen`, `mention_checked` | Housekeeping |

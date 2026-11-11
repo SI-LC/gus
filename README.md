@@ -32,11 +32,12 @@ Gus does one full run a day, or whenever you press **Full run**. It's one job, i
 2. **Job sources:** if you've turned them on, search Adzuna and JSearch for roles beyond your company list, within the limits you set
 3. **Read emails:** if connected, an offline agent picks out replies and roles
 4. **Discover:** turn signals into companies, roles and dated events, and search the web for your target roles
-5. **Refresh accounts:** find companies through VCs, funding news and new local openings, then research, score and tier them. The heaviest step, so it runs every few days
-6. **Score what's new**, and map the people at strong accounts
-7. **Plan moves:** pick this week's moves, once a week
+5. **Find boards:** work out the job board behind each company that arrived with a role or a careers address, and scan the new ones
+6. **Refresh accounts:** find companies through VCs, funding news and new local openings, then research, score and tier them. The heaviest step, so it runs every few days
+7. **Score what's new**, and map the people at strong accounts
+8. **Plan moves:** pick this week's moves, once a week
 
-Scanning uses no AI. Scoring does, but only for new roles. **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
+Scanning uses no AI. Scoring does, but only for new roles, and so does mapping people at an account with fresh news. **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
 **No event, no move.** A move is rejected in code unless it cites a dated, linked event from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently. Raw signals never count on their own: an agent has to turn one into an event first.
 
@@ -48,7 +49,7 @@ A small web app, and the place you work. Each page is one object from the list a
 - **Pipeline:** every conversation and application by stage, and the page the cockpit opens on
 - **To do:** this week's moves, each with the event behind it, your angle and a draft, plus the funnel from events to interviews
 - **Companies:** your accounts by tier, with what's happened at each and who to talk to there. Add a company, set its tier, mark the ones you love, add news Gus missed or dismiss news that isn't
-- **Usage:** what the AI runs have used, by day and by task
+- **Usage:** what the AI runs have used, by day and by task, and under it Health: the last scan, job source limits, and any board or feed that failed
 - **Settings:** AI provider, matching, schedule, job sources and their limits, newsletters, email, keys and your profile
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
@@ -97,7 +98,7 @@ Every pull request installs Gus from scratch, runs a full scan against a made-up
 `tests/test_replies.py` checks the code around the model. To check the model's judgement, label some real roles yourself and compare:
 
 ```bash
-python3 -m radar.evals sample   # picks about 40 roles from your Pi
+python3 -m radar.evals sample   # picks about 40 roles from your Pi (add --local to use this machine's)
 python3 -m radar.evals label    # you mark each one, without seeing its score
 python3 -m radar.evals run      # scores them 3 times, and fails on any good role it would have skipped
 ```
@@ -116,8 +117,8 @@ Run it after changing `prompts/triage.md`, the scoring model or your profile. It
 | Web search and the pages agents open | Search terms based on your target roles and locations |
 | Public job boards, company careers sites and feeds | Plain requests, with nothing about you |
 | Adzuna and JSearch, if turned on | Your role searches and location |
-| X, Bluesky, Mastodon and Reddit, if turned on | Your search terms |
-| Companies House, if you add a key | Company names |
+| X, Bluesky, Mastodon and Reddit, if turned on | Your search terms, and on Bluesky the names of companies whose people are being mapped |
+| Gmail, if connected | Your address and app password, to read matching emails. Nothing is sent or changed |
 | ntfy, if turned on | Your alerts, including role and company names. The topic name is the only protection on the public server |
 | Google Fonts | Your browser's request for the cockpit's fonts |
 
@@ -130,7 +131,7 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 - **Web agents** can read this repo and search the web, but can only write to `data/` and `watchlist.csv`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
 - **Email** is off until you connect it. It's then read-only and filtered before opening, and a separate agent with no internet access processes it, so a crafted email can't send your data out.
 - **The cockpit** has no login unless you set an access token. It listens on this machine only by default, and won't listen on a network without a token. Keep it behind a private network such as Tailscale, never on the public internet. The Pi install publishes it to your Tailscale devices, so anything on your tailnet can open it.
-- **On other people's sites** Gus is a guest: it says who it is (`gus/<version>` with a link to this repo), follows each site's `robots.txt`, waits between pages and between requests to one host, and reads the large sites once a day. If you run a site and would rather it didn't visit, open an issue here.
+- **On other people's sites** Gus is a guest: it says who it is (`gus/<version>` with a link to this repo), follows `robots.txt` on every company careers site and job site it reads (the job board systems' public APIs are built to be read), waits between pages and between requests to one host, and reads the large sites once a day. If you run a site and would rather it didn't visit, open an issue here.
 - **Known limits:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way. A Claude login can also bring that account's connectors to the machine, such as mail, files and calendar, so check what your account has connected.
 
 ## Principles
@@ -139,6 +140,21 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 2. **Signal over volume.** Five good moves a week beat 40 roles in a queue.
 3. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
 4. **Human in the loop where it counts.** The agent prepares; you apply and you press send. No auto-submitting or auto-DMs, ever.
+
+## How the code is laid out
+
+Everything is in `radar/`, one module per job. The fields of every object in `data/` are in [`docs/objects.md`](docs/objects.md).
+
+| Module | What it does |
+|---|---|
+| `service`, `server`, `cockpit.html` | The always-on service: the cockpit, its API and the daily full run |
+| `scan`, `boards`, `web`, `matching` | One scan: read every board (`boards`), politely (`web`), keep what matches your titles and places (`matching`) |
+| `sources`, `feeds`, `social`, `x`, `inbox`, `links`, `resolve` | Everything else that brings roles and signals in, and finds a company's job board |
+| `jobs`, `triage`, `salary` | One role however many places list it, and its score |
+| `companies`, `events`, `people`, `network`, `accounts` | Accounts, what happened at each, who's there, and the weekly moves |
+| `agent`, `ai`, `usage` | The agent runs (playbooks in `prompts/`), the one way to call a model, and what it cost |
+| `settings`, `paths`, `store`, `schema` | Settings and keys, where files live, the one way to read and write them, and what they must look like |
+| `firstrun`, `notify`, `prune`, `evals` | The welcome flow, phone alerts, keeping data small, and checking the scoring |
 
 ## Roadmap
 
