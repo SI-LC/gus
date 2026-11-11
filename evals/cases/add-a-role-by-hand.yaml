@@ -1,0 +1,15 @@
+id: add-a-role-by-hand
+requirement: I can add a role that reached me directly, from a recruiter say, and it goes into my pipeline and stays there.
+given: scanned
+check:
+  - open Pipeline
+  - click "+ Add a role"
+  - type "Quiet Co" into "Company"
+  - type "Head of Product" into "Role title"
+  - type "London" into "Location"
+  - click "Add role"
+  - message says "Head of Product at Quiet Co added"
+  - see "Head of Product"
+  - reload
+  - see "Head of Product"
+judge: Is it clear where a role with no public ad is added, and what Gus will and won't do with it?

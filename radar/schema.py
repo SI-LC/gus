@@ -64,7 +64,8 @@ def check_record(name: str, key: str, rec, companies: dict, people: dict, events
         return ["not an object"]
     errs = [f"key {key!r} doesn't look like a {name[:-1]} id"] if not re.search(pattern, key) else []
     migrating = name == "moves" and isinstance(rec.get("signal"), dict) and rec["signal"].get("url")  # pre-events shape
-    errs += [f"missing {f}" for f in required if rec.get(f) in (None, "") and not (migrating and f == "event_id")]
+    no_ad = name == "jobs" and rec.get("source") == "manual"  # a recruiter's role may have no public address
+    errs += [f"missing {f}" for f in required if rec.get(f) in (None, "") and not (migrating and f == "event_id") and not (no_ad and f == "url")]
     for f, t in types.items():
         if rec.get(f) is not None and not isinstance(rec[f], t) or (t is INT and isinstance(rec.get(f), bool)):
             errs.append(f"{f} should be {getattr(t, '__name__', 'a number')}")

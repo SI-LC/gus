@@ -294,6 +294,58 @@ def add_company(body):
     return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
 
 
+def clean_folder(value):
+    """(folder, problem). A web link or a path on your computer: it lives in data/ only, never in the repo."""
+    folder = str(value or "").strip()
+    if "\n" in folder or len(folder) > 2000:
+        return None, "That doesn't look like a folder path or link"
+    if "://" in folder and not folder.lower().startswith(("https://", "http://")):
+        return None, "Use a web link starting with https://, or a folder path"
+    return folder, None
+
+
+MAX_DESCRIPTION = 60_000
+START_STAGES = [s for s in JOB_STAGES if s not in ("closed", "skipped")]
+
+
+def add_job(body):
+    """Add a role by hand: one a recruiter brought you, say, with no public ad for a scan to find. It starts shortlisted
+    unless you say otherwise, belongs to its company's account (made here if it's new to Gus), is scored like any other
+    role, and is never skipped by its score or closed because a board stopped listing it."""
+    from radar import jobs as J
+    line = lambda k, n: " ".join(str(body.get(k) or "").split())[:n]
+    company, title, location = line("company", 80), line("title", 200), line("location", 120)
+    url, stage = str(body.get("url") or "").strip(), body.get("stage") or "shortlisted"
+    if not company or not title:
+        return {"error": "Needs a company and a title"}
+    if url and not re.match(r"https?://\S+$", url):
+        return {"error": "The link needs to start with http"}
+    if stage not in START_STAGES:
+        return {"error": f"The stage must be one of: {', '.join(START_STAGES)}"}
+    folder, problem = clean_folder(body.get("folder"))
+    if problem:
+        return {"error": problem}
+    same = lambda n: n.lower() == company.lower() or (same_company(n) and same_company(n) == same_company(company))
+    company = next((n for n in read(COMPANIES, {}) if same(n)), company)  # the account's own spelling, so the role is found under it
+    role = {"id": J.manual_id(company, title), "company": company, "title": title, "url": url, "location": location,
+            "description": str(body.get("description") or "").strip()[:MAX_DESCRIPTION], "text_kind": "posting", "posted": None}
+    with locked(JOBS) as store:
+        if (have := J.find_match(store, role)) is not None:
+            j = store[have]
+            return {"error": f"Gus has this role already: {j.get('title')} at {j.get('company')}", "id": have}
+        role.update(first_seen=now(), last_seen=now(), stage=stage, history=[{"stage": stage, "at": now()}], score=None, why=None, source="manual")
+        if folder:
+            role["folder"] = folder
+        if body.get("note"):
+            role["note"] = str(body["note"])[:2000]
+        store[role["id"]] = role
+    with locked(COMPANIES) as companies:
+        new_account = company not in companies
+        if new_account:
+            companies[company] = {"status": "watched", "added": now()[:10], "source": "manual"}
+    return {"ok": True, "id": role["id"], "new_account": new_account, "job": {k: v for k, v in role.items() if k != "description"}}
+
+
 def update_job(body):
     with locked(JOBS) as store:
         j = store.get(body.get("id"))
@@ -304,12 +356,10 @@ def update_job(body):
             j["stage"] = body["stage"]
         if "note" in body:
             j["note"] = str(body["note"])[:2000]
-        if "folder" in body:  # a web link or a path on your computer: lives in data/ only, never in the repo
-            folder = str(body["folder"] or "").strip()
-            if "\n" in folder or len(folder) > 2000:
-                return {"error": "That doesn't look like a folder path or link"}
-            if "://" in folder and not folder.lower().startswith(("https://", "http://")):
-                return {"error": "Use a web link starting with https://, or a folder path"}
+        if "folder" in body:
+            folder, problem = clean_folder(body["folder"])
+            if problem:
+                return {"error": problem}
             j["folder"] = folder
         return {"ok": True, "job": {k: v for k, v in j.items() if k != "description"}}
 
@@ -394,6 +444,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/job":
             return self.send(200, update_job(body))
+        if path == "/api/job/add":
+            return self.send(200, add_job(body))
         if path == "/api/watch":
             job = read(JOBS, {}).get(body.get("id"))
             return self.send(200, {"ok": bool(job) and links.watch(job)})

@@ -134,7 +134,7 @@ def sync(jobs: dict | None = None) -> dict:
             accounts = set(companies)
         # 2. role events: a role this good at an account is a signal while it's open
         for jid, j in jobs.items():
-            good = (j.get("score") or 0) >= ROLE_EVENT_SCORE and j.get("company") in accounts
+            good = (j.get("score") or 0) >= ROLE_EVENT_SCORE and j.get("company") in accounts and bool(j.get("url"))  # no public ad, no event to cite
             live = good and not j.get("ad_closed") and j.get("stage") not in ("skipped", "closed")
             eid = f"role:{jid}"
             if not good and eid in events and j.get("company") not in accounts:

@@ -67,7 +67,7 @@ def score_batch(profile_path, todo):
             j.update(score=score, why=r["why"], flags=flags + [note] if note else flags)
             if note:
                 j["score_before_salary"] = r["score"]
-            if score < 5 and j.get("stage") == "new":
+            if score < 5 and j.get("stage") == "new" and j.get("source") != "manual":  # a role you added yourself is yours to skip
                 j["stage"] = "skipped"
             if score >= threshold:
                 alerts.append((f"{score}/10 · {j['company']}", j["title"], r["why"], j["url"]))
