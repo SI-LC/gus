@@ -16,12 +16,11 @@ import urllib.parse
 import urllib.request
 
 from radar.matching import load_config
-from radar.paths import DATA
+from radar.paths import SIGNALS
 from radar.web import get_json, strip_html, ua
 from radar.settings import secret
 from radar.store import locked
 
-SIGNALS = DATA / "signals.json"
 BOT = re.compile(r"jobs?\b|alert|careers|hiring\.|recruit|vacanc|\.app$|board", re.I)
 TEMPLATE = re.compile(r"new (remote )?job alert|position:|apply (now|here)|#jobsearch", re.I)
 

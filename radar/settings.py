@@ -12,10 +12,9 @@ import json
 import os
 import re
 import stat
-from pathlib import Path
-from radar.store import read
 
-ROOT = Path(__file__).resolve().parent.parent
+from radar.paths import ROOT
+from radar.store import read
 DEFAULTS = ROOT / "config.json"
 USER = ROOT / "settings.json"
 SECRETS = ROOT / ".secrets.json"
@@ -27,7 +26,7 @@ PROVIDERS = {
 }
 CLAUDE_MODELS = ["haiku", "sonnet", "opus"]
 
-# key, label, type, group, help. Types: text, regex, int, bool, select:<options>, times
+# key, label, type, group, help. Types: text, lines, int:lo-hi, money, bool, select:<options>, times
 SCHEMA = [
     ("ai_provider", "How Gus connects to AI", "select:provider", "AI",
      "A Claude plan or an Anthropic API key can do everything. An OpenAI-compatible API can score roles, but can't search the web for people or run the agent."),
@@ -98,7 +97,7 @@ SCHEMA = [
     ("jsearch_every_days", "JSearch: run every (days)", "int:1-30", "Source limits", "However often Gus runs, JSearch is only asked this often."),
     ("jsearch_allow_month", "JSearch: requests to allow a month", "int:1-100000", "Source limits", "Shared evenly across runs. Your plan's limit comes from JSearch itself, and Gus never goes over either."),
 
-    ("source_x", "X", "bool", "Social", "Needs an X API bearer token (Keys below). X bills per post."),
+    ("source_x", "X", "bool", "Social", "Needs an X API bearer token (Keys tab). X bills per post."),
     ("x_daily_post_cap", "X posts per day", "int:0-2000", "Social", "Hard cap on posts fetched, and paid for, each day."),
     ("x_cost_per_post", "X price per post (USD)", "money", "Social", "Used to estimate X costs. Check your X developer console for the real rate."),
     ("source_bluesky", "Bluesky", "bool", "Social", "Free, open search. Also used when finding people."),
@@ -109,7 +108,7 @@ SCHEMA = [
     ("social_role_include", "Posts must mention", "lines", "Social", "Leave empty to use your titles to include."),
     ("x_query", "X search", "text", "Social", "Leave empty to build one from your titles and locations."),
     ("social_include_bots", "Keep job-bot posts", "bool", "Social", "Bots repost listings. Off keeps only posts from people; on also uses bots to discover companies."),
-    ("source_reddit", "Reddit", "bool", "Social", "Needs a free Reddit 'script' app: client id and secret in Keys."),
+    ("source_reddit", "Reddit", "bool", "Social", "Needs a free Reddit 'script' app: client id and secret in the Keys tab."),
     ("social_reddit_subs", "Subreddits", "lines", "Social", "Without r/."),
 
     ("feeds_disabled", "Feeds turned off", "lines", "Feeds", "Names of built-in feeds to skip, one per line."),
@@ -216,12 +215,6 @@ def validate(key: str, value):
         if v < 0:
             raise ValueError(f"{row[1]} can't be negative")
         return v
-    if kind == "regex":
-        try:
-            re.compile(value)
-        except re.error as e:
-            raise ValueError(f"{row[1]}: not a valid pattern ({e})") from e
-        return str(value)
     if kind == "lines":
         return "\n".join(x.strip() for x in re.split(r"[\n,]", str(value)) if x.strip()) if "tags" in key or "subs" in key or "senders" in key \
             else _checked(key, row, "\n".join(x.strip() for x in str(value).splitlines() if x.strip()))

@@ -182,12 +182,12 @@ class Budget(unittest.TestCase):
         from unittest import mock
         with mock.patch("radar.notify.notify"):  # a test must never send a real notification
             with self.assertRaises(ai.BudgetReached):
-                ai._check_budget({"ai_daily_budget_usd": 0})
+                ai.check_budget({"ai_daily_budget_usd": 0})
             with self.assertRaises(ai.BudgetReached):
-                ai._check_budget({})
+                ai.check_budget({})
 
     def test_room_left_allows_a_run(self):
-        ai._check_budget({"ai_daily_budget_usd": 1000000})
+        ai.check_budget({"ai_daily_budget_usd": 1000000})
 
 
 class Inbox(unittest.TestCase):

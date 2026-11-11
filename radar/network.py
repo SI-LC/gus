@@ -18,7 +18,9 @@ import re
 import sys
 from datetime import date
 
-from radar.accounts import COMPANIES, PEOPLE, person_id, read, tier
+from radar.accounts import person_id, tier
+from radar.paths import COMPANIES, PEOPLE
+from radar.store import read
 from radar.paths import DATA
 from radar.store import locked
 

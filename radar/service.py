@@ -20,7 +20,7 @@ import traceback
 from datetime import date, datetime
 
 from radar.matching import load_config
-from radar.paths import DATA, ROOT
+from radar.paths import DATA, JOBS, MOVES, ROOT
 from radar.store import read
 
 STATE = DATA / "schedule_state.json"
@@ -83,7 +83,7 @@ def _run_modules(*modules):
 
 
 def _counts():
-    jobs = read(DATA / "jobs.json")
+    jobs = read(JOBS)
     return {"roles": len(jobs), "strong": sum((j.get("score") or 0) >= 8 and j.get("stage") == "new" for j in jobs.values())}
 
 
@@ -93,7 +93,7 @@ def _emails_waiting():
 
 def _moves_this_week():
     from radar.accounts import week_id
-    return sum(m.get("week") == week_id() for m in read(DATA / "moves.json").values())
+    return sum(m.get("week") == week_id() for m in read(MOVES).values())
 
 
 def _watchlist_due(cfg, s):

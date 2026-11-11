@@ -63,10 +63,7 @@ def call(url, headers=None):
 # --- counting and limits ------------------------------------------------------
 
 def load_state() -> dict:
-    try:
-        return read(STATE)
-    except (FileNotFoundError, ValueError):
-        return {}
+    return read(STATE)
 
 
 def save_state(st) -> None:

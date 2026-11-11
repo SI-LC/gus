@@ -19,11 +19,10 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 
 from radar import ai, boards, matching, paths, resolve, settings, triage, web
-from radar.paths import DATA, JOBS, ROOT
+from radar.paths import DATA, JOBS, PROFILE, ROOT
 from radar.store import locked, read
 
 STARTER = ROOT / "starter-boards.csv"
-PROFILE = ROOT / "profile" / "profile.md"
 EXAMPLE = ROOT / "profile" / "profile.example.md"
 DRAFT = DATA / "first_run_profile.md"
 TIMINGS = DATA / "first_run.json"
@@ -531,7 +530,7 @@ def _save(gen: int, best: list, titles: list, places: list, read: dict) -> None:
             job = by_id.get(c["id"])
             if job and c["reason_ready"]:
                 store.setdefault(c["id"], {k: job.get(k) for k in ("id", "company", "title", "location", "url", "posted", "description")}).update(
-                    first_seen=now, last_seen=now, stage="new" if c["score"] >= 5 else "skipped", score=c["score"], why=c["why"], flags=c["flags"],
+                    first_seen=now, last_seen=now, stage="new" if c["score"] >= GOOD_ENOUGH else "skipped", score=c["score"], why=c["why"], flags=c["flags"],
                     talk_to=c["talk_to"], source="board", first_run=True)
     PROFILE.parent.mkdir(exist_ok=True)
     PROFILE.write_text(profile_text(cv, titles, places, read))  # last: from here on this install counts as set up
@@ -621,7 +620,7 @@ def timings() -> dict:
 
 
 def status() -> dict:
-    from radar.accounts import PEOPLE, read
+    from radar.paths import PEOPLE
     with _lock:
         out = {k: RUN[k] for k in ("boards", "answered", "failed", "fetching", "ai", "reading", "read_error", "titles", "places",
                                    "favourites", "phase", "matched", "message", "saved")}

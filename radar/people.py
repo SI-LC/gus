@@ -14,7 +14,9 @@ import urllib.parse
 from datetime import date, timedelta
 
 from radar import ai
-from radar.accounts import COMPANIES, PEOPLE, brief, person_id, read
+from radar.accounts import brief, person_id
+from radar.paths import COMPANIES, PEOPLE
+from radar.store import read
 from radar.notify import notify
 from radar.matching import load_config
 from radar.paths import JOBS, ROOT
@@ -96,7 +98,7 @@ def main():
         targets = [a["account"] for a in brief()["accounts"] if len(a["people"]) < MIN_PEOPLE
                    and (companies.get(a["account"], {}).get("people_checked") or "") < recent]
     try:
-        ai._check_budget(load_config())  # before anything is marked as checked
+        ai.check_budget(load_config())  # before anything is marked as checked
     except ai.BudgetReached as e:
         print(f"  people mapping skipped: {e}")
         return

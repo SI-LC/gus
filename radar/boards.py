@@ -481,7 +481,7 @@ def read_site(company: str, ats: str, slug: str) -> list:
     On a board of many companies (Mind the Product) each page names its company, and one on your leave-out list is skipped."""
     cfg, known, out = matching.load_config(), known_jobs(), []
     alias = J.aliases(known)
-    read = readable = unread = 0
+    pages_read = readable = unread = 0
     today = date.today()
     listed = listed_jobs(ats, slug)
     listed_ids.update(listed)
@@ -501,10 +501,10 @@ def read_site(company: str, ats: str, slug: str) -> list:
         elif looked and (looked.get("gone") or not matching.matches(looked, cfg) or excluded(looked, cfg)):
             readable += not looked.get("gone")
             continue
-        if read >= (BIG_BOARD_PAGES if ats in ("mindtheproduct", "getro") else PAGES_PER_SCAN):
+        if pages_read >= (BIG_BOARD_PAGES if ats in ("mindtheproduct", "getro") else PAGES_PER_SCAN):
             continue
-        time.sleep(PAGE_PAUSE if read else 0)
-        read += 1
+        time.sleep(PAGE_PAUSE if pages_read else 0)
+        pages_read += 1
         row = job_page(SITE_BOARDS[ats][2](url), SITE_BOARDS[ats][3])
         if row == GONE:
             looked_up()[jid] = {"updated": url, "gone": True}

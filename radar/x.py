@@ -16,11 +16,10 @@ from datetime import date
 
 from radar import usage
 from radar.matching import load_config
-from radar.paths import DATA
+from radar.paths import DATA, SIGNALS
 from radar.settings import load as settings_load
 from radar.store import read
 
-SIGNALS = DATA / "signals.json"
 STATE = DATA / "x_state.json"
 
 HIRING = '("hiring" OR "we\'re hiring" OR "my team is hiring" OR "join my team")'

@@ -9,10 +9,9 @@ import platform
 import shutil
 import subprocess
 import urllib.request
-from pathlib import Path
-from radar.store import read
 
-ROOT = Path(__file__).resolve().parent.parent
+from radar.paths import DATA
+from radar.store import read
 
 
 def _cfg():
@@ -49,7 +48,7 @@ def notify(title: str, subtitle: str, message: str, url: str = "", click: str = 
     if topic:
         server = os.environ.get("NTFY_SERVER") or _cfg().get("notify_ntfy_server") or "https://ntfy.sh"
         click = click or cockpit_url() or url
-        headers = {"Title": f"{title}: {subtitle}".encode("utf-8"), "Tags": "briefcase"}
+        headers = {"Title": (f"{title}: {subtitle}" if subtitle else title).encode("utf-8"), "Tags": "briefcase"}
         if click:
             headers["Click"] = click
         if url:
@@ -72,7 +71,7 @@ def notify(title: str, subtitle: str, message: str, url: str = "", click: str = 
     subprocess.run(["osascript", "-e", script], check=False)
 
 
-HELD = ROOT / "data" / "held_notifications.json"
+HELD = DATA / "held_notifications.json"
 
 
 def _hold(*n):

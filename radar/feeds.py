@@ -16,13 +16,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from radar.matching import load_config
-from radar.paths import DATA, ROOT
+from radar.paths import DATA, ROOT, SIGNALS
 from radar.web import fetch_bytes, strip_html
 from radar.store import read
 
-SIGNALS = DATA / "signals.json"
 FULL_TEXT = 15_000  # job lists name dozens of roles, so they keep far more than the teaser
-SIGNAL = re.compile(r"rais|fund|series [a-e]|seed|expan|launch|hiring|acqui|ai\b|agent", re.I)
+SIGNAL_WORDS = re.compile(r"rais|fund|series [a-e]|seed|expan|launch|hiring|acqui|ai\b|agent", re.I)
 ATOM = "{http://www.w3.org/2005/Atom}"
 CONTENT = "{http://purl.org/rss/1.0/modules/content/}encoded"
 
@@ -83,7 +82,7 @@ def _parses(url):
     return None
 
 
-def discover(text: str):
+def find_feed(text: str):
     """Turn a Substack name, newsletter URL or feed URL into (title, feed_url).
 
     Handles Substack ("lenny", "lenny.substack.com", custom domains), Beehiiv, Ghost,
@@ -123,7 +122,7 @@ def discover(text: str):
     host = urllib.parse.urlparse(t).netloc
     if not host.startswith("www.") and host.count(".") == 1:  # some sites only serve the feed on www
         try:
-            return discover(t.replace("://", "://www.", 1))
+            return find_feed(t.replace("://", "://www.", 1))
         except ValueError:
             pass
     raise ValueError("Couldn't find a feed there. Check the link, or paste the feed URL itself")
@@ -133,7 +132,7 @@ def add_feed(text: str, kind: str = "newsletter"):
     from radar.settings import load, save
     if kind not in ("newsletter", "signals", "jobs", "community"):
         raise ValueError("Unknown kind")
-    title, url = discover(text)
+    title, url = find_feed(text)
     title = re.sub(r"\s*[|]\s*", " - ", title)[:60]
     if any(f["url"].rstrip("/") == url.rstrip("/") for f in all_feeds()):
         raise ValueError(f"{title} is already in your feeds")
@@ -151,7 +150,7 @@ def remove_feed(name: str):
 
 def is_signal(text: str, places=None) -> bool:
     """News worth an agent's look: funding, launches, hiring and the like, or anything naming one of your own locations."""
-    return bool(SIGNAL.search(text) or (places and places.search(text)))
+    return bool(SIGNAL_WORDS.search(text) or (places and places.search(text)))
 
 
 def all_feeds():

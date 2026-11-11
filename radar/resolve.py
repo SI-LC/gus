@@ -193,20 +193,22 @@ def restore(companies: dict) -> list:
 
 
 def _look(name: str, rec: dict):
-    """What one company without a board turns up: ("board", hit) from its careers address, ("guess", hit) from its name, or None."""
+    """What one company without a board turns up, as (kind, hit, broken): "board" and the board its careers address leads to, "guess"
+    and the board its name suggests (or None), or (None, None) when there's nothing new to try. `broken` says its careers address
+    no longer answers."""
     careers = rec.get("careers_url")
     if careers:
-        rec_broken = not address_answers(careers)
-        if not rec_broken and (hit := from_careers(careers)):
+        broken = not address_answers(careers)
+        if not broken and (hit := from_careers(careers)):
             return "board", hit, False
     else:
-        rec_broken = False
+        broken = False
     if rec.get("board_guess") or (rec.get("guess_checked") or "") > str(date.today() - timedelta(days=GUESS_DAYS)):
-        return None, None, rec_broken
+        return None, None, broken
     hit = resolve(name)
     if hit and f"{hit[0]}:{hit[1]}" in (rec.get("board_guess_rejected") or []):
         hit = None
-    return "guess", hit, rec_broken
+    return "guess", hit, broken
 
 
 def auto() -> dict:
