@@ -23,7 +23,9 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/browser"
           "$RUNNER_TEMP/browser/bin/pip" -q install -r evals/requirements.txt
-          "$RUNNER_TEMP/browser/bin/playwright" install --with-deps chromium
+          # No --with-deps: the runner already has the system libraries Chromium needs, and fetching them again from
+          # Ubuntu's mirror hung the whole scan when the mirror couldn't be reached
+          "$RUNNER_TEMP/browser/bin/playwright" install chromium
           "$RUNNER_TEMP/browser/bin/python" -m evals.browser
       - name: Secret scan of the full history
         run: |
