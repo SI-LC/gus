@@ -24,6 +24,7 @@ interviewing → closed, or skipped). Every object's fields are in
 - **"map people at <company>"**: `python3 -m radar.people "<Company>"`.
 - **"what's firing"**: `python3 -m radar.accounts brief`, summarised by account.
 - **"applied to <role>"**: update the stage and record the date.
+- **"did you find <role> at <company>"** or a list of roles the candidate saw elsewhere: add each with `python3 -m radar.recall add "<Company>" "<Title>"`, then run `python3 -m radar.recall` and report what was found, what was skipped and why each miss was missed. Run it where the data is (the Pi).
 - **"run the evals"**: `python3 -m radar.evals run`, after any change to `prompts/triage.md`, the scoring model or the profile. It runs on the Mac and shows whether the model still scores roles the way the candidate would.
 
 ## Deploying
