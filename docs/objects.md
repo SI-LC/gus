@@ -36,6 +36,12 @@ A role that reached you directly, from a recruiter say, has no ad for a scan to 
 `folder`, `note` and a starting `stage` (`shortlisted` unless given; not `closed` or `skipped`). It's saved with
 `source: manual` and may have no `url`; its company becomes an account if it isn't one. It's scored like any other role,
 but it's yours: a score under 5 doesn't skip it and no scan closes it. A role Gus already has is refused, with its id.
+Its `title`, `location`, `url` and `description` can be corrected afterwards (POST `/api/job` with its `id`, or "Details"
+on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as
+they were. A role from any other source keeps what its ad says.
+
+POST `/api/job` also sets any role's `stage`, `note` and `folder`. GET `/api/job?id=<id>` returns one role in full,
+`description` included, which `/api/state` leaves out.
 
 A role scoring 7+ that's still open is a `role_posted` event on its account (`role:<job id>` in `data/events.json`), written by
 `radar.events sync` after every scoring run and closed when the ad goes or you skip the role. A role with no `url` is

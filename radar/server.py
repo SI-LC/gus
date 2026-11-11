@@ -346,11 +346,37 @@ def add_job(body):
     return {"ok": True, "id": role["id"], "new_account": new_account, "job": {k: v for k, v in role.items() if k != "description"}}
 
 
+DETAILS = {"title": 200, "location": 120}
+
+
+def get_job(jid):
+    """One role with everything on it, its description included: /api/state leaves that out, as it's most of the file."""
+    j = read(JOBS, {}).get(jid)
+    return {"ok": True, "job": j} if j else {"error": "No such role"}
+
+
 def update_job(body):
     with locked(JOBS) as store:
         j = store.get(body.get("id"))
         if not j:
             return {"error": "No such role"}
+        if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
+            if j.get("source") != "manual":
+                return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
+            changes = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
+            if "title" in changes and not changes["title"]:
+                return {"error": "Needs a title"}
+            if "url" in body:
+                changes["url"] = str(body["url"] or "").strip()
+                if changes["url"] and not re.match(r"https?://\S+$", changes["url"]):
+                    return {"error": "The link needs to start with http"}
+            if "description" in body:
+                changes["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
+                if changes["description"] != (j.get("description") or ""):
+                    changes.update(score=None, why=None, flags=[])  # scored on the old words: the next scan scores it again
+                    j.pop("score_before_salary", None)
+                    j.pop("pruned", None)
+            j.update(changes)
         if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
             j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
             j["stage"] = body["stage"]
@@ -410,6 +436,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/state":
             return self.send(200, state())
+        if path == "/api/job":
+            return self.send(200, get_job(parse_qs(urlparse(self.path).query).get("id", [""])[0]))
         if path == "/api/settings":
             return self.send(200, settings_payload())
         if path == "/api/profile":

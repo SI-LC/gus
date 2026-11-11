@@ -67,6 +67,35 @@ class AddRole(unittest.TestCase):
         self.assertEqual(self.add(company="Acme", title="Anything", url="https://boards.example/acme/9/?utm_source=x")["id"], "gh:acme:9")
         self.assertEqual(list(self.stored()), ["gh:acme:9"])
 
+    def test_its_details_can_be_corrected_and_a_new_description_is_scored_again(self):
+        jid = self.add(description="First draft")["id"]
+        store = self.stored()
+        store[jid].update(score=8, why="Good fit", flags=["x"])
+        self.jobs.write_text(json.dumps(store))
+        out = server.update_job({"id": jid, "title": " Product  Lead, Platform ", "location": "London (hybrid)", "url": "https://quiet.example/jobs/1"})
+        self.assertEqual((out["job"]["title"], out["job"]["location"], out["job"]["url"], out["job"]["score"]),
+                         ("Product Lead, Platform", "London (hybrid)", "https://quiet.example/jobs/1", 8))
+        self.assertEqual(server.update_job({"id": jid, "description": "First draft"})["job"]["score"], 8)  # the same words: nothing to rescore
+        server.update_job({"id": jid, "description": "What the recruiter sent next"})
+        j = self.stored()[jid]
+        self.assertEqual((j["description"], j["score"], j["why"], j["flags"], j["stage"]), ("What the recruiter sent next", None, None, [], "shortlisted"))
+        for bad in ({"title": " "}, {"url": "javascript:alert(1)"}):
+            self.assertIn("error", server.update_job({"id": jid, **bad}))
+        self.assertEqual(self.stored()[jid]["title"], "Product Lead, Platform")
+
+    def test_a_role_from_a_board_keeps_what_its_ad_says(self):
+        self.jobs.write_text(json.dumps({"gh:acme:9": {"id": "gh:acme:9", "company": "Acme", "title": "PM", "url": "https://boards.example/acme/9",
+                                                       "stage": "new", "source": "board", "description": "The ad"}}))
+        self.assertIn("error", server.update_job({"id": "gh:acme:9", "title": "Something else"}))
+        self.assertTrue(server.update_job({"id": "gh:acme:9", "note": "Mine"})["ok"])  # your own note is still yours
+        self.assertEqual((self.stored()["gh:acme:9"]["title"], self.stored()["gh:acme:9"]["note"]), ("PM", "Mine"))
+
+    def test_one_role_can_be_read_in_full_with_its_description(self):
+        jid = self.add(description="What the recruiter sent")["id"]
+        self.assertEqual(server.get_job(jid)["job"]["description"], "What the recruiter sent")
+        self.assertIn("error", server.get_job("manual:nobody:00000000"))
+        self.assertIn("error", server.get_job(""))
+
     def test_no_scan_closes_it_even_once_a_board_lists_the_same_role(self):
         jid = self.add()["id"]
         store = self.stored()
