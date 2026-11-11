@@ -15,7 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-from radar.scan import DATA
+from radar.paths import DATA
 
 STR, INT, BOOL, LIST, DICT, NUM = str, int, bool, list, dict, (int, float)
 

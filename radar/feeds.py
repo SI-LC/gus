@@ -15,7 +15,9 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from radar.scan import DATA, ROOT, fetch_bytes, load_config, strip_html
+from radar.matching import load_config
+from radar.paths import DATA, ROOT
+from radar.web import fetch_bytes, strip_html
 from radar.store import read
 
 SIGNALS = DATA / "signals.json"

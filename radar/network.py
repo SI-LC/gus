@@ -19,7 +19,7 @@ import sys
 from datetime import date
 
 from radar.accounts import COMPANIES, PEOPLE, person_id, read, tier
-from radar.scan import DATA
+from radar.paths import DATA
 from radar.store import locked
 
 NETWORK = DATA / "network.json"

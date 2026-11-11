@@ -18,7 +18,8 @@ from datetime import datetime
 from statistics import median
 
 from radar import triage
-from radar.scan import DATA, JOBS, ROOT, load_config
+from radar.matching import load_config
+from radar.paths import DATA, JOBS, ROOT
 from radar.store import read
 
 EVALS = DATA / "evals"

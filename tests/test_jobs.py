@@ -92,13 +92,13 @@ class Dedupe(unittest.TestCase):
 
     def test_dry_run_changes_nothing_and_apply_merges(self):
         import json
-        from radar import accounts, events, scan
+        from radar import accounts, events
         with tempfile.TemporaryDirectory() as d:
             jobs, ev, mv = Path(d) / "jobs.json", Path(d) / "events.json", Path(d) / "moves.json"
             jobs.write_text(json.dumps({"adzuna:1": role("adzuna:1", stage="new"), "gh:acme:2": role("gh:acme:2", stage="shortlisted")}))
             ev.write_text(json.dumps({"role:adzuna:1": {"job_id": "adzuna:1"}}))
             mv.write_text("{}")
-            with mock.patch.object(scan, "JOBS", jobs), mock.patch.object(events, "EVENTS", ev), mock.patch.object(accounts, "MOVES", mv):
+            with mock.patch.object(J, "JOBS", jobs), mock.patch.object(events, "EVENTS", ev), mock.patch.object(accounts, "MOVES", mv):
                 self.assertEqual(J.dedupe(), [("gh:acme:2", ["adzuna:1", "gh:acme:2"])])
                 self.assertEqual(set(json.loads(jobs.read_text())), {"adzuna:1", "gh:acme:2"})
                 self.assertEqual(J.dedupe(apply=True), [("gh:acme:2", ["adzuna:1"])])
@@ -109,13 +109,13 @@ class Dedupe(unittest.TestCase):
 class InTheScan(unittest.TestCase):
     def test_a_board_role_already_found_on_a_job_site_is_absorbed_not_added(self):
         import json
-        from radar import scan
+        from radar import matching, scan
         with tempfile.TemporaryDirectory() as d:
             jobs = Path(d) / "jobs.json"
             jobs.write_text(json.dumps({"adzuna:1": role("adzuna:1", stage="new", source="adzuna", location="London, UK")}))
             found = [role("gh:acme:9", location="London", description="Full ad")]
             with mock.patch.object(scan, "JOBS", jobs), mock.patch.object(scan, "DATA", Path(d)), \
-                 mock.patch.object(scan, "fetch_all", lambda: (found, [])), mock.patch.object(scan, "matches", lambda *a: True), \
+                 mock.patch.object(scan, "fetch_all", lambda: (found, [])), mock.patch.object(matching, "matches", lambda *a: True), \
                  mock.patch("sys.argv", ["scan", "--json"]), mock.patch("builtins.print"):
                 scan.main()
             store = json.loads(jobs.read_text())
@@ -139,13 +139,12 @@ class AddedByAnAgent(unittest.TestCase):
     """A role an agent finds on a careers page goes through the same checks as every other source, in code."""
 
     def setUp(self):
-        from radar import scan
         from sample_search import use_sample
         use_sample(self)
         d = tempfile.TemporaryDirectory()
         self.addCleanup(d.cleanup)
         self.jobs = Path(d.name) / "jobs.json"
-        patcher = mock.patch.object(scan, "JOBS", self.jobs)
+        patcher = mock.patch.object(J, "JOBS", self.jobs)
         patcher.start()
         self.addCleanup(patcher.stop)
 

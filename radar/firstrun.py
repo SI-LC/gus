@@ -18,8 +18,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 
-from radar import ai, resolve, scan, settings, triage
-from radar.scan import DATA, JOBS, ROOT
+from radar import ai, boards, matching, paths, resolve, settings, triage, web
+from radar.paths import DATA, JOBS, ROOT
 from radar.store import locked, read
 
 STARTER = ROOT / "starter-boards.csv"
@@ -140,19 +140,19 @@ def starter() -> list:
 def listing(company: str, ats: str, slug: str) -> list:
     """Every open role on a board. Greenhouse lists titles only, so its details are fetched for the shortlist alone."""
     if ats == "greenhouse":
-        d = scan.get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
+        d = web.get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs")
         rows = [{"id": f"gh:{slug}:{j['id']}", "company": company, "title": j["title"], "url": j["absolute_url"],
                  "posted": j.get("first_published") or j.get("updated_at"), "description": "",
                  "location": (j.get("location") or {}).get("name", "")} for j in d.get("jobs", [])]
     else:
-        rows = scan.SOURCES[ats](company, slug)
+        rows = boards.SOURCES[ats](company, slug)
     for r in rows:
         r.update(description=(r.get("description") or "")[:2500], _ats=ats, _slug=slug)
     return rows
 
 
 def _board(row: dict, deadline: float) -> None:
-    scan.time_limit(deadline)
+    web.time_limit(deadline)
     try:
         roles = listing(row["company"], row["ats"], row["slug"])
         with _lock:
@@ -162,7 +162,7 @@ def _board(row: dict, deadline: float) -> None:
         with _lock:
             RUN["failed"] += 1
     finally:
-        scan.time_limit(None)
+        web.time_limit(None)
 
 
 def _fetch() -> None:
@@ -200,13 +200,13 @@ def _find_board(name: str) -> None:
     deadline = time.monotonic() + FIND_BOARD_SECONDS
 
     def probe(t):
-        scan.time_limit(deadline)
+        web.time_limit(deadline)
         try:
             return t, resolve.probe(*t)
         except Exception:
             return t, None
         finally:
-            scan.time_limit(None)
+            web.time_limit(None)
 
     tries = [(a, s) for s in resolve.slugs(name)[:3] for a in ("greenhouse", "ashby", "lever", "workable")]
     pool = ThreadPoolExecutor(max_workers=len(tries))
@@ -356,15 +356,15 @@ def _details(rows: list) -> None:
     deadline = time.monotonic() + DETAIL_SECONDS
 
     def one(r):
-        scan.time_limit(deadline)
+        web.time_limit(deadline)
         try:
-            d = scan.get_json(f"https://boards-api.greenhouse.io/v1/boards/{r['_slug']}/jobs/{r['id'].rsplit(':', 1)[-1]}")
-            r["description"] = scan.strip_html(d.get("content", ""))[:2500]
+            d = web.get_json(f"https://boards-api.greenhouse.io/v1/boards/{r['_slug']}/jobs/{r['id'].rsplit(':', 1)[-1]}")
+            r["description"] = web.strip_html(d.get("content", ""))[:2500]
             r["location"] = " / ".join(dict.fromkeys(filter(None, [r["location"]] + [o.get("name", "") for o in d.get("offices") or []])))
         except Exception:
             pass
         finally:
-            scan.time_limit(None)
+            web.time_limit(None)
 
     todo = [r for r in rows if r.get("_ats") == "greenhouse" and not r["description"]]
     if todo:
@@ -414,7 +414,7 @@ def _find(gen: int) -> None:
     seen, matched = set(), []
     for job in pool:
         same = (job["company"].lower(), job["title"].lower())  # one role, posted once per city, is still one role
-        if same not in seen and scan.matches(job, cfg):
+        if same not in seen and matching.matches(job, cfg):
             seen.add(same)
             matched.append(job)
     by_rank = lambda j: rank(j, titles, places, read, loved)  # noqa: E731
@@ -484,7 +484,7 @@ def changes_for(titles: list, places: list, read: dict) -> dict:
 
 def _keep_boards(rows: list) -> None:
     """Your companies, plus the starter boards that have something for you. Anything you already watch stays."""
-    path, example = scan.WATCHLIST, ROOT / "watchlist.example.csv"
+    path, example = paths.WATCHLIST, ROOT / "watchlist.example.csv"
     untouched = path.exists() and path.read_text() == example.read_text()  # copied in by a read, not chosen by anyone
     have = list(csv.DictReader(path.open())) if path.exists() and not untouched else []
     known = {r["slug"] for r in have}
@@ -517,7 +517,7 @@ def _save(gen: int, best: list, titles: list, places: list, read: dict) -> None:
         by_id, cards = {j["id"]: j for j in best}, list(RUN["top"])
         favourites, cv = list(RUN["favourites"]), RUN["cv"]
         found = {j["company"]: (j["_ats"], j["_slug"]) for j in RUN["roles"]
-                 if scan.matches(j, matcher(titles, places))} if best else {}
+                 if matching.matches(j, matcher(titles, places))} if best else {}
     settings.save(changes_for(titles, places, read))
     sectors = {r["company"]: r["sector"] for r in starter()}
     _keep_boards([(f["name"], f["ats"], f["slug"], "favourite") for f in favourites if f.get("ats")] +

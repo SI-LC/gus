@@ -15,7 +15,8 @@ import urllib.request
 from datetime import date
 
 from radar import usage
-from radar.scan import DATA, load_config
+from radar.matching import load_config
+from radar.paths import DATA
 from radar.settings import load as settings_load
 from radar.store import read
 

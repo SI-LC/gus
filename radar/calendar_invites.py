@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from radar.accounts import COMPANIES, PEOPLE, read
 from radar.network import norm
-from radar.scan import DATA
+from radar.paths import DATA
 
 MEETINGS = DATA / "meetings.json"
 INVITE_SUBJECT = re.compile(r"^\s*(updated invitation|invitation|canceled event|cancelled event|accepted|declined|tentatively accepted|new event|meeting)\b", re.I)

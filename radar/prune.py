@@ -18,7 +18,8 @@ from email.utils import parsedate_to_datetime
 from radar.accounts import MOVES
 from radar.events import EVENTS, SIGNALS, parse_date
 from radar.jobs import is_live
-from radar.scan import DATA, JOBS, load_config
+from radar.matching import load_config
+from radar.paths import DATA, JOBS
 from radar.store import locked, read
 
 ARCHIVE = DATA / "archive"

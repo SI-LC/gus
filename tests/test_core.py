@@ -22,15 +22,15 @@ class RemoteRoles(unittest.TestCase):
         return {"title": "Product Manager", "location": location, "description": ""}
 
     def test_a_repeated_remote_location_counts_as_remote(self):
-        from radar import scan
-        cfg = scan.load_config()
-        self.assertTrue(scan.matches(self.job("Remote / Remote "), cfg))
-        self.assertTrue(scan.matches(self.job("Remote"), cfg))
+        from radar import matching
+        cfg = matching.load_config()
+        self.assertTrue(matching.matches(self.job("Remote / Remote "), cfg))
+        self.assertTrue(matching.matches(self.job("Remote"), cfg))
 
     def test_remote_in_one_country_still_does_not_count(self):
-        from radar import scan
-        cfg = scan.load_config()
-        self.assertFalse(scan.matches(self.job("Remote / United States"), cfg))
+        from radar import matching
+        cfg = matching.load_config()
+        self.assertFalse(matching.matches(self.job("Remote / United States"), cfg))
 
 
 class Feeds(unittest.TestCase):
@@ -95,7 +95,7 @@ class Feeds(unittest.TestCase):
 
 class AppIcon(unittest.TestCase):
     def test_browser_icon_has_light_and_dark_versions(self):
-        from radar.scan import ROOT
+        from radar.paths import ROOT
         self.assertIn("prefers-color-scheme:dark", (ROOT / "radar" / "static" / "icon.svg").read_text())
 
     def test_every_icon_file_exists(self):
@@ -146,10 +146,10 @@ class FullRun(unittest.TestCase):
                 calls.append(name)
                 return True, ""
             return go
-        with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _boards=step("boards"), _command=lambda *a: step("score")(),
+        with mock.patch.multiple(service, _check_roles=step("scan"), _agent_step=step, _boards=step("boards"), _run_modules=lambda *a: step("score")(),
                                   _emails_waiting=lambda: emails, _moves_this_week=lambda: moves,
                                   _watchlist_due=lambda c, s: watchlist_due, _counts=lambda: {"roles": 0, "strong": 0},
-                                  _state=lambda: {}, _save=lambda s: None, load_config=lambda: {}):
+                                  _schedule_state=lambda: {}, _save_schedule_state=lambda s: None, load_config=lambda: {}):
             service.progress.clear()
             ok, summary = service.full_run()
         return ok, summary, calls, {s["name"]: s["status"] for s in service.progress["steps"]}
@@ -462,7 +462,7 @@ from unittest import mock
 sys.argv = ["radar.service"]
 import radar.server, radar.service as svc
 def fake_server():
-    with mock.patch.object(svc, "_do", lambda job: (True, "ran")):
+    with mock.patch.object(svc, "_run_job", lambda job: (True, "ran")):
         radar.server.service.start("scan")
         time.sleep(1)
         print("RAN" if "scan" in radar.server.service.last else "STUCK", flush=True)
@@ -478,12 +478,12 @@ class Targeting(unittest.TestCase):
         use_sample(self)
 
     def test_where(self):
-        from radar.scan import where
+        from radar.matching import where
         for loc, want in (("Berlin / London", "London"), ("Remote, United Kingdom", "Remote"), ("Manchester, UK", "UK"), ("Paris, Europe", "Europe")):
             self.assertEqual(where(loc), want)
 
     def test_titles(self):
-        from radar.scan import load_config, role_type, wanted_title
+        from radar.matching import load_config, role_type, wanted_title
         c = load_config()
         keep = lambda t: wanted_title(t, c)
         for t in ("Senior Product Manager", "Forward Deployed Engineer", "Forward-Deployed PM", "Product Engineer", "Founding Product Engineer", "Applied AI Engineer", "Member of Deployed Staff"):
@@ -497,7 +497,7 @@ class Targeting(unittest.TestCase):
         self.assertEqual(role_type("Forward Deployed Product Manager"), "Forward deployed")
 
     def test_remote_locations(self):
-        from radar.scan import load_config
+        from radar.matching import load_config
         loc = load_config()["location_include"]
         for l in ("Remote", "London", "Remote - Worldwide", "Remote, United Kingdom", "Remote (EMEA)"):
             self.assertTrue(loc.search(l), l)
@@ -527,7 +527,7 @@ class Targeting(unittest.TestCase):
             settings.validate("title_include", "(broken")
 
     def test_exceptions_stop_a_leave_out_word_catching_a_wanted_title(self):
-        from radar.scan import load_config, wanted_title
+        from radar.matching import load_config, wanted_title
         c = load_config()
         self.assertTrue(wanted_title("Forward-Deployed Engineer", c))
         self.assertFalse(wanted_title("Staff Engineer, Product", c))
@@ -565,7 +565,7 @@ class SharedBoard(unittest.TestCase):
         import csv, tempfile
         from pathlib import Path
         from unittest import mock
-        from radar import scan
+        from radar import boards, matching, scan
         d = tempfile.TemporaryDirectory(); self.addCleanup(d.cleanup)
         path = Path(d.name) / "watchlist.csv"
         with path.open("w", newline="") as f:
@@ -573,8 +573,8 @@ class SharedBoard(unittest.TestCase):
             w.writerows([["company", "ats", "slug", "sector", "only"], ["Base44", "fake", "wix", "ai-apps", "base44"], ["Wix", "fake", "wix", "web", ""]])
         board = lambda company, slug: [{"id": f"{company}:1", "company": company, "title": "Product Manager - Base44"},
                                        {"id": f"{company}:2", "company": company, "title": "Full Stack Engineer"}]
-        with mock.patch.dict(scan.SOURCES, fake=board, clear=True), mock.patch.object(scan, "watchlist_path", lambda: path), \
-             mock.patch.object(scan, "load_config", lambda: {"source_hn": False}), mock.patch.object(scan, "save_looked_up", lambda a: None), \
+        with mock.patch.dict(boards.SOURCES, fake=board, clear=True), mock.patch.object(scan, "watchlist_path", lambda: path), \
+             mock.patch.object(matching, "load_config", lambda: {"source_hn": False}), mock.patch.object(boards, "save_looked_up", lambda a: None), \
              mock.patch.object(scan, "DATA", Path(d.name)):
             jobs, errors = scan.fetch_all()
         self.assertEqual(errors, [])
@@ -586,32 +586,32 @@ class BotIdentity(unittest.TestCase):
     """Sites see who is asking: a name, the release and a link to this repo; and no host gets a burst of requests from one address."""
 
     def test_user_agent_names_the_repo_and_release(self):
-        from radar import scan
-        self.assertRegex(scan.ua()["User-Agent"], r"^gus/(\d+\.\d+\.\d+|dev) \(\+https://github\.com/SI-LC/gus; .+\)$")
+        from radar import web
+        self.assertRegex(web.ua()["User-Agent"], r"^gus/(\d+\.\d+\.\d+|dev) \(\+https://github\.com/SI-LC/gus; .+\)$")
 
     def test_version_without_git_is_dev(self):
         import subprocess
         from unittest import mock
-        from radar import scan
-        with mock.patch.object(subprocess, "run", side_effect=OSError("no git")), mock.patch.object(scan, "_version", (0.0, "")):
-            self.assertEqual(scan.version(), "dev")
+        from radar import web
+        with mock.patch.object(subprocess, "run", side_effect=OSError("no git")), mock.patch.object(web, "_version", (0.0, "")):
+            self.assertEqual(web.version(), "dev")
 
     def test_a_tag_made_after_the_start_is_picked_up_within_the_hour(self):
         """The release is tagged after the Pi has started the new code, so the header must not be fixed at import."""
         from unittest import mock
-        from radar import scan
-        with mock.patch.object(scan, "_version", (0.0, "")):
-            with mock.patch.object(scan.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.9\n")):
-                self.assertEqual(scan.version(), "9.9.9")
-            with mock.patch.object(scan.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.10\n")):
-                self.assertEqual(scan.version(), "9.9.9", "cached for an hour")
-                scan._version = (0.0, scan._version[1])  # the hour is up
-                self.assertEqual(scan.version(), "9.9.10", "read again")
+        from radar import web
+        with mock.patch.object(web, "_version", (0.0, "")):
+            with mock.patch.object(web.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.9\n")):
+                self.assertEqual(web.version(), "9.9.9")
+            with mock.patch.object(web.subprocess, "run", lambda *a, **k: mock.Mock(stdout="v9.9.10\n")):
+                self.assertEqual(web.version(), "9.9.9", "cached for an hour")
+                web._version = (0.0, web._version[1])  # the hour is up
+                self.assertEqual(web.version(), "9.9.10", "read again")
 
     def test_requests_to_one_host_are_paced(self):
         import io
         from unittest import mock
-        from radar import scan
+        from radar import boards, web
 
         class Reply(io.BytesIO):
             headers = {}
@@ -619,14 +619,14 @@ class BotIdentity(unittest.TestCase):
             def __exit__(self, *a): return False
 
         slept = []
-        with mock.patch("urllib.request.urlopen", lambda req, timeout=30: Reply(b"ok")), mock.patch.object(scan.time, "sleep", slept.append), \
-             mock.patch.dict(scan._hosts, clear=True):
-            scan.fetch_bytes("https://boards.example.com/a/jobs")
-            scan.fetch_bytes("https://other.example.com/jobs")
+        with mock.patch("urllib.request.urlopen", lambda req, timeout=30: Reply(b"ok")), mock.patch.object(boards.time, "sleep", slept.append), \
+             mock.patch.dict(web._hosts, clear=True):
+            web.fetch_bytes("https://boards.example.com/a/jobs")
+            web.fetch_bytes("https://other.example.com/jobs")
             self.assertEqual(slept, [], "different hosts run side by side")
-            scan.fetch_bytes("https://boards.example.com/b/jobs")
+            web.fetch_bytes("https://boards.example.com/b/jobs")
         self.assertEqual(len(slept), 1)
-        self.assertAlmostEqual(slept[0], scan.HOST_PAUSE, delta=0.2)
+        self.assertAlmostEqual(slept[0], web.HOST_PAUSE, delta=0.2)
 
 
 class YourOwnSearch(unittest.TestCase):
@@ -667,7 +667,7 @@ class NothingMissed(unittest.TestCase):
 
     def test_a_big_smartrecruiters_board_is_read_to_the_end(self):
         from unittest import mock
-        from radar import scan
+        from radar import boards, web
         asked = []
 
         def reply(url):
@@ -675,18 +675,18 @@ class NothingMissed(unittest.TestCase):
             start = int(url.split("offset=")[1])
             return {"totalFound": 250, "content": [{"id": n, "name": "Product Manager", "location": {"city": "London", "country": "gb"}}
                                                    for n in range(start, min(start + 100, 250))]}
-        with mock.patch.object(scan, "get_json", reply), mock.patch.object(scan, "PAGE_PAUSE", 0):
-            jobs = scan.smartrecruiters("Wise", "wise")
+        with mock.patch.object(web, "get_json", reply), mock.patch.object(boards, "PAGE_PAUSE", 0):
+            jobs = boards.smartrecruiters("Wise", "wise")
         self.assertEqual((len(jobs), len(asked), len({j["id"] for j in jobs})), (250, 3, 250))
 
     def test_an_ad_with_no_place_is_judged_by_its_title(self):
-        from radar import scan
-        cfg = scan.load_config()
+        from radar import matching
+        cfg = matching.load_config()
         ad = {"title": "Senior Product Manager, London", "location": "", "description": ""}
-        self.assertTrue(scan.matches(ad, cfg))
-        self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager, New York"}, cfg))
-        self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager"}, cfg))
-        self.assertFalse(scan.matches({**ad, "location": "New York"}, cfg))  # a place that is given still decides
+        self.assertTrue(matching.matches(ad, cfg))
+        self.assertFalse(matching.matches({**ad, "title": "Senior Product Manager, New York"}, cfg))
+        self.assertFalse(matching.matches({**ad, "title": "Senior Product Manager"}, cfg))
+        self.assertFalse(matching.matches({**ad, "location": "New York"}, cfg))  # a place that is given still decides
 
 
 class NothingReadsThem(unittest.TestCase):

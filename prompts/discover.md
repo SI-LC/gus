@@ -58,7 +58,6 @@ mark the record `status: "candidate", "fast_tracked": true`. The loop assesses i
   describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
   `stage` to `skipped`.
 - For A/B accounts with a fresh event and fewer than 2 people mapped, run `python3 -m radar.people "<Company>"` (at most 3 per run).
-- Run `python3 -m radar.dashboard`.
 
 ## 4. Report
 

@@ -16,7 +16,9 @@ from datetime import date, timedelta
 from radar import ai
 from radar.accounts import COMPANIES, PEOPLE, brief, person_id, read
 from radar.notify import notify
-from radar.scan import JOBS, ROOT, get_json, load_config
+from radar.matching import load_config
+from radar.paths import JOBS, ROOT
+from radar.web import get_json
 from radar.store import locked
 
 PROMPT = (ROOT / "prompts" / "people.md").read_text()

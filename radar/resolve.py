@@ -21,7 +21,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, SOURCES, board_size, fetch_bytes, gem_posts, get_json, github_count, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.boards import board_size, gem_posts, github_count, teamtailor_items, SITE_BOARDS, SOURCES
+from radar.paths import watchlist_path, DATA
+from radar.web import fetch_bytes, get_json, polite_fetch, site_rules
 from radar.store import read
 
 GUESS_DAYS = 14  # how long before a company with no board is guessed at again

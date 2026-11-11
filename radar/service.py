@@ -2,9 +2,11 @@
 
     python3 -m radar.service --host 0.0.0.0
 
-There are two jobs. A full run does everything in a fixed order, so the parts can't drift
-out of sync; it starts at your daily time (if the scheduler is on in Settings) or from the
-Full run button. Check roles only scans and scores.
+There are three jobs, run strictly one at a time. A full run does everything in a fixed order, so the
+parts can't drift out of sync; it starts at your daily time (if the scheduler is on in Settings) or from
+the Full run button. Check roles is its first step on its own: one scan (run.sh), which reads every board,
+feed and inbox, scores what's new and maps people at accounts with fresh news. Job sources searches Adzuna
+and JSearch when they're due.
 """
 from __future__ import annotations
 
@@ -17,7 +19,8 @@ import time
 import traceback
 from datetime import date, datetime
 
-from radar.scan import DATA, ROOT, load_config
+from radar.matching import load_config
+from radar.paths import DATA, ROOT
 from radar.store import read
 
 STATE = DATA / "schedule_state.json"
@@ -29,29 +32,30 @@ progress: dict = {}            # the job running now, step by step
 
 
 
-def _state():
+def _schedule_state():
     return read(STATE)
 
 
-def _save(s):
+def _save_schedule_state(s):
     DATA.mkdir(exist_ok=True)
     STATE.write_text(json.dumps(s, indent=2))
 
 
-def _scan():
+def _check_roles():
+    """One scan, start to finish: everything in run.sh."""
     out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=1800, cwd=ROOT)
     return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
 
 
 def _sources():
-    """Job sources on their own: fetch whatever is due, then score it. Separate from scans and the daily run."""
+    """Job sources: fetch whatever is due, then score it. Run on its own schedule, and as a step of the full run."""
     if not _sources_on(load_config()):
         return True, "Job sources are turned off"
     before = _counts()["roles"]
     out = subprocess.run([sys.executable, "-m", "radar.sources"], capture_output=True, text=True, timeout=3600, cwd=ROOT)
     if _counts()["roles"] > before:  # nothing new means nothing to score
-        _command("triage", "dashboard")
-    _command("links")  # strong roles: swap job-site links for the employer's own ad
+        _run_modules("triage")
+    _run_modules("links")  # strong roles: swap job-site links for the employer's own ad
     lines = [line for line in out.stdout.splitlines() if line.strip() and not line.endswith("turned off")]
     return out.returncode == 0, ". ".join(lines)[-300:] or "Nothing to do"
 
@@ -63,15 +67,16 @@ def _sources_on(cfg) -> bool:
 def _boards():
     """Boards for companies that arrived with a role or a careers address, then a scan so their roles are scored this run."""
     from radar import resolve
-    _command("links")  # a role from a job site or a web search: find the employer's board and watch it
+    _run_modules("links")  # a role from a job site or a web search: find the employer's board and watch it
     out = resolve.auto()
     if out["added"] or out["restored"]:
-        _command("scan")
+        _run_modules("scan")
     n, g, r = len(out["added"]), len(out["guesses"]), len(out["restored"])
     return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {r} put back on the watchlist" if r else "") + (f", {g} to look at in Companies" if g else "")
 
 
-def _command(*modules):
+def _run_modules(*modules):
+    """Run Gus's own commands one after another. A failure is left to that command's log and the Health section."""
     for m in modules:
         subprocess.run([sys.executable, "-m", f"radar.{m}"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
     return True, ""
@@ -105,16 +110,16 @@ def _agent_step(name):
 
 def steps():
     """The full run, in order. Each step: (label, function, why it's skipped, or None to run it)."""
-    cfg, s = load_config(), _state()
+    cfg, s = load_config(), _schedule_state()
     every = cfg.get("watchlist_every_days", 3)
     return [
-        ("Scan and score", _scan, lambda: None),
+        ("Scan and score", _check_roles, lambda: None),
         ("Job sources", _sources, lambda: None if _sources_on(cfg) else "Turned off"),
         ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
         ("Discover", _agent_step("discover"), lambda: None),
         ("Find boards", _boards, lambda: None),
         ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
-        ("Score what's new", lambda: _command("triage", "people", "dashboard"), lambda: None),
+        ("Score what's new", lambda: _run_modules("triage", "people"), lambda: None),
         ("Plan moves", _agent_step("moves"), lambda: "Already planned this week" if _moves_this_week() else None),
     ]
 
@@ -144,10 +149,10 @@ def full_run():
             step.update(status="failed", detail=str(e)[:200])
             ok = False
             traceback.print_exc()
-    s = _state()
+    s = _schedule_state()
     if any(x["name"] == "Refresh accounts" and x["status"] == "done" for x in progress["steps"]):
         s["watchlist"] = str(date.today())
-        _save(s)
+        _save_schedule_state(s)
     after = _counts()
     new = after["roles"] - before["roles"]
     summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong, {_moves_this_week()} moves this week"
@@ -155,8 +160,8 @@ def full_run():
     return ok and not stop, f"{stop}. {summary}" if stop else summary
 
 
-def _do(job):
-    return {"run": full_run, "scan": _scan, "sources": _sources}[job]()
+def _run_job(job):
+    return {"run": full_run, "scan": _check_roles, "sources": _sources}[job]()
 
 
 def start(job: str) -> bool:
@@ -175,7 +180,7 @@ def worker():
         progress.clear()
         progress.update(job=job, steps=[])
         try:
-            ok, summary = _do(job)
+            ok, summary = _run_job(job)
         except Exception as e:
             ok, summary = False, f"{e}"
             traceback.print_exc()
@@ -183,9 +188,9 @@ def worker():
             running.pop(job, None)
             last[job] = {"at": datetime.now().isoformat(timespec="seconds"), "ok": ok, "summary": summary,
                          "steps": list(progress.get("steps", []))}
-            s = _state()
+            s = _schedule_state()
             s.setdefault("results", {})[job] = last[job]
-            _save(s)
+            _save_schedule_state(s)
 
 
 def _times(spec):
@@ -214,17 +219,17 @@ def scheduler():
         try:
             cfg = load_config()
             now = datetime.now()
-            s = _state()
+            s = _schedule_state()
             if sources_due(now, cfg, s) and start("sources"):
                 s["sources"] = str(now.date())
-                _save(s)
+                _save_schedule_state(s)
             if cfg.get("scheduler_enabled"):
                 if first and due(now, cfg, s):  # started after today's time: don't fire straight away
                     s["run"] = str(now.date())
-                    _save(s)
+                    _save_schedule_state(s)
                 elif due(now, cfg, s) and start("run"):
                     s["run"] = str(now.date())
-                    _save(s)
+                    _save_schedule_state(s)
             first = False
         except Exception:
             traceback.print_exc()
@@ -232,7 +237,7 @@ def scheduler():
 
 
 def status() -> dict:
-    s = _state()
+    s = _schedule_state()
     with _lock:
         cfg = load_config()
         return {"running": dict(running), "last": {**s.get("results", {}), **last},

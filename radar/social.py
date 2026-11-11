@@ -15,7 +15,9 @@ import re
 import urllib.parse
 import urllib.request
 
-from radar.scan import DATA, get_json, load_config, strip_html, ua
+from radar.matching import load_config
+from radar.paths import DATA
+from radar.web import get_json, strip_html, ua
 from radar.settings import secret
 from radar.store import locked
 

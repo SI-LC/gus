@@ -19,7 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from radar.companies import COMPANIES, veto
-from radar.scan import DATA, JOBS, ROOT, role_type, where
+from radar.matching import role_type, where
+from radar.paths import DATA, JOBS, ROOT
 from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked, read

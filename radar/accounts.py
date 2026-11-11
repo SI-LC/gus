@@ -26,7 +26,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from radar import events as E
 from radar.events import EVENTS, FRESH_DAYS, parse_date
-from radar.scan import DATA, JOBS
+from radar.paths import DATA, JOBS
 from radar.store import locked, read
 
 COMPANIES = DATA / "companies.json"

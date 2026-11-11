@@ -18,7 +18,7 @@ import re
 import sys
 from datetime import date, timedelta
 
-from radar.scan import DATA, WATCHLIST, watchlist_path
+from radar.paths import watchlist_path, DATA, WATCHLIST
 from radar.store import read
 
 COMPANIES = DATA / "companies.json"

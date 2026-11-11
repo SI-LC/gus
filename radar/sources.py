@@ -23,7 +23,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from radar import jobs as J
 from radar.jobs import same_company, same_title  # one definition, shared with scan and links
-from radar.scan import DATA, JOBS, left_out, load_config, matches, strip_html, ua
+from radar.matching import left_out, load_config, matches
+from radar.paths import DATA, JOBS
+from radar.web import strip_html, ua
 from radar.settings import secret
 from radar.store import locked, read
 

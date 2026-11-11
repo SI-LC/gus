@@ -15,7 +15,12 @@ import hashlib
 import json
 import re
 import sys
+from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from radar.matching import load_config, matches
+from radar.paths import JOBS
+from radar.store import locked, read
 
 STAGE_ORDER = ["new", "skipped", "closed", "shortlisted", "preparing", "applied", "interviewing"]
 TRACKING = re.compile(r"^(utm_|gh_src$|src$|ref$|source$|lever-source|ashby_jid$|fbclid$|gclid$)")
@@ -195,11 +200,8 @@ def repoint(events: dict, moves: dict, keep: str, gone: list[str]) -> None:
 
 
 def dedupe(apply: bool = False) -> list[tuple[str, list[str]]]:
-    from datetime import datetime, timezone
     from radar.accounts import MOVES
     from radar.events import EVENTS
-    from radar.scan import JOBS
-    from radar.store import locked
 
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     done = []
@@ -225,9 +227,6 @@ def add(rows: list, source: str = "web") -> list[tuple[str, str]]:
     """Roles an agent found by reading the web, each put through the checks every other source gets. Returns (what happened,
     id or reason) per role: "added"; "have" when Gus has this ad already, from any source, and the sighting is recorded on
     it; "no" when it's malformed or outside the candidate's titles and locations. An agent never decides what is a duplicate."""
-    from datetime import datetime, timezone
-    from radar.scan import JOBS, load_config, matches
-    from radar.store import locked
 
     cfg, now, out = load_config(), datetime.now(timezone.utc).isoformat(timespec="seconds"), []
     with locked(JOBS) as store:
@@ -270,8 +269,6 @@ def main():
         print(__doc__)
         return
     apply = "--apply" in sys.argv
-    from radar.scan import JOBS
-    from radar.store import read
     store = read(JOBS)
     for keep, group in dedupe(apply):
         j = store.get(keep) or {}

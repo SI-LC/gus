@@ -22,7 +22,7 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 
-from radar.scan import DATA, JOBS
+from radar.paths import DATA, JOBS
 from radar.store import locked, read
 
 EVENTS = DATA / "events.json"

@@ -20,7 +20,9 @@ from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 
 from radar.calendar_invites import is_invite, keep
-from radar.scan import DATA, load_config, strip_html
+from radar.matching import load_config
+from radar.paths import DATA
+from radar.web import strip_html
 from radar.settings import to_pattern
 from radar.settings import secret
 from radar.store import locked
