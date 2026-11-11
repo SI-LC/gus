@@ -27,7 +27,8 @@ class FindingBoards(unittest.TestCase):
 
     def run_auto(self, records, careers_hit=None, name_hit=None):
         (self.data / "companies.json").write_text(json.dumps(records))
-        with mock.patch.object(resolve, "from_careers", lambda url: careers_hit), mock.patch.object(resolve, "resolve", lambda name: name_hit):
+        with mock.patch.object(resolve, "from_careers", lambda url: careers_hit), mock.patch.object(resolve, "resolve", lambda name: name_hit), \
+             mock.patch.object(resolve, "try_board", lambda ats, slug: None):  # no network: a board off the watchlist is checked before it goes back
             out = resolve.auto()
         return out, json.loads((self.data / "companies.json").read_text())
 
@@ -61,7 +62,7 @@ class FindingBoards(unittest.TestCase):
 
     def test_companies_with_a_board_or_out_of_the_running_are_left_alone(self):
         out, _ = self.run_auto({"Has": {"status": "watched", "board": "lever:has"}, "Out": {"status": "rejected"}}, name_hit=HIT)
-        self.assertEqual(out, {"added": [], "guesses": [], "broken": []})
+        self.assertEqual(out, {"added": [], "guesses": [], "broken": [], "restored": []})
 
     def test_accepting_a_guess_watches_the_board(self):
         _, _ = self.run_auto({"Acme": {"status": "candidate"}}, name_hit=HIT)
@@ -75,6 +76,38 @@ class FindingBoards(unittest.TestCase):
         self.assertTrue(companies.reject_board("Acme"))
         saved = companies.load()["Acme"]
         self.assertEqual((self.rows(), saved["board_guess_rejected"], "board_guess" in saved), (["Other"], ["ashby:acme"], False))
+
+
+    # A board the scan has stopped reading goes back by itself, and the candidate's own choices outrank a fit score.
+
+    def restore(self, records, answers=True):
+        (self.data / "companies.json").write_text(json.dumps(records))
+        with mock.patch.object(resolve, "from_careers", lambda url: None), mock.patch.object(resolve, "resolve", lambda name: None), \
+             mock.patch.object(resolve, "try_board", lambda ats, slug: (ats, slug, 9) if answers else None):
+            out = resolve.auto()
+        return out, json.loads((self.data / "companies.json").read_text())
+
+    def test_a_watched_account_whose_line_went_missing_is_read_again(self):
+        out, _ = self.restore({"Monzo": {"status": "watched", "board": "greenhouse:monzo"}})
+        self.assertEqual((out["restored"], self.rows()), (["Monzo"], ["Other", "Monzo"]))
+
+    def test_a_favourite_parked_or_rejected_by_a_score_is_watched_again(self):
+        out, saved = self.restore({"Harvey": {"status": "maybe", "favourite": True, "board": "ashby:harvey"},
+                                   "Wayve": {"status": "rejected", "tier_locked": True, "board": "ashby:wayve"}})
+        self.assertEqual((sorted(out["restored"]), saved["Harvey"]["status"], saved["Wayve"]["status"]), (["Harvey", "Wayve"], "watched", "watched"))
+
+    def test_a_rejected_or_vetoed_account_stays_off(self):
+        out, saved = self.restore({"Snyk": {"status": "rejected", "board": "ashby:snyk"},
+                                   "Nope": {"status": "watched", "favourite": True, "vetoed": True, "board": "ashby:nope"}})
+        self.assertEqual((out["restored"], self.rows(), saved["Snyk"]["status"]), ([], ["Other"], "rejected"))
+
+    def test_a_board_that_no_longer_answers_isnt_put_back(self):
+        out, _ = self.restore({"Monzo": {"status": "watched", "board": "greenhouse:monzo"}}, answers=False)
+        self.assertEqual((out["restored"], self.rows()), ([], ["Other"]))
+
+    def test_the_agent_is_told_to_keep_the_candidates_choices(self):
+        text = (Path(__file__).resolve().parent.parent / "prompts" / "watchlist.md").read_text()
+        self.assertIn("never dropped", text)
 
 
 class Addresses(unittest.TestCase):

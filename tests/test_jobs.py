@@ -37,8 +37,16 @@ class Matching(unittest.TestCase):
         self.assertIsNone(J.find_match(store, role("gh:acme:10")))
 
     def test_a_closed_role_doesnt_claim_a_fresh_one(self):
-        store = {"adzuna:1": role("adzuna:1", ad_closed="x"), "gh:acme:2": role("gh:acme:2", stage="skipped")}
+        store = {"adzuna:1": role("adzuna:1", ad_closed="x"), "gh:acme:2": role("gh:acme:2", stage="closed")}
         self.assertIsNone(J.find_match(store, role("jsearch:3")))
+
+    def test_a_role_you_skipped_doesnt_come_back_as_new_from_another_site(self):
+        store = {"gh:acme:2": role("gh:acme:2", stage="skipped")}
+        self.assertEqual(J.find_match(store, role("getro:jobs.vc.example:3")), "gh:acme:2")
+
+    def test_capitals_in_an_address_dont_make_a_second_role(self):
+        store = {"ashby:acme:1": role("ashby:acme:1", title="Other", url="https://jobs.ashbyhq.com/acme/7afe97a2")}
+        self.assertEqual(J.find_match(store, role("getro:x:9", title="Else", url="https://jobs.ashbyhq.com/Acme/7afe97a2")), "ashby:acme:1")
 
     def test_absorb_remembers_the_sighting_and_fills_gaps(self):
         have = role("adzuna:1", location="", description="short précis", text_kind="summary", stage="shortlisted")

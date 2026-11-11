@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
-from radar.scan import DATA, SITE_BOARDS, board_size, fetch_bytes, gem_posts, get_json, github_count, polite_fetch, site_rules, teamtailor_items, watchlist_path
+from radar.scan import DATA, SITE_BOARDS, SOURCES, board_size, fetch_bytes, gem_posts, get_json, github_count, polite_fetch, site_rules, teamtailor_items, watchlist_path
 from radar.store import read
 
 GUESS_DAYS = 14  # how long before a company with no board is guessed at again
@@ -166,6 +166,30 @@ def add_board(name: str, ats: str, slug: str) -> bool:
     return True
 
 
+def chosen(rec: dict) -> bool:
+    """An account the candidate picked themselves: a favourite, or one whose tier they set."""
+    return bool(rec.get("favourite") or rec.get("tier_locked")) and not rec.get("vetoed")
+
+
+def restore(companies: dict) -> list:
+    """Accounts whose board the scan has stopped reading: watched, or chosen by the candidate, with a board on the record but
+    no line in watchlist.csv. A line can go missing when an agent or a person edits the file, and nothing else would notice:
+    the account still looks watched. Each board is checked before it goes back. A chosen account parked as maybe or rejected
+    is watched again, because the candidate's choice outranks a fit score."""
+    listed = {r["company"].lower() for r in csv.DictReader(watchlist_path().open())}
+    back = []
+    for name, rec in companies.items():
+        if rec.get("vetoed") or not (rec.get("status") == "watched" or chosen(rec)):
+            continue
+        if chosen(rec) and rec.get("status") in ("maybe", "rejected"):
+            rec["status"] = "watched"
+        ats, _, slug = str(rec.get("board") or "").partition(":")
+        if slug and ats in SOURCES and name.lower() not in listed and try_board(ats, slug) and add_board(name, ats, slug):
+            listed.add(name.lower())
+            back.append(name)
+    return back
+
+
 def _look(name: str, rec: dict):
     """What one company without a board turns up: ("board", hit) from its careers address, ("guess", hit) from its name, or None."""
     careers = rec.get("careers_url")
@@ -191,7 +215,7 @@ def auto() -> dict:
     path = DATA / "companies.json"
     companies = read(path)
     todo = {n: companies[n] for n in missing()}
-    out = {"added": [], "guesses": [], "broken": []}
+    out = {"added": [], "guesses": [], "broken": [], "restored": restore(companies)}
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(zip(todo, pool.map(lambda item: _look(*item), todo.items())))
     today = str(date.today())
@@ -214,7 +238,7 @@ def auto() -> dict:
                 rec["board_guess"] = {"board": f"{ats}:{slug}", "url": BOARD_URL.get(ats, "").format(s=slug), "open_roles": n, "found": today}
                 out["guesses"].append(name)
     path.write_text(json.dumps(companies, indent=2, ensure_ascii=False))
-    if out["added"]:
+    if out["added"] or out["restored"]:
         from radar.companies import sync
         sync()
     return out
@@ -225,6 +249,8 @@ def main():
     if "--auto" in args:
         out = auto()
         print(f"{len(out['added'])} boards added from careers addresses: {', '.join(out['added']) or 'none'}")
+        if out["restored"]:
+            print(f"{len(out['restored'])} boards back on the watchlist after dropping off it: {', '.join(out['restored'])}")
         print(f"{len(out['guesses'])} found by name, waiting for you in the cockpit: {', '.join(out['guesses']) or 'none'}")
         if out["broken"]:
             print(f"careers addresses that have gone: {', '.join(out['broken'])}")
