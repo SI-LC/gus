@@ -270,7 +270,6 @@ def update_event(body):
 def add_company(body):
     """Add a company to watch from the cockpit: find its job board the way `radar.resolve --add` does, then make it an account.
     Without a public board it's still an account, with no board until the watchlist agent or you find one."""
-    from radar import resolve
     name = " ".join(str(body.get("name") or "").split())[:80]
     careers = str(body.get("careers") or "").strip() or None
     if not name:
