@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from radar import events as E, jobs as J, schema, server, triage
+from radar import events as E, jobs as J, resolve, schema, server, triage
 from radar.scan import mark_closed
 
 NOW = "2026-11-11T10:00:00+00:00"
@@ -16,8 +16,11 @@ class AddRole(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         self.dir, self.jobs, self.companies = d, d / "jobs.json", d / "companies.json"
         self.companies.write_text(json.dumps({"Acme": {"status": "watched", "tier": "A"}}))
-        for target, attr, value in ((server, "JOBS", self.jobs), (server, "COMPANIES", self.companies)):
-            p = mock.patch.object(target, attr, value)
+        self.watchlist = d / "watchlist.csv"
+        self.watchlist.write_text("company,ats,slug,sector,only\nAcme,greenhouse,acme,,\n")
+        self.lookup = mock.Mock(return_value=None)  # the board search, which would otherwise go to the internet
+        for p in (mock.patch.object(server, "JOBS", self.jobs), mock.patch.object(server, "COMPANIES", self.companies),
+                  mock.patch.object(resolve, "resolve", self.lookup), mock.patch("radar.resolve.watchlist_path", lambda: self.watchlist)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -42,10 +45,23 @@ class AddRole(unittest.TestCase):
         self.assertTrue(self.add()["new_account"])
         c = json.loads(self.companies.read_text())
         self.assertEqual((c["Quiet Co"]["status"], c["Quiet Co"]["source"]), ("watched", "manual"))
+        self.assertNotIn("board", c["Quiet Co"])  # none found: still an account, and the full run keeps looking
+        self.lookup.reset_mock()
         out = self.add(company="acme ltd", title="Head of Product")
         self.assertFalse(out["new_account"])
         self.assertEqual(out["job"]["company"], "Acme")
         self.assertEqual(json.loads(self.companies.read_text())["Acme"], {"status": "watched", "tier": "A"})
+        self.lookup.assert_not_called()  # a company Gus has is left as it is
+
+    def test_a_new_company_has_its_job_board_found_and_watched_in_the_same_step(self):
+        self.lookup.return_value = ("lever", "quietco", 7)
+        out = self.add(careers="https://quiet.example/careers")
+        self.lookup.assert_called_once_with("Quiet Co", "https://quiet.example/careers")
+        self.assertEqual((out["new_account"], out["board"], out["open_roles"]), (True, "lever:quietco", 7))
+        c = json.loads(self.companies.read_text())["Quiet Co"]
+        self.assertEqual((c["board"], c["careers_url"], c["status"]), ("lever:quietco", "https://quiet.example/careers", "watched"))
+        self.assertIn("Quiet Co,lever,quietco", self.watchlist.read_text())
+        self.assertIn("error", self.add(company="Other Co", careers="quiet.example/careers"))
 
     def test_the_starting_stage_can_be_chosen_but_not_closed_or_skipped(self):
         self.assertEqual(self.add(stage="applied")["job"]["stage"], "applied")
@@ -57,6 +73,7 @@ class AddRole(unittest.TestCase):
             self.assertIn("error", self.add(**body), body)
         self.assertFalse(self.jobs.exists())
         self.assertNotIn("Quiet Co", json.loads(self.companies.read_text()))
+        self.lookup.assert_not_called()
 
     def test_a_role_gus_has_already_is_not_added_twice(self):
         first = self.add()

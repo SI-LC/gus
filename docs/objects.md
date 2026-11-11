@@ -34,7 +34,9 @@ copy furthest along and moving its events and moves across.
 A role that reached you directly, from a recruiter say, has no ad for a scan to find: add it from the Pipeline page
 ("+ Add a role") or POST `/api/job/add` with `company` and `title`, and optionally `location`, `url`, `description`,
 `folder`, `note` and a starting `stage` (`shortlisted` unless given; not `closed` or `skipped`). It's saved with
-`source: manual` and may have no `url`; its company becomes an account if it isn't one. It's scored like any other role,
+`source: manual` and may have no `url`; a company new to Gus becomes an account the way the Companies page adds one, in the
+same request: its public job board is looked for (surer with an optional `careers` address), added to the watchlist and
+scanned from the next scan on. With no board found it's still an account, and the full run keeps looking. It's scored like any other role,
 but it's yours: a score under 5 doesn't skip it and no scan closes it. A role Gus already has is refused, with its id.
 Its `title`, `location`, `url` and `description` can be corrected afterwards (POST `/api/job` with its `id`, or "Details"
 on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as

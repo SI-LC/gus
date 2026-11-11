@@ -279,6 +279,13 @@ def add_company(body):
         return {"error": "The careers address needs to start with http"}
     if name.lower() in {n.lower() for n in read(COMPANIES, {})} or same_company(name) in links.watched():
         return {"error": f"{name} is already on your list"}
+    hit = watch_company(name, careers)
+    return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
+
+
+def watch_company(name, careers=None):
+    """Make a company an account and watch its public job board, if it has one Gus can find. Returns (ats, slug, open roles) or None."""
+    from radar import resolve
     hit = resolve.resolve(name, careers)  # network, outside the lock
     if hit:
         resolve.add_board(name, hit[0], hit[1])
@@ -291,7 +298,7 @@ def add_company(body):
             c["careers_url"] = careers
         if hit:
             c["board"] = f"{hit[0]}:{hit[1]}"
-    return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
+    return hit
 
 
 def clean_folder(value):
@@ -310,16 +317,20 @@ START_STAGES = [s for s in JOB_STAGES if s not in ("closed", "skipped")]
 
 def add_job(body):
     """Add a role by hand: one a recruiter brought you, say, with no public ad for a scan to find. It starts shortlisted
-    unless you say otherwise, belongs to its company's account (made here if it's new to Gus), is scored like any other
-    role, and is never skipped by its score or closed because a board stopped listing it."""
+    unless you say otherwise, and belongs to its company's account. A company new to Gus is added the way "Add a company"
+    adds one: its public job board is looked for there and then (surer with its `careers` address) and watched, so its
+    other roles arrive with the next scan. The role is scored like any other, and is never skipped by its score or closed because a board stopped listing it."""
     from radar import jobs as J
     line = lambda k, n: " ".join(str(body.get(k) or "").split())[:n]
     company, title, location = line("company", 80), line("title", 200), line("location", 120)
     url, stage = str(body.get("url") or "").strip(), body.get("stage") or "shortlisted"
+    careers = str(body.get("careers") or "").strip() or None
     if not company or not title:
         return {"error": "Needs a company and a title"}
     if url and not re.match(r"https?://\S+$", url):
         return {"error": "The link needs to start with http"}
+    if careers and not re.match(r"https?://", careers):
+        return {"error": "The careers address needs to start with http"}
     if stage not in START_STAGES:
         return {"error": f"The stage must be one of: {', '.join(START_STAGES)}"}
     folder, problem = clean_folder(body.get("folder"))
@@ -339,11 +350,10 @@ def add_job(body):
         if body.get("note"):
             role["note"] = str(body["note"])[:2000]
         store[role["id"]] = role
-    with locked(COMPANIES) as companies:
-        new_account = company not in companies
-        if new_account:
-            companies[company] = {"status": "watched", "added": now()[:10], "source": "manual"}
-    return {"ok": True, "id": role["id"], "new_account": new_account, "job": {k: v for k, v in role.items() if k != "description"}}
+    new_account = company not in read(COMPANIES, {})
+    hit = watch_company(company, careers) if new_account else None  # the role is saved by now, whatever the lookup finds
+    return {"ok": True, "id": role["id"], "new_account": new_account, "board": f"{hit[0]}:{hit[1]}" if hit else None,
+            "open_roles": hit[2] if hit else 0, "job": {k: v for k, v in role.items() if k != "description"}}
 
 
 DETAILS = {"title": 200, "location": 120}

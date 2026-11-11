@@ -712,11 +712,12 @@ const V = {
           <input type="text" id="add-role-title" placeholder="Role title" aria-label="Role title" style="flex:2">
           <input type="text" id="add-role-location" placeholder="Location" aria-label="Location" style="flex:1"></div>
         <div class="row" style="margin-top:6px"><input type="text" id="add-role-url" placeholder="Link to the ad (optional)" aria-label="Link to the ad" style="flex:2">
+          <input type="text" id="add-role-careers" placeholder="Company careers page (optional)" aria-label="Company careers page" style="flex:2">
           <input type="text" id="add-role-folder" placeholder="Application folder (optional)" aria-label="Application folder" style="flex:2">
           <select id="add-role-stage" aria-label="Starting stage">${PIPE.filter(s => s !== "closed").map(s => `<option value="${s}">${LABEL[s]}</option>`).join("")}</select></div>
         <textarea id="add-role-description" rows="6" placeholder="Paste the job description" aria-label="Job description" style="width:100%;margin-top:6px"></textarea>
         <div class="row" style="margin-top:6px"><button class="primary" id="add-role-go" onclick="addRole()">Add role</button>
-          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you.</span></div></details>
+          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details>
       ${ppl.length || S.jobs.some(j => PIPE.includes(j.stage)) ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions" style="justify-content:center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
       <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
       <div class="section">Applications</div><div class="board">${appBoard}</div>`;
@@ -1074,10 +1075,13 @@ async function addEvent(account, k) {
   if (await post("/api/event", { account, type: v("type"), date: v("date"), url: v("url").trim(), summary: v("summary") })) { toast("Added"); load(); }
 }
 async function addRole() {
-  const v = k => $("add-role-" + k).value.trim();
+  const v = k => $("add-role-" + k).value.trim(), b = $("add-role-go");
   if (!v("company") || !v("title")) { toast("Needs a company and a title"); return; }
-  const d = await post("/api/job/add", { company: v("company"), title: v("title"), location: v("location"), url: v("url"), folder: v("folder"), stage: v("stage"), description: v("description") });
-  if (d) { toast(`${d.job.title} at ${d.job.company} added${d.new_account ? ", and " + d.job.company + " is now on your Companies page" : ""}`); await load(); render(true); }
+  b.disabled = true; b.textContent = "Adding…";  // a company new to Gus has its job board looked for, which takes a moment
+  const d = await post("/api/job/add", { company: v("company"), title: v("title"), location: v("location"), url: v("url"), careers: v("careers"), folder: v("folder"), stage: v("stage"), description: v("description") });
+  if (!d) { b.disabled = false; b.textContent = "Add role"; return; }
+  const co = !d.new_account ? "" : d.board ? `. ${d.job.company} added too: ${d.board}, ${d.open_roles} open role${d.open_roles === 1 ? "" : "s"}` : `. ${d.job.company} added too, but no public job board found yet. Gus keeps looking`;
+  toast(`${d.job.title} at ${d.job.company} added${co}`); await load(); render(true);
 }
 async function addCompany() {
   const name = $("add-co-name").value.trim(), careers = $("add-co-careers").value.trim(), b = $("add-co-go");

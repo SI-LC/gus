@@ -4,7 +4,7 @@ given: scanned
 check:
   - open Pipeline
   - click "+ Add a role"
-  - type "Quiet Co" into "Company"
+  - type "Harborlight" into "Company"
   - type "Head of Product" into "Role title"
   - click "Add role"
   - see "Head of Product"

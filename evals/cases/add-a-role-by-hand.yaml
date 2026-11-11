@@ -4,11 +4,11 @@ given: scanned
 check:
   - open Pipeline
   - click "+ Add a role"
-  - type "Quiet Co" into "Company"
+  - type "Harborlight" into "Company"
   - type "Head of Product" into "Role title"
   - type "London" into "Location"
   - click "Add role"
-  - message says "Head of Product at Quiet Co added"
+  - message says "Head of Product at Harborlight added"
   - see "Head of Product"
   - reload
   - see "Head of Product"
