@@ -163,7 +163,7 @@ Everything is in `radar/`, one module per job. The fields of every object in `da
 | `companies`, `events`, `people`, `network`, `accounts` | Accounts, what happened at each, who's there, and the weekly moves |
 | `agent`, `ai`, `usage` | The agent runs (playbooks in `prompts/`), the one way to call a model, and what it cost |
 | `settings`, `paths`, `store`, `schema` | Settings and keys, where files live, the one way to read and write them, and what they must look like |
-| `firstrun`, `notify`, `prune`, `evals` | The welcome flow, phone alerts, keeping data small, and checking the scoring |
+| `firstrun`, `notify`, `prune`, `evals`, `recall` | The welcome flow, phone alerts, keeping data small, checking the scoring, and checking Gus found the roles you found |
 
 ## Roadmap
 
