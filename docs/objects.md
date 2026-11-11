@@ -48,6 +48,7 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `product`, `stage`, `london` (its presence in your target locations: the name is from Gus's first search), `headcount`, `customers`, `investors`, `product_leaders`, `careers_url` | Research. `careers_url_broken` when the address no longer opens |
 | `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed |
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
+| `careers_checked` | When an agent last read the careers page of a company with no board, looking for a board or for roles |
 | `favourite`, `neighbour_of`, `neighbours_checked` | Companies you love and the ones found next to them |
 | `added`, `people_checked` | Housekeeping dates |
 

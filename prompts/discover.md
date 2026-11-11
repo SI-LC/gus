@@ -65,6 +65,13 @@ mark the record `status: "candidate", "fast_tracked": true`. The loop assesses i
 If anything scored 8+ or new people were mapped, end with a short summary: role, score, why,
 best contact. Otherwise end with a single line of counts.
 
-## Job format (for roles you add by hand)
+## Adding a role you found
+Never write a role into `data/jobs.json` by hand. Run
+`python3 -m radar.jobs add '{"company": "...", "title": "...", "location": "...", "url": "<the ad's own address>", "posted": "YYYY-MM-DD if shown", "description": "<the ad's text>"}'`
+(a list of objects adds several). It checks whether Gus already has that ad from a job site, a board or an earlier run and
+records the sighting there, so nothing is added twice, and it answers "added", "already have it" or "not added" with the reason.
+Take its answer: don't retry a role it turned down with a changed title or place.
+
+## Job format (for the offline inbox run, which can't use the command above)
 `{"id": "<source>:<stable id>", "company", "title", "location", "url", "posted", "description",
   "first_seen", "last_seen", "stage": "new", "score": null, "why": null, "source": "email|x|web"}`

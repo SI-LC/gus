@@ -77,5 +77,25 @@ Then by score:
 ## 4. Fix broken boards
 For `broken_boards`, re-run `python3 -m radar.resolve "<Company>"`. If it moved, update its line in `watchlist.csv`.
 
+## 4b. Companies nothing reads
+`no_board` from `due` lists watched companies with no job board, so no scan sees their roles. For each one, in the order given:
+
+1. **Find the board.** Open its careers page (find one and record `careers_url` if it's missing or `careers_url_broken`), and
+   follow it to the list of open roles. If that list is hosted on a job board system (Greenhouse, Ashby, Lever, Workable,
+   SmartRecruiters, Recruitee, Workday, SuccessFactors, Teamtailor, Gem), run
+   `python3 -m radar.resolve --add "<Company>" --careers "<address of that list>"`. If it says the board was added, the scan
+   reads this company from now on: go to the next one.
+2. **Otherwise read the careers page yourself.** Look through the open roles for the candidate's target roles in their
+   locations. For each one, run
+   `python3 -m radar.jobs add '{"company": "<name as in companies.json>", "title": "...", "location": "...", "url": "<the ad's own address>", "posted": "YYYY-MM-DD if shown", "description": "<the ad's text>"}'`.
+   Never write a role into `data/jobs.json` by hand: the command checks whether Gus already has that ad from a job site,
+   a board or an earlier run and records the sighting there, so nothing is added twice. It answers "added", "already have
+   it" or "not added" with the reason. Take its answer: don't retry a role it turned down with a changed title or place.
+3. Set `careers_checked` to today on the account, whatever you found, so it isn't read again for a few days.
+
+At most 3 page fetches per company. If the site's `robots.txt` rules out its job pages, or a bot check comes back, stop there
+for that company and say so in the report: never work around it.
+
 ## 5. Report
-End with: companies added (fit, why), moves up or down with the reason, rejections (one line each), board fixes.
+End with: companies added (fit, why), moves up or down with the reason, rejections (one line each), board fixes, and for
+each company in 4b: board found, roles added, or nothing readable.

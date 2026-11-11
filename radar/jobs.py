@@ -6,9 +6,13 @@ on the record Gus already has. `dedupe` merges what slipped through before.
 
     python3 -m radar.jobs dedupe            # show the duplicates, change nothing
     python3 -m radar.jobs dedupe --apply    # merge them
+    python3 -m radar.jobs add '{"company": "Acme", "title": "Product Manager", "location": "London", "url": "https://acme.example/jobs/1"}'
+                                            # how an agent adds a role it found on the web: checked, never written by hand
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -211,7 +215,57 @@ def dedupe(apply: bool = False) -> list[tuple[str, list[str]]]:
     return done
 
 
+def web_id(role: dict) -> str:
+    """The same ad found on the web twice gets the same id, so adding it again changes nothing."""
+    slug = lambda s: re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-")
+    return f"web:{slug(same_company(role['company']))[:30]}:{slug(role['title'])[:40]}-{hashlib.sha256(same_url(role['url']).encode()).hexdigest()[:6]}"
+
+
+def add(rows: list, source: str = "web") -> list[tuple[str, str]]:
+    """Roles an agent found by reading the web, each put through the checks every other source gets. Returns (what happened,
+    id or reason) per role: "added"; "have" when Gus has this ad already, from any source, and the sighting is recorded on
+    it; "no" when it's malformed or outside the candidate's titles and locations. An agent never decides what is a duplicate."""
+    from datetime import datetime, timezone
+    from radar.scan import JOBS, load_config, matches
+    from radar.store import locked
+
+    cfg, now, out = load_config(), datetime.now(timezone.utc).isoformat(timespec="seconds"), []
+    with locked(JOBS) as store:
+        alias = aliases(store)
+        for r in rows:
+            if not isinstance(r, dict) or not all(isinstance(r.get(k), str) and r[k].strip() for k in ("company", "title", "url")):
+                out.append(("no", "needs company, title and url"))
+                continue
+            if not r["url"].startswith("https://"):
+                out.append(("no", "the url must be the ad's own https address"))
+                continue
+            role = {"id": web_id(r), "company": r["company"].strip(), "title": r["title"].strip(), "url": r["url"].strip(),
+                    "location": str(r.get("location") or "").strip(), "posted": r.get("posted") or None,
+                    "description": str(r.get("description") or "").strip()}
+            if (have := find_match(store, role, alias)) is not None:
+                if have != role["id"]:
+                    absorb(store[have], {**role, "source": source}, now)
+                    alias[role["id"]] = have
+                store[have]["last_seen"] = now
+                out.append(("have", have))
+            elif not matches(role, cfg):
+                out.append(("no", f"not one of the candidate's titles and locations: {role['title']} | {role['location'] or 'no place given'}"))
+            else:
+                store[role["id"]] = {**role, "first_seen": now, "last_seen": now, "stage": "new", "score": None, "why": None, "source": source}
+                alias[role["id"]] = role["id"]
+                out.append(("added", role["id"]))
+    return out
+
+
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "add":
+        try:
+            rows = json.loads(sys.argv[2])
+        except ValueError:
+            sys.exit("add takes one JSON object, or a list of them")
+        for what, detail in add(rows if isinstance(rows, list) else [rows]):
+            print({"added": "added", "have": "already have it, as", "no": "not added:"}[what], detail)
+        return
     if len(sys.argv) < 2 or sys.argv[1] != "dedupe":
         print(__doc__)
         return

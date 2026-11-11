@@ -26,6 +26,8 @@ SIGNALS = DATA / "signals.json"
 BOARD_ERRORS = DATA / "board_errors.json"
 STALE_DAYS = 30
 NEIGHBOUR_DAYS = 28
+CAREERS_DAYS = 3  # how often an agent reads the careers page of a watched company that has no board
+CAREERS_PER_RUN = 8  # companies an agent reads that way per run, the candidate's own choices first
 
 
 def load():
@@ -91,6 +93,16 @@ def health():
     save(c)
 
 
+def no_board(c: dict) -> list:
+    """Watched companies nothing reads: no board, and their careers page not read by an agent lately. The candidate's
+    favourites and tier A first, then whoever has waited longest, a few per run so the agent's budget lasts."""
+    cutoff = str(date.today() - timedelta(days=CAREERS_DAYS))
+    names = [n for n, r in c.items() if r.get("status") == "watched" and not r.get("vetoed") and not r.get("board")
+             and (r.get("careers_checked") or "") <= cutoff]
+    first = lambda n: (not (c[n].get("favourite") or c[n].get("tier_locked")), c[n].get("tier") or "Z", c[n].get("careers_checked") or "")
+    return sorted(names, key=first)[:CAREERS_PER_RUN]
+
+
 def due():
     c = load()
     cutoff = str(date.today() - timedelta(days=STALE_DAYS))
@@ -98,6 +110,7 @@ def due():
     out = {"candidates": [], "reassess": [], "stale": [], "broken_boards": [], "recheck_rejected": [],
            "favourites": [n for n, r in c.items() if r.get("favourite") and not r.get("vetoed")
                           and (r.get("neighbours_checked") or "") < str(date.today() - timedelta(days=NEIGHBOUR_DAYS))]}
+    out["no_board"] = no_board(c)
     for n, r in c.items():
         s = r.get("status", "candidate")
         if s == "candidate":
