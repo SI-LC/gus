@@ -47,6 +47,10 @@ def step(page, text):
         page.locator("#main .chips-row a.on", has_text=m[1]).first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'type "(.+)" into "(.+)"', text):
         page.get_by_label(m[2], exact=True).fill(m[1])
+    elif text == "Gus stops answering":  # restarting, or the connection dropped: nothing sent from the page arrives
+        page.route("**/api/**", lambda r: r.abort() if r.request.method == "POST" else r.fallback())
+    elif m := re.fullmatch(r'message says "(.+)"', text):
+        page.locator("#toast.on", has_text=m[1]).wait_for(timeout=WAIT_MS)
     elif text == "reload":
         page.reload()
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)

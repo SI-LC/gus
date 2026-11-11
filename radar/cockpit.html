@@ -293,8 +293,11 @@ async function load() {
   render();
 }
 async function post(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const d = await r.json();
+  let d;
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    d = await r.json();
+  } catch (e) { toast("Not saved: Gus isn't answering. Try again in a moment"); return null; }  // restarting, or the connection dropped
   if (d.error) { toast(d.error); return null; }
   return d;
 }

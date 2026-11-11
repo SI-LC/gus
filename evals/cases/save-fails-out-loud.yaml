@@ -1,0 +1,9 @@
+id: save-fails-out-loud
+requirement: When a change I make can't be saved because Gus isn't answering, the cockpit tells me so.
+given: scanned
+check:
+  - open Role Inbox
+  - Gus stops answering
+  - click "Shortlist"
+  - message says "Not saved"
+judge: Is it clear the change wasn't saved and what to do next?
