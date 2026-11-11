@@ -1,0 +1,16 @@
+id: edit-a-role-added-by-hand
+requirement: I can read and correct a role I added by hand, such as when the recruiter sends a new description.
+given: scanned
+check:
+  - open Pipeline
+  - click "+ Add a role"
+  - type "Harborlight" into "Company"
+  - type "Head of Product" into "Role title"
+  - click "Add role"
+  - see "Head of Product"
+  - click "Details"
+  - type "Head of Product, Platform" into "Edit title"
+  - click "Save"
+  - message says "Saved"
+  - see "Head of Product, Platform"
+judge: Is it clear which roles can be edited, and that a new description is scored again?

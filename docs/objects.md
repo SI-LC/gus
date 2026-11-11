@@ -11,7 +11,7 @@ Records may carry extra fields: the research agents keep what they find. What's 
 A job ad. Key: `<source prefix>:<slug>:<id on the board>`, e.g. `gh:acme:123`, `lever:…`, `hn:…`, `adzuna:…`,
 `gc:search:…` and `amz:search:…` for the saved Google Careers and amazon.jobs searches, `ghc:github:…` for GitHub's own
 careers site, `mtp:jobs:…` for Mind the Product's jobs board, `getro:<board host>:…` for VC boards on Getro, `email:<message id>:<n>` for roles
-pulled from the inbox. One ad is one record however many places list it: before
+pulled from the inbox, `manual:<company>:<hash of the title>` for a role you added by hand. One ad is one record however many places list it: before
 adding a role, every writer asks `radar.jobs.find_match` whether Gus has it already (by id, by address without tracking
 tags, or by company and title among live roles found through another source) and, if so, records the sighting under
 `also` instead. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
@@ -26,13 +26,28 @@ copy furthest along and moving its events and moves across.
 | `score_before_salary` | When a stated salary lowered the score |
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
-| `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed |
+| `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
 
+A role that reached you directly, from a recruiter say, has no ad for a scan to find: add it from the Pipeline page
+("+ Add a role") or POST `/api/job/add` with `company` and `title`, and optionally `location`, `url`, `description`,
+`folder`, `note` and a starting `stage` (`shortlisted` unless given; not `closed` or `skipped`). It's saved with
+`source: manual` and may have no `url`; a company new to Gus becomes an account the way the Companies page adds one, in the
+same request: its public job board is looked for (surer with an optional `careers` address), added to the watchlist and
+scanned from the next scan on. With no board found it's still an account, and the full run keeps looking. It's scored like any other role,
+but it's yours: a score under 5 doesn't skip it and no scan closes it. A role Gus already has is refused, with its id.
+Its `title`, `location`, `url` and `description` can be corrected afterwards (POST `/api/job` with its `id`, or "Details"
+on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as
+they were. A role from any other source keeps what its ad says.
+
+POST `/api/job` also sets any role's `stage`, `note` and `folder`. GET `/api/job?id=<id>` returns one role in full,
+`description` included, which `/api/state` leaves out.
+
 A role scoring 7+ that's still open is a `role_posted` event on its account (`role:<job id>` in `data/events.json`), written by
-`radar.events sync` after every scoring run and closed when the ad goes or you skip the role.
+`radar.events sync` after every scoring run and closed when the ad goes or you skip the role. A role with no `url` is
+never an event: there's nothing for a move to cite.
 
 ## Account (`data/companies.json`)
 

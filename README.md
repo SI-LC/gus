@@ -83,6 +83,7 @@ To update it, merge your change through a pull request, then run `bash deploy/de
 
 ## Make it yours
 
+- **Add a role by hand:** for a role that reached you directly, from a recruiter say, with no public ad for a scan to find. Open "+ Add a role" on the Pipeline page and paste the job description. Gus scores it like any other role, but never skips or closes it for you.
 - **Add a company:** type its name under Companies in the cockpit, or run `python3 -m radar.resolve --add "Acme"`. Either way Gus works out which of ten job board systems it uses. Giving its careers address is surer, and companies on SuccessFactors, Workday, Teamtailor or Gem need it: Gus never guesses their address. A company whose roles sit on its parent's board (Base44 on Wix's) takes the parent's slug and a pattern its titles must match in the `only` column of `watchlist.csv`.
 - **Change what counts as a match:** Settings → Matching.
 - **Change how roles are judged:** edit [`prompts/triage.md`](prompts/triage.md).

@@ -186,6 +186,9 @@
   .sig-wrap { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
   .sig-wrap button.x { border: 0; background: none; color: var(--muted); opacity: .5; padding: 0 4px; font-size: 14px; line-height: 1; min-height: 0; cursor: pointer; }
   .sig-wrap:hover button.x, .sig-wrap button.x:focus-visible { opacity: 1; } .sig-wrap button.x:hover { color: var(--text); }
+  #role-dlg { width: min(760px, 92vw); max-height: 86vh; overflow: auto; padding: 18px; color: var(--text); background: var(--surface); border: 1px solid var(--line, var(--muted)); }
+  #role-dlg::backdrop { background: rgba(0, 0, 0, .6); }
+  #role-dlg .jd { margin-top: 10px; white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
   .add-event { margin-top: 8px; } .add-event summary { cursor: pointer; list-style: none; } .add-event summary::-webkit-details-marker { display: none; }
   .add-event input[type=text], .add-event input[type=date], .add-event select { min-height: 30px; padding: 4px 8px; }
   .person-chip b { font-weight: 600; }
@@ -352,7 +355,28 @@ function roleExtras(j) {
   }).join("");
   return `<div class="extras">${j.folder
     ? `${/^https?:\/\//i.test(j.folder) ? `<a href="${link(j.folder)}" target="_blank" rel="noopener"><button class="mini">Open folder</button></a>` : `<button class="mini" onclick="copyPath(${jsq(j.folder)})">Copy folder path</button>`}<button class="mini" onclick="setFolder(${jsq(j.id)}, ${jsq(j.folder)})">Change</button>`
-    : `<button class="mini" onclick="setFolder(${jsq(j.id)}, '')">Add folder</button>`}${who}</div>`;
+    : `<button class="mini" onclick="setFolder(${jsq(j.id)}, '')">Add folder</button>`}<button class="mini" onclick="roleDetails(${jsq(j.id)})">${j.source === "manual" ? "Details" : "Description"}</button>${who}</div>`;
+}
+async function roleDetails(id) {  // the description isn't in the page's data, so it's fetched when asked for
+  const r = await fetch("/api/job?id=" + encodeURIComponent(id), { cache: "no-store" }).then(r => r.json()).catch(() => null);
+  if (!r || r.error) { toast(r ? r.error : "Gus isn't answering. Try again in a moment"); return; }
+  const j = r.job, mine = j.source === "manual";
+  let d = $("role-dlg");
+  if (!d) { d = Object.assign(document.createElement("dialog"), { id: "role-dlg" }); $("main").append(d); }  // inside the page, so a redraw takes it away with the card it belongs to
+  d.innerHTML = `<div class="co">${esc(j.company)}</div>` + (mine
+    ? `<div class="row" style="margin-top:8px"><input type="text" id="role-edit-title" aria-label="Edit title" value="${esc(j.title)}" style="flex:2"><input type="text" id="role-edit-location" aria-label="Edit location" placeholder="Location" value="${esc(j.location || "")}" style="flex:1"></div>
+       <input type="text" id="role-edit-url" aria-label="Edit link" placeholder="Link to the ad (optional)" value="${esc(j.url || "")}" style="width:100%;margin-top:6px">
+       <textarea id="role-edit-description" aria-label="Edit description" placeholder="Paste the job description" rows="16" style="width:100%;margin-top:6px">${esc(j.description || "")}</textarea>
+       <div class="actions"><button class="primary" onclick="saveRole(${jsq(j.id)})">Save</button><button onclick="$('role-dlg').close()">Cancel</button>
+       <span class="sub">Changing the description has Gus score it again on the next scan.</span></div>`
+    : `<div class="title">${roleTitle(j, j.url)}</div><div class="sub">${esc(j.location || "")}</div>
+       <div class="jd">${j.description ? esc(j.description) : `<span class="sub">${j.pruned ? "The description was cleared to save space once this role closed." : "No description saved."}</span>`}</div>
+       <div class="actions"><button onclick="$('role-dlg').close()">Close</button></div>`);
+  d.showModal();
+}
+async function saveRole(id) {
+  const v = k => $("role-edit-" + k).value;
+  if (await post("/api/job", { id, title: v("title"), location: v("location"), url: v("url"), description: v("description") })) { $("role-dlg").close(); toast("Saved"); await load(); render(true); }
 }
 async function roleContact(id, person_id, sent) { if (await post("/api/role-contact", { id, person_id, sent })) { toast(sent ? "Logged" : "Undone"); load(); } }
 async function setFolder(id, current) {
@@ -462,13 +486,14 @@ async function boardGuess(name, accept) {
   const d = await post("/api/company/board", { name, accept });
   if (d) { toast(accept ? "Watching its board. Roles arrive on the next check." : "Noted. Gus won't offer that board again."); load(); }
 }
+const roleTitle = (j, href) => /^https?:\/\//i.test(String(href || "")) ? `<a href="${link(href)}" target="_blank" rel="noopener">${esc(j.title)}</a>` : esc(j.title);  // a role you added by hand may have no ad to open
 function roleCard(j, actions) {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
       <div class="co">${esc(j.company)}</div>
-      <div class="title"><a href="${link(titleLink(j))}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="title">${roleTitle(j, titleLink(j))}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
       <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
@@ -673,7 +698,7 @@ const V = {
       return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>` + rows.map(j => {
         const since = (j.history || []).filter(h => h.stage === st).pop();
         return `<div class="card"><div class="co">${esc(j.company)} · ${j.score ?? "–"}</div>
-          <div class="title"><a href="${link(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a></div>
+          <div class="title">${roleTitle(j, j.url)}</div>
           ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
           ${j.ad_closed ? `<div class="sub"><span class="pill due">Ad closed</span></div>` : ""}
           <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
@@ -682,6 +707,17 @@ const V = {
       }).join("") + `</div>`; }).join("");
     return `<h1>Pipeline</h1><p class="lede">Every conversation and application, by stage. Move a card on as things happen.</p>
       ${meetingsBlock()}
+      <details class="add-event keep" style="margin:0 0 12px"><summary class="sub">+ Add a role</summary>
+        <div class="row" style="margin-top:6px"><input type="text" id="add-role-company" placeholder="Company" aria-label="Company" style="flex:1">
+          <input type="text" id="add-role-title" placeholder="Role title" aria-label="Role title" style="flex:2">
+          <input type="text" id="add-role-location" placeholder="Location" aria-label="Location" style="flex:1"></div>
+        <div class="row" style="margin-top:6px"><input type="text" id="add-role-url" placeholder="Link to the ad (optional)" aria-label="Link to the ad" style="flex:2">
+          <input type="text" id="add-role-careers" placeholder="Company careers page (optional)" aria-label="Company careers page" style="flex:2">
+          <input type="text" id="add-role-folder" placeholder="Application folder (optional)" aria-label="Application folder" style="flex:2">
+          <select id="add-role-stage" aria-label="Starting stage">${PIPE.filter(s => s !== "closed").map(s => `<option value="${s}">${LABEL[s]}</option>`).join("")}</select></div>
+        <textarea id="add-role-description" rows="6" placeholder="Paste the job description" aria-label="Job description" style="width:100%;margin-top:6px"></textarea>
+        <div class="row" style="margin-top:6px"><button class="primary" id="add-role-go" onclick="addRole()">Add role</button>
+          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details>
       ${ppl.length || S.jobs.some(j => PIPE.includes(j.stage)) ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions" style="justify-content:center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
       <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
       <div class="section">Applications</div><div class="board">${appBoard}</div>`;
@@ -953,6 +989,7 @@ function render(force) {
   if (v === "welcome" && $("fr")) return;  // it keeps itself up to date, and redrawing would wipe what you're typing
   drawTicker();
   if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
+  if (!force && document.querySelector("#main details.keep[open], #main dialog[open]")) return;  // a form you've opened: a refresh would close it and wipe what you typed
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
   $("n-week").textContent = S.moves.filter(m => m.week === S.week && m.status === "todo").length || "";
   $("n-accounts").textContent = S.accounts.filter(a => a.tier === "A" && a.fresh).length || "";
@@ -1036,6 +1073,15 @@ function eventForm(name) {
 async function addEvent(account, k) {
   const v = id => ($(k + "-" + id) || {}).value || "";
   if (await post("/api/event", { account, type: v("type"), date: v("date"), url: v("url").trim(), summary: v("summary") })) { toast("Added"); load(); }
+}
+async function addRole() {
+  const v = k => $("add-role-" + k).value.trim(), b = $("add-role-go");
+  if (!v("company") || !v("title")) { toast("Needs a company and a title"); return; }
+  b.disabled = true; b.textContent = "Adding…";  // a company new to Gus has its job board looked for, which takes a moment
+  const d = await post("/api/job/add", { company: v("company"), title: v("title"), location: v("location"), url: v("url"), careers: v("careers"), folder: v("folder"), stage: v("stage"), description: v("description") });
+  if (!d) { b.disabled = false; b.textContent = "Add role"; return; }
+  const co = !d.new_account ? "" : d.board ? `. ${d.job.company} added too: ${d.board}, ${d.open_roles} open role${d.open_roles === 1 ? "" : "s"}` : `. ${d.job.company} added too, but no public job board found yet. Gus keeps looking`;
+  toast(`${d.job.title} at ${d.job.company} added${co}`); await load(); render(true);
 }
 async function addCompany() {
   const name = $("add-co-name").value.trim(), careers = $("add-co-careers").value.trim(), b = $("add-co-go");

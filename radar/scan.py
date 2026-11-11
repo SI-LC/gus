@@ -24,9 +24,12 @@ _boards_answered: set = set()
 
 
 def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
-    """Roles gone from a board that answered, two scans running, are marked closed; if one returns, it's reopened."""
+    """Roles gone from a board that answered, two scans running, are marked closed; if one returns, it's reopened.
+    A role you added by hand is yours to close."""
     closed = []
     for jid, j in store.items():
+        if j.get("source") == "manual":  # you added it by hand, a recruiter's role say: no board's silence closes it
+            continue
         ids = [jid] + list(j.get("also") or {})
         if not any(":".join(i.split(":")[:2]) in answered for i in ids):
             continue

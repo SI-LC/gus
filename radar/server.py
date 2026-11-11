@@ -270,7 +270,6 @@ def update_event(body):
 def add_company(body):
     """Add a company to watch from the cockpit: find its job board the way `radar.resolve --add` does, then make it an account.
     Without a public board it's still an account, with no board until the watchlist agent or you find one."""
-    from radar import resolve
     name = " ".join(str(body.get("name") or "").split())[:80]
     careers = str(body.get("careers") or "").strip() or None
     if not name:
@@ -279,6 +278,13 @@ def add_company(body):
         return {"error": "The careers address needs to start with http"}
     if name.lower() in {n.lower() for n in read(COMPANIES, {})} or same_company(name) in links.watched():
         return {"error": f"{name} is already on your list"}
+    hit = watch_company(name, careers)
+    return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
+
+
+def watch_company(name, careers=None):
+    """Make a company an account and watch its public job board, if it has one Gus can find. Returns (ats, slug, open roles) or None."""
+    from radar import resolve
     hit = resolve.resolve(name, careers)  # network, outside the lock
     if hit:
         resolve.add_board(name, hit[0], hit[1])
@@ -291,7 +297,71 @@ def add_company(body):
             c["careers_url"] = careers
         if hit:
             c["board"] = f"{hit[0]}:{hit[1]}"
-    return {"ok": True, "name": name, "board": f"{hit[0]}:{hit[1]}" if hit else None, "open_roles": hit[2] if hit else 0}
+    return hit
+
+
+def clean_folder(value):
+    """(folder, problem). A web link or a path on your computer: it lives in data/ only, never in the repo."""
+    folder = str(value or "").strip()
+    if "\n" in folder or len(folder) > 2000:
+        return None, "That doesn't look like a folder path or link"
+    if "://" in folder and not folder.lower().startswith(("https://", "http://")):
+        return None, "Use a web link starting with https://, or a folder path"
+    return folder, None
+
+
+MAX_DESCRIPTION = 60_000
+START_STAGES = [s for s in JOB_STAGES if s not in ("closed", "skipped")]
+
+
+def add_job(body):
+    """Add a role by hand: one a recruiter brought you, say, with no public ad for a scan to find. It starts shortlisted
+    unless you say otherwise, and belongs to its company's account. A company new to Gus is added the way "Add a company"
+    adds one: its public job board is looked for there and then (surer with its `careers` address) and watched, so its
+    other roles arrive with the next scan. The role is scored like any other, and is never skipped by its score or closed because a board stopped listing it."""
+    from radar import jobs as J
+    line = lambda k, n: " ".join(str(body.get(k) or "").split())[:n]
+    company, title, location = line("company", 80), line("title", 200), line("location", 120)
+    url, stage = str(body.get("url") or "").strip(), body.get("stage") or "shortlisted"
+    careers = str(body.get("careers") or "").strip() or None
+    if not company or not title:
+        return {"error": "Needs a company and a title"}
+    if url and not re.match(r"https?://\S+$", url):
+        return {"error": "The link needs to start with http"}
+    if careers and not re.match(r"https?://", careers):
+        return {"error": "The careers address needs to start with http"}
+    if stage not in START_STAGES:
+        return {"error": f"The stage must be one of: {', '.join(START_STAGES)}"}
+    folder, problem = clean_folder(body.get("folder"))
+    if problem:
+        return {"error": problem}
+    same = lambda n: n.lower() == company.lower() or (same_company(n) and same_company(n) == same_company(company))
+    company = next((n for n in read(COMPANIES, {}) if same(n)), company)  # the account's own spelling, so the role is found under it
+    role = {"id": J.manual_id(company, title), "company": company, "title": title, "url": url, "location": location,
+            "description": str(body.get("description") or "").strip()[:MAX_DESCRIPTION], "text_kind": "posting", "posted": None}
+    with locked(JOBS) as store:
+        if (have := J.find_match(store, role)) is not None:
+            j = store[have]
+            return {"error": f"Gus has this role already: {j.get('title')} at {j.get('company')}", "id": have}
+        role.update(first_seen=now(), last_seen=now(), stage=stage, history=[{"stage": stage, "at": now()}], score=None, why=None, source="manual")
+        if folder:
+            role["folder"] = folder
+        if body.get("note"):
+            role["note"] = str(body["note"])[:2000]
+        store[role["id"]] = role
+    new_account = company not in read(COMPANIES, {})
+    hit = watch_company(company, careers) if new_account else None  # the role is saved by now, whatever the lookup finds
+    return {"ok": True, "id": role["id"], "new_account": new_account, "board": f"{hit[0]}:{hit[1]}" if hit else None,
+            "open_roles": hit[2] if hit else 0, "job": {k: v for k, v in role.items() if k != "description"}}
+
+
+DETAILS = {"title": 200, "location": 120}
+
+
+def get_job(jid):
+    """One role with everything on it, its description included: /api/state leaves that out, as it's most of the file."""
+    j = read(JOBS, {}).get(jid)
+    return {"ok": True, "job": j} if j else {"error": "No such role"}
 
 
 def update_job(body):
@@ -299,17 +369,32 @@ def update_job(body):
         j = store.get(body.get("id"))
         if not j:
             return {"error": "No such role"}
+        if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
+            if j.get("source") != "manual":
+                return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
+            changes = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
+            if "title" in changes and not changes["title"]:
+                return {"error": "Needs a title"}
+            if "url" in body:
+                changes["url"] = str(body["url"] or "").strip()
+                if changes["url"] and not re.match(r"https?://\S+$", changes["url"]):
+                    return {"error": "The link needs to start with http"}
+            if "description" in body:
+                changes["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
+                if changes["description"] != (j.get("description") or ""):
+                    changes.update(score=None, why=None, flags=[])  # scored on the old words: the next scan scores it again
+                    j.pop("score_before_salary", None)
+                    j.pop("pruned", None)
+            j.update(changes)
         if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
             j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
             j["stage"] = body["stage"]
         if "note" in body:
             j["note"] = str(body["note"])[:2000]
-        if "folder" in body:  # a web link or a path on your computer: lives in data/ only, never in the repo
-            folder = str(body["folder"] or "").strip()
-            if "\n" in folder or len(folder) > 2000:
-                return {"error": "That doesn't look like a folder path or link"}
-            if "://" in folder and not folder.lower().startswith(("https://", "http://")):
-                return {"error": "Use a web link starting with https://, or a folder path"}
+        if "folder" in body:
+            folder, problem = clean_folder(body["folder"])
+            if problem:
+                return {"error": problem}
             j["folder"] = folder
         return {"ok": True, "job": {k: v for k, v in j.items() if k != "description"}}
 
@@ -360,6 +445,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/state":
             return self.send(200, state())
+        if path == "/api/job":
+            return self.send(200, get_job(parse_qs(urlparse(self.path).query).get("id", [""])[0]))
         if path == "/api/settings":
             return self.send(200, settings_payload())
         if path == "/api/profile":
@@ -394,6 +481,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/job":
             return self.send(200, update_job(body))
+        if path == "/api/job/add":
+            return self.send(200, add_job(body))
         if path == "/api/watch":
             job = read(JOBS, {}).get(body.get("id"))
             return self.send(200, {"ok": bool(job) and links.watch(job)})

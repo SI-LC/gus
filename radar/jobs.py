@@ -223,6 +223,12 @@ def web_id(role: dict) -> str:
     return f"web:{slug(same_company(role['company']))[:30]}:{slug(role['title'])[:40]}-{hashlib.sha256(same_url(role['url']).encode()).hexdigest()[:6]}"
 
 
+def manual_id(company: str, title: str) -> str:
+    """A role you add by hand has no ad to take an id from: the same company and title is the same role, so adding it twice changes nothing."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (same_company(company) or str(company).lower())).strip("-")[:30] or "company"
+    return f"manual:{slug}:{hashlib.sha256(same_title(title).encode()).hexdigest()[:8]}"
+
+
 def add(rows: list, source: str = "web") -> list[tuple[str, str]]:
     """Roles an agent found by reading the web, each put through the checks every other source gets. Returns (what happened,
     id or reason) per role: "added"; "have" when Gus has this ad already, from any source, and the sighting is recorded on
