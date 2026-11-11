@@ -104,6 +104,15 @@ python3 -m radar.evals run      # scores them 3 times, and fails on any good rol
 
 Run it after changing `prompts/triage.md`, the scoring model or your profile. It saves nothing to your roles, sends no alerts, and keeps your labels in `data/evals/`.
 
+To check Gus is finding roles at all, keep a list of ones you spot yourself:
+
+```bash
+python3 -m radar.recall add "Acme" "Senior Product Manager"   # a role you saw somewhere
+python3 -m radar.recall                                       # how many Gus found, and why each miss was missed
+```
+
+Each miss gets a cause: nothing reads the company, its board fell off the watchlist, your title or location rules drop the role, or it isn't on the board. Your list and the reports stay in `data/evals/`.
+
 ## Privacy
 
 **The repo holds code only.** Your CV, watchlist, settings, keys, drafts and everything Gus finds are git-ignored. With the hooks turned on, a commit or push is refused if it contains those files, a key, or the email address or phone number in your profile. On this repo, every pull request must also pass a code scan and a full-history secret scan before it can merge. That rule is a GitHub setting, so a fork has to add its own.
