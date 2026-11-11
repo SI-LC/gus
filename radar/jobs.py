@@ -39,7 +39,8 @@ def same_url(url) -> str:
     if not p.netloc:
         return ""
     query = urlencode([(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not TRACKING.match(k.lower())])
-    return urlunsplit(("https", p.netloc.lower().removeprefix("www."), p.path.rstrip("/"), query, ""))
+    # capitals in the path never pick a different job, and job sites copy them differently: /Omnea/ and /omnea/ are one board
+    return urlunsplit(("https", p.netloc.lower().removeprefix("www."), p.path.rstrip("/").lower(), query, ""))
 
 
 def board_of(jid: str) -> str:
@@ -59,6 +60,12 @@ def is_live(j: dict) -> bool:
     return not j.get("ad_closed") and j.get("stage") not in ("closed", "skipped")
 
 
+def still_open(j: dict) -> bool:
+    """Its ad is still up, whatever you did with it. A role you skipped is still that role when another site lists it, so it
+    mustn't come back as new; one whose ad has closed can't be the ad just found."""
+    return not j.get("ad_closed") and j.get("stage") != "closed"
+
+
 def aliases(store: dict) -> dict:
     """Every id a stored role has been seen under, including its own."""
     out = {}
@@ -71,7 +78,7 @@ def aliases(store: dict) -> dict:
 
 def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None:
     """The id of the stored role this one is, or None. By id (or an id it was absorbed under), then by address, then by
-    company and title among live roles found somewhere other than this one's own board."""
+    company and title among roles whose ad is still open, found somewhere other than this one's own board."""
     alias = aliases(store) if alias is None else alias
     rid = role.get("id")
     if rid in alias:
@@ -82,7 +89,7 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
     for jid, j in store.items():
         if url and (same_url(j.get("url")) == url or any(same_url(a.get("url")) == url for a in (j.get("also") or {}).values())):
             return jid
-        if by_key is None and key[0] and key[1] and is_live(j) and role_key(j) == key and board_of(jid) != board_of(rid):
+        if by_key is None and key[0] and key[1] and still_open(j) and role_key(j) == key and board_of(jid) != board_of(rid):
             by_key = jid
     return by_key
 

@@ -65,10 +65,10 @@ def _boards():
     from radar import resolve
     _command("links")  # a role from a job site or a web search: find the employer's board and watch it
     out = resolve.auto()
-    if out["added"]:
+    if out["added"] or out["restored"]:
         _command("scan")
-    n, g = len(out["added"]), len(out["guesses"])
-    return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {g} to look at in Companies" if g else "")
+    n, g, r = len(out["added"]), len(out["guesses"]), len(out["restored"])
+    return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {r} put back on the watchlist" if r else "") + (f", {g} to look at in Companies" if g else "")
 
 
 def _command(*modules):

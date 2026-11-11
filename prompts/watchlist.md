@@ -57,6 +57,9 @@ Then by score:
 - **5–6 → maybe.** Recheck in 30 days (`recheck_after`).
 - **under 5 → rejected**, with `fit_why`. Recheck in 90 days.
 - A watched company that drops below 5 → set it to rejected and remove its line from `watchlist.csv`.
+- **The candidate's own choices are never dropped.** An account with `favourite: true` or `tier_locked: true` stays `watched` and
+  keeps its line in `watchlist.csv` whatever it scores: the candidate chose it, and a low score today says nothing about the
+  role it posts tomorrow. Record `fit` and `fit_why` as usual, and list it in the report as "kept, scored <n>".
 
 ## 3b. Tier, events and people (A and B accounts)
 - Set `tier` on every watched or maybe account: **A** = fit 8+ and you'd move for it, **B** = fit 7,

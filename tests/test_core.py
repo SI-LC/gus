@@ -659,3 +659,31 @@ class YourOwnSearch(unittest.TestCase):
         text = "\n".join(p.read_text() for p in prompts.glob("*.md")) + agent.PROMPT + agent.INBOX_PROMPT
         for word in ("UK spelling", "European", "Sifted", "UKTN", "Balderton", "hires PMs"):
             self.assertNotIn(word, text)
+
+
+class NothingMissed(unittest.TestCase):
+    def setUp(self):
+        use_sample(self)
+
+    def test_a_big_smartrecruiters_board_is_read_to_the_end(self):
+        from unittest import mock
+        from radar import scan
+        asked = []
+
+        def reply(url):
+            asked.append(url)
+            start = int(url.split("offset=")[1])
+            return {"totalFound": 250, "content": [{"id": n, "name": "Product Manager", "location": {"city": "London", "country": "gb"}}
+                                                   for n in range(start, min(start + 100, 250))]}
+        with mock.patch.object(scan, "get_json", reply), mock.patch.object(scan, "PAGE_PAUSE", 0):
+            jobs = scan.smartrecruiters("Wise", "wise")
+        self.assertEqual((len(jobs), len(asked), len({j["id"] for j in jobs})), (250, 3, 250))
+
+    def test_an_ad_with_no_place_is_judged_by_its_title(self):
+        from radar import scan
+        cfg = scan.load_config()
+        ad = {"title": "Senior Product Manager, London", "location": "", "description": ""}
+        self.assertTrue(scan.matches(ad, cfg))
+        self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager, New York"}, cfg))
+        self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager"}, cfg))
+        self.assertFalse(scan.matches({**ad, "location": "New York"}, cfg))  # a place that is given still decides

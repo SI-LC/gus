@@ -266,9 +266,17 @@ def workable(company: str, slug: str):
 
 
 def smartrecruiters(company: str, slug: str):
-    d = get_json(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=100")
+    """Every page of the board: it gives 100 jobs at a time, and a big company lists several hundred."""
+    posts = []
+    for page in range(SR_PAGES):
+        time.sleep(PAGE_PAUSE if page else 0)
+        d = get_json(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit={SR_PAGE}&offset={page * SR_PAGE}")
+        found = d.get("content") or []
+        posts += found
+        if len(found) < SR_PAGE or len(posts) >= (d.get("totalFound") or 0):
+            break
     out = []
-    for j in d.get("content", []):
+    for j in posts:
         loc = j.get("location", {})
         out.append({
             "id": f"sr:{slug}:{j['id']}",
@@ -305,6 +313,8 @@ class Refused(ValueError):
 
 
 PAGE_PAUSE = 1.5  # seconds between job pages on one board
+SR_PAGE = 100  # jobs per request, the most SmartRecruiters gives
+SR_PAGES = 20  # requests per board, so 2,000 jobs
 PAGES_PER_SCAN = 25  # job pages read per board; the rest wait for the next scan
 RETRY_UNREAD_DAYS = 7  # a job page that made no sense is tried again after this long
 UNREAD_TO_FLAG = 3  # this many unreadable pages, and none readable, means the board itself is the problem
@@ -1082,6 +1092,7 @@ def matches(job, cfg, hn=False) -> bool:
         words = cfg["hn_title_include"] if cfg["hn_title_include"].pattern != "(?!)" else cfg["title_include"]
         return bool(words.search(title + job["description"])) and bool(cfg["location_include"].search(job["description"]))
     place = " / ".join(dict.fromkeys(p.strip() for p in job["location"].split("/")))  # "Remote / Remote" is just remote
+    place = place if place.strip() else title  # an ad that gives no place often names it in the title: "Product Manager, London"
     return wanted_title(title, cfg) and bool(cfg["location_include"].search(place))
 
 
