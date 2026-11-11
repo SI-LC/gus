@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from radar import ai
 from radar.scan import DATA, ROOT, load_config
 
-COMMANDS = ["scan", "resolve", "dashboard", "companies", "feeds", "x", "social", "inbox", "triage", "people", "accounts", "network"]
+COMMANDS = ["scan", "resolve", "dashboard", "companies", "feeds", "x", "social", "inbox", "triage", "people", "accounts", "network", "jobs"]
 # Web pages and emails are untrusted, so a run must not be able to touch code, keys or anything outside this repo:
 # it reads the repo, and writes only its data files. Secrets are denied outright.
 TOOLS = ["Read(./**)", "Glob", "Grep", "Edit(./data/**)", "Write(./data/**)", "Edit(./watchlist.csv)",

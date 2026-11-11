@@ -133,3 +133,57 @@ class InTheScan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AddedByAnAgent(unittest.TestCase):
+    """A role an agent finds on a careers page goes through the same checks as every other source, in code."""
+
+    def setUp(self):
+        from radar import scan
+        from sample_search import use_sample
+        use_sample(self)
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        self.jobs = Path(d.name) / "jobs.json"
+        patcher = mock.patch.object(scan, "JOBS", self.jobs)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def add(self, have=None, **found):
+        import json
+        self.jobs.write_text(json.dumps(have or {}))
+        row = {"company": "Revolut", "title": "Senior Product Manager", "location": "London", "url": "https://revolut.example/careers/1", **found}
+        return J.add([row]), json.loads(self.jobs.read_text())
+
+    def test_a_new_role_is_added_unscored_and_adding_it_again_changes_nothing(self):
+        import json
+        out, store = self.add()
+        (what, jid), = out
+        self.assertEqual((what, store[jid]["stage"], store[jid]["score"], store[jid]["source"]), ("added", "new", None, "web"))
+        again = J.add([{"company": "Revolut", "title": "Senior Product Manager", "location": "London", "url": "https://revolut.example/careers/1/?utm_source=x"}])
+        self.assertEqual((again, list(json.loads(self.jobs.read_text()))), ([("have", jid)], [jid]))
+
+    def test_a_role_gus_has_from_a_job_site_is_a_sighting_not_a_second_role(self):
+        have = {"jsearch:9": role("jsearch:9", company="Revolut Ltd", title="Senior Product Manager", stage="shortlisted", source="jsearch")}
+        out, store = self.add(have)
+        self.assertEqual((out, list(store), store["jsearch:9"]["stage"]), ([("have", "jsearch:9")], ["jsearch:9"], "shortlisted"))
+        self.assertEqual([a["source"] for a in store["jsearch:9"]["also"].values()], ["web"])
+
+    def test_a_role_you_skipped_stays_skipped(self):
+        have = {"adzuna:4": role("adzuna:4", company="Revolut", title="Senior Product Manager", stage="skipped")}
+        out, store = self.add(have)
+        self.assertEqual((out[0][0], list(store), store["adzuna:4"]["stage"]), ("have", ["adzuna:4"], "skipped"))
+
+    def test_the_same_address_is_the_same_role_whatever_the_title_says(self):
+        have = {"gh:revolut:1": role("gh:revolut:1", company="Revolut", title="Sr PM, Cards", url="https://revolut.example/careers/1")}
+        self.assertEqual(self.add(have)[0], [("have", "gh:revolut:1")])
+
+    def test_a_role_outside_your_titles_or_places_is_turned_down_with_the_reason(self):
+        for change in ({"title": "Senior Product Designer"}, {"location": "New York"}):
+            out, store = self.add(**change)
+            self.assertEqual((out[0][0], store), ("no", {}))
+            self.assertIn("titles and locations", out[0][1])
+
+    def test_a_role_without_its_own_address_is_turned_down(self):
+        for change in ({"url": "revolut.example/careers"}, {"url": ""}, {"company": ""}):
+            self.assertEqual(self.add(**change)[0][0][0], "no")

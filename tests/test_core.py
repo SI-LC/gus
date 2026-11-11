@@ -687,3 +687,32 @@ class NothingMissed(unittest.TestCase):
         self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager, New York"}, cfg))
         self.assertFalse(scan.matches({**ad, "title": "Senior Product Manager"}, cfg))
         self.assertFalse(scan.matches({**ad, "location": "New York"}, cfg))  # a place that is given still decides
+
+
+class NothingReadsThem(unittest.TestCase):
+    """Watched companies with no board are handed to the agent, the candidate's own choices first."""
+
+    def test_no_board_lists_the_unread_and_leaves_out_the_recently_read(self):
+        from datetime import date, timedelta
+        from radar import companies
+        today, old = str(date.today()), str(date.today() - timedelta(days=10))
+        c = {"Read by a board": {"status": "watched", "board": "ashby:x"},
+             "Looked at today": {"status": "watched", "careers_checked": today},
+             "Maybe": {"status": "maybe"}, "Vetoed": {"status": "watched", "vetoed": True},
+             "Plain": {"status": "watched", "careers_checked": old}, "Tier A": {"status": "watched", "tier": "A"},
+             "Favourite": {"status": "watched", "favourite": True, "tier": "B", "careers_checked": old}}
+        self.assertEqual(companies.no_board(c), ["Favourite", "Tier A", "Plain"])
+
+    def test_only_a_few_per_run(self):
+        from radar import companies
+        c = {f"Co {n}": {"status": "watched"} for n in range(30)}
+        self.assertEqual(len(companies.no_board(c)), companies.CAREERS_PER_RUN)
+
+    def test_the_agent_may_add_roles_only_through_the_checked_command(self):
+        from pathlib import Path
+        prompts = Path(__file__).resolve().parent.parent / "prompts"
+        self.assertIn("jobs", agent.COMMANDS)
+        for name in ("watchlist.md", "discover.md"):
+            text = (prompts / name).read_text()
+            self.assertIn("python3 -m radar.jobs add", text)
+            self.assertIn("Never write a role into `data/jobs.json` by hand", text)
