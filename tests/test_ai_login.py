@@ -101,9 +101,9 @@ class LoginExpiry(unittest.TestCase):
                 calls.append(name)
                 return True, ""
             return go
-        with mock.patch.multiple(service, _scan=step("scan"), _agent_step=step, _boards=step("boards"), _command=lambda *a: step("score")(),
+        with mock.patch.multiple(service, _check_roles=step("scan"), _agent_step=step, _boards=step("boards"), _run_modules=lambda *a: step("score")(),
                                  _emails_waiting=lambda: 0, _moves_this_week=lambda: 0, _watchlist_due=lambda c, s: True,
-                                 _counts=lambda: {"roles": 0, "strong": 0}, _state=lambda: {}, _save=lambda s: None, load_config=lambda: {}):
+                                 _counts=lambda: {"roles": 0, "strong": 0}, _schedule_state=lambda: {}, _save_schedule_state=lambda s: None, load_config=lambda: {}):
             service.progress.clear()
             ok, summary = service.full_run()
         self.assertFalse(ok)

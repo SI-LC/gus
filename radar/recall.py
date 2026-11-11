@@ -19,11 +19,14 @@ import sys
 from datetime import datetime
 
 from radar import jobs as J
-from radar import scan
+from radar.boards import SOURCES
+from radar.matching import left_out, load_config, matches
+from radar.paths import COMPANIES, DATA, JOBS, watchlist_path
 from radar.store import read
+from radar.web import get_json
 
-EXPECTED = scan.DATA / "evals" / "expected.csv"
-REPORTS = scan.DATA / "evals" / "recall"
+EXPECTED = DATA / "evals" / "expected.csv"
+REPORTS = DATA / "evals" / "recall"
 FIELDS = ["company", "title", "seen", "note"]
 SHORT = {"pm": "product manager", "sr": "senior", "snr": "senior", "vp": "vice president", "tpm": "technical product manager"}
 FILLER = {"of", "the", "and", "a", "an", "for", "in", "at", "to", "uk", "london", "remote"}
@@ -67,10 +70,10 @@ def best(expected: dict, rows: list):
 def listing(ats: str, slug: str):
     """Every job on a board as (title, place), with no filter of yours applied, or None for a board that can't be listed whole."""
     if ats == "greenhouse":
-        found = scan.get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs").get("jobs", [])
+        found = get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs").get("jobs", [])
         return [(j["title"], (j.get("location") or {}).get("name", "")) for j in found]
     if ats in LISTED:
-        return [(j["title"], j["location"]) for j in scan.SOURCES[ats]("", slug)]
+        return [(j["title"], j["location"]) for j in SOURCES[ats]("", slug)]
     return None
 
 
@@ -99,9 +102,9 @@ def why_missed(expected: dict, companies: dict, watched: dict, cfg, list_board=l
     title, place = hit
     if not cfg["title_include"].search(title):
         return f'your title rules drop it: nothing in Titles to include matches "{title}"'
-    if scan.left_out(title, cfg, "title_exclude"):
+    if left_out(title, cfg, "title_exclude"):
         return f'your title rules drop it: Titles to leave out catches "{title}"'
-    if not scan.matches({"title": title, "location": place, "description": ""}, cfg):
+    if not matches({"title": title, "location": place, "description": ""}, cfg):
         return f'your location rules drop it: "{title}" is listed in "{place or "no place given"}"'
     return f'it\'s on the board as "{title}" and fits your rules: the next scan should bring it in'
 
@@ -179,9 +182,9 @@ def add(company: str, title: str, seen: str = "", note: str = "") -> bool:
 
 
 def run(offline: bool = False) -> dict:
-    with scan.watchlist_path().open(newline="") as f:
+    with watchlist_path().open(newline="") as f:
         watched = {r["company"]: (r["ats"], r["slug"]) for r in csv.DictReader(f)}
-    results = check(load_expected(), read(scan.JOBS), read(scan.DATA / "companies.json"), watched, scan.load_config(),
+    results = check(load_expected(), read(JOBS), read(COMPANIES), watched, load_config(),
                     None if offline else listing)
     s = summarise(results)
     show(results, s)

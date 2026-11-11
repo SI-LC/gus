@@ -4,7 +4,7 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 
 ## Decide first
 
-- **Email access.** Gus doesn't read email. Connecting it through the Claude connector was built and tested, then parked, because it gives an always-on machine access to a mailbox. The work is on the `gmail-connector` branch (closed PR #16). Options: leave email out and log replies by hand, have a session on the main computer send outcomes only, or revisit the connector.
+- **Email access.** Gus reads one Gmail account over IMAP with an app password, read-only, once you connect it in Settings. Connecting it through the Claude connector instead was built and tested, then parked, because it gives an always-on machine access to a mailbox. The work is on the `gmail-connector` branch (closed PR #16). Options: leave email out and log replies by hand, have a session on the main computer send outcomes only, or revisit the connector.
 - **What the Pi's Claude login can reach.** Logging in with a Claude account brings that account's connectors (mail, files, calendar) to the Pi, and only Gus's own agents are limited. Options: use an Anthropic API key on the Pi (pay per use), or a separate Claude account with nothing connected.
 - **What should depend on the laptop.** Today deploys run from it, evals copy role data to it, and application status is sent from it. Proposed rule: the Pi runs everything and the laptop is only a screen, plus whatever local apps documents need.
 - **Scoring evals.** Decide what evals should cover before more labelling. The job-first labelling change is on a branch (closed PR #17). Labels are incomplete, and the pass marks haven't been checked against a real run.
@@ -23,7 +23,7 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 
 - **First real full run.** Full run has only been tested with stand-ins. Press it and watch each step. Consider moving agent runs to a cheaper model first.
 - **Unread signals.** Discovery hasn't run on the Pi yet, so signals have built up.
-- **Screens not yet clicked through in a browser:** the Skipped and Closed ads filters, Restore, Quick check feedback, Open folder, and the phone layout.
+- **Screens not yet clicked through in a browser:** the Skipped and Closed ads filters, Restore, Check roles feedback, Open folder, and the phone layout.
 - **Messaged button.** One click was reported that didn't reach the Pi, and the cause wasn't found.
 - **Stale moves.** Moves planned before the signal date fix may rest on old roles. Review or skip them.
 - **Closed ads.** Confirm detection on real scans, then decide whether reposted roles should link to the original.
@@ -41,7 +41,7 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 - **Manual edits in the cockpit:** add a role from a link, edit a move's draft, add notes, correct a score, add a person or a signal.
 - **Role page** with the saved job description, and CV tailoring from it. Decide the output format.
 - **Drafts for follow-ups,** and the same reasoning shown for moves.
-- **Bring in the network:** import connections, and fill past employers so routes work.
+- **Bring in the network:** connections can be imported (Settings → Network); still to do: fill past employers so routes work.
 - **Scoring calibration** from shortlist and skip decisions.
 - **"Applied AI" in title matching** may be too broad. Decide whether to narrow it.
 - **One role posted once per country.** Grafana Labs lists the same Staff PM role six times on one board, once per
@@ -62,9 +62,9 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 - **Big company careers sites.** SuccessFactors boards are read from the sitemap each site publishes. Workday boards are read from the job data behind each careers site (`/wday/cxs/`), as its sitemap stops at 100 jobs. Gus asks only for jobs in the candidate's locations, using the board's own location filter, so a big board takes about a dozen requests; a board with no location filter is reported in Health and not read. Every request is checked against the site's robots.txt and kept to a low rate, and a site that refuses is listed in Health and left alone. Other in-house sites can't be scanned, so job alert emails (which depend on the email decision) or adding roles by hand remain the options there.
   - **Teamtailor.** Each site publishes a public feed of its open jobs at `/jobs.json` and lists it in its `/.well-known/api-catalog`, so one request per scan gets everything. Teamtailor's own API needs a company's secret key and isn't used. These sites' robots.txt allows the feed, and their content signal says `ai-input=yes, ai-train=no`. The feed matched the sitemap on every board checked, the largest with 56 jobs, but a much larger board or a site with several languages hasn't been tested.
   - **Gem.** Boards at `jobs.gem.com/<slug>` are read from Gem's public Job Board API (`api.gem.com/job_board/v0/<slug>/job_posts/`), one request per scan. Gem's API reference says these endpoints are public, "can be read by anyone" and return complete lists with no pages. The list matched the live board page on the two boards checked, of 22 and 25 jobs; a much larger board hasn't been tested. `jobs.gem.com` has no robots.txt. `api.gem.com` has none either: `/robots.txt` gets the same 403 as any made-up address, so Gus counts that one reply on that one host as "no file" and would obey a real file if one appeared. A 403 on a job list itself is still a refusal. Gem's terms and acceptable use policy don't mention crawling or job boards, though they ban getting around its protections, and Gus doesn't. This hasn't had a legal check. The API doesn't name the company, so boards are never guessed from a name. Its `location_type` is unreliable (it says hybrid on jobs named "Poland - Remote"), so places come from each job's offices.
-  - **Google Careers.** Google has no public job board, so Gus reads the first page of one saved search once a day, newest first (`radar/scan.py`). Its robots.txt disallows paged results, so Gus never asks for page two; a search with more than 20 results can't prove a role has closed. Google's terms bar automated access that breaks those rules, and no careers-specific terms were found. The job data is an undocumented part of the page, so it can change without warning: Health shows it if that happens. Not legally checked.
+  - **Google Careers.** Google has no public job board, so Gus reads the first page of one saved search once a day, newest first (`radar/boards.py`). Its robots.txt disallows paged results, so Gus never asks for page two; a search with more than 20 results can't prove a role has closed. Google's terms bar automated access that breaks those rules, and no careers-specific terms were found. The job data is an undocumented part of the page, so it can change without warning: Health shows it if that happens. Not legally checked.
   - **Workday's terms.** Its robots.txt has no rule either way for `/wday/cxs/`. The candidate chose to use it. Workday's website terms ban scraping and ignoring robots.txt, and bar using its APIs without a separate agreement. They name workday.com, its APIs and pages that reference those terms; the careers pages checked don't reference them. This hasn't had a legal check, and each company's own terms vary.
-- Most VC job boards need a browser, so they're left to agents. Some sites block automated access entirely.
+- VC job boards run on Getro are read by the scan. Most others need a browser, so they're left to agents. Some sites block automated access entirely.
 - Optional keys: X, Reddit, Companies House. ntfy for phone notifications isn't set up.
 
 ## Later

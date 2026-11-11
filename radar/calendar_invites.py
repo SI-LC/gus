@@ -11,9 +11,10 @@ from datetime import datetime, timezone
 from email.utils import parseaddr
 from zoneinfo import ZoneInfo
 
-from radar.accounts import COMPANIES, PEOPLE, read
+from radar.paths import COMPANIES, PEOPLE
+from radar.store import read
 from radar.network import norm
-from radar.scan import DATA
+from radar.paths import DATA
 
 MEETINGS = DATA / "meetings.json"
 INVITE_SUBJECT = re.compile(r"^\s*(updated invitation|invitation|canceled event|cancelled event|accepted|declined|tentatively accepted|new event|meeting)\b", re.I)
@@ -106,7 +107,8 @@ def relevance(ev: dict, companies: dict, people: dict):
     return None
 
 
-def keep(events: list[dict]) -> int:
+def save_meetings(events: list[dict]) -> int:
+    """Save the invites that are about your search as meetings, and move anyone you're meeting to the conversation stage."""
     from radar.store import locked
     companies, people = read(COMPANIES, {}), read(PEOPLE, {})
     kept = 0

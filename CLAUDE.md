@@ -30,8 +30,8 @@ interviewing → closed, or skipped). Every object's fields are in
 ## Deploying
 
 `main` is protected: nothing reaches it without a pull request that passes the `scan` check on GitHub, so never
-push to `main` directly. Work on a branch, push it (the pre-push hook runs `deploy/scan.sh`, which is the only place
-your personal details are checked), open a PR, then once `scan` passes merge with
+push to `main` directly. Work on a branch, push it (the pre-push hook runs `deploy/scan.sh`, which is the only check
+that knows your employers and the people you track), open a PR, then once `scan` passes merge with
 `gh pr merge --squash --delete-branch`.
 
 The scan also runs `tests/test_smoke.py`, a fresh install going through a full run, and on GitHub the requirement

@@ -9,7 +9,7 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-from radar import resolve, scan
+from radar import boards, matching, paths, resolve, scan, web
 from sample_search import use_sample
 
 SAMPLES = Path(__file__).parent / "samples"
@@ -88,21 +88,23 @@ class Base(unittest.TestCase):
     def setUp(self):
         use_sample(self)
         self.dir = Path(tempfile.mkdtemp())
-        for name, value in (("DATA", self.dir), ("JOBS", self.dir / "jobs.json"), ("LOOKED_UP", self.dir / "seen.json"),
-                            ("WATCHLIST", self.dir / "w.csv"), ("PAGE_PAUSE", 0)):
-            patcher = mock.patch.object(scan, name, value)
+        jobs = self.dir / "jobs.json"
+        for module, name, value in ((scan, "DATA", self.dir), (boards, "DATA", self.dir), (scan, "JOBS", jobs), (boards, "JOBS", jobs),
+                                    (boards, "LOOKED_UP", self.dir / "seen.json"), (paths, "WATCHLIST", self.dir / "w.csv"),
+                                    (boards, "PAGE_PAUSE", 0)):
+            patcher = mock.patch.object(module, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.clear()
         self.addCleanup(self.clear)
 
     def clear(self):
-        scan._known, scan._looked_up = None, None
-        scan._listed.clear()
-        scan._robots.clear()
+        boards._known, boards._looked_up = None, None
+        boards.listed_ids.clear()
+        web._robots.clear()
 
     def fetch(self, site):
-        return mock.patch.object(scan, "fetch_bytes", site)
+        return mock.patch.object(web, "fetch_bytes", site)
 
     def watch(self, *rows):
         with (self.dir / "w.csv").open("w", newline="") as f:
@@ -113,15 +115,15 @@ class Base(unittest.TestCase):
     def run_scan(self, site):
         """Fetch all boards as a scan does, then return (jobs, errors written for the Health page)."""
         self.clear()
-        cfg = {**scan.load_config(), "source_hn": False}
-        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg):
+        cfg = {**matching.load_config(), "source_hn": False}
+        with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg):
             jobs, _ = scan.fetch_all()
         return jobs, json.loads((self.dir / "board_errors.json").read_text())
 
 
 class Robots(unittest.TestCase):
     def allows(self, text, path):
-        return scan.robots_allow(scan.parse_robots(text)[0], path)
+        return web.robots_allow(web.parse_robots(text)[0], path)
 
     def test_optimizely_blocks_its_rss_but_not_its_jobs(self):
         text = sample("successfactors_robots.txt").decode()
@@ -133,7 +135,7 @@ class Robots(unittest.TestCase):
         text = sample("workday_robots.txt").decode()
         self.assertTrue(self.allows(text, "/External_Career_Site/siteMap.xml"))
         self.assertFalse(self.allows(text, "/refreshFacet/x"))
-        self.assertIn(f"https://{WD_HOST}/External_Career_Site/siteMap.xml", scan.parse_robots(text)[1])
+        self.assertIn(f"https://{WD_HOST}/External_Career_Site/siteMap.xml", web.parse_robots(text)[1])
 
     def test_the_longest_rule_wins_whatever_the_order(self):
         self.assertFalse(self.allows("User-agent: *\nAllow: /\nDisallow: /jobs/", "/jobs/1"))
@@ -162,34 +164,34 @@ class Robots(unittest.TestCase):
 class Fetching(Base):
     def test_a_missing_robots_file_means_no_rules(self):
         with self.fetch(Site({"example.com/page": b"hello"})):
-            self.assertEqual(scan.polite_fetch("https://example.com/page"), "hello")
+            self.assertEqual(web.polite_fetch("https://example.com/page"), "hello")
 
     def test_a_refused_or_broken_robots_file_stops_everything(self):
         for code in (401, 403, 429, 503):
-            scan._robots.clear()
+            web._robots.clear()
             site = Site({"robots.txt": refused("x", code), "/page": b"hello"})
-            with self.fetch(site), self.assertRaises(scan.Refused):
-                scan.polite_fetch("https://example.com/page")
+            with self.fetch(site), self.assertRaises(web.Refused):
+                web.polite_fetch("https://example.com/page")
             self.assertEqual(len(site.asked), 1)
 
     def test_a_disallowed_page_is_never_requested(self):
         site = Site({"robots.txt": b"User-agent: *\nDisallow: /private/\n"})
-        with self.fetch(site), self.assertRaises(scan.Refused):
-            scan.polite_fetch("https://example.com/private/1")
+        with self.fetch(site), self.assertRaises(web.Refused):
+            web.polite_fetch("https://example.com/private/1")
         self.assertEqual(len(site.asked), 1)
 
     def test_robots_is_read_once_per_host(self):
         site = Site({"robots.txt": b"", "/a": b"a", "/b": b"b"})
         with self.fetch(site):
-            scan.polite_fetch("https://example.com/a")
-            scan.polite_fetch("https://example.com/b")
+            web.polite_fetch("https://example.com/a")
+            web.polite_fetch("https://example.com/b")
         self.assertEqual(sum("robots" in u for u in site.asked), 1)
 
     def test_only_public_web_addresses(self):
         site = Site({})
         for url in ("http://example.com/a", "https://127.0.0.1/a", "https://localhost/a", "https://pi.local/a", "https://example.com:8000/a", "file:///etc/passwd"):
-            with self.fetch(site), self.assertRaises(scan.Refused):
-                scan.polite_fetch(url)
+            with self.fetch(site), self.assertRaises(web.Refused):
+                web.polite_fetch(url)
         self.assertEqual(site.asked, [])
 
     def test_a_sitemap_index_is_followed_on_the_same_host_only(self):
@@ -197,50 +199,50 @@ class Fetching(Base):
                  b'<sitemap><loc>https://elsewhere.com/b.xml</loc></sitemap></sitemapindex>')
         site = Site({"robots.txt": b"", "/sitemap.xml": index, "/a.xml": b"<urlset><url><loc>https://example.com/job/x/1/</loc></url></urlset>"})
         with self.fetch(site):
-            self.assertEqual(scan.sitemap_urls("https://example.com/sitemap.xml"), ["https://example.com/job/x/1/"])
+            self.assertEqual(web.sitemap_urls("https://example.com/sitemap.xml"), ["https://example.com/job/x/1/"])
         self.assertFalse(any("elsewhere" in u for u in site.asked))
 
     def test_a_bot_check_instead_of_a_sitemap_is_a_refusal(self):
-        with self.fetch(Site({"robots.txt": b"", "/sitemap.xml": b"<html>Just a moment...</html>"})), self.assertRaises(scan.Refused):
-            scan.sitemap_urls("https://example.com/sitemap.xml")
+        with self.fetch(Site({"robots.txt": b"", "/sitemap.xml": b"<html>Just a moment...</html>"})), self.assertRaises(web.Refused):
+            web.sitemap_urls("https://example.com/sitemap.xml")
 
 
 class Addresses(unittest.TestCase):
     def test_successfactors(self):
-        self.assertEqual(scan.successfactors_job("https://careers.optimizely.com/job/Dhaka-Product-Manager-1212-BD/1360527755/"),
+        self.assertEqual(boards.successfactors_job("https://careers.optimizely.com/job/Dhaka-Product-Manager-1212-BD/1360527755/"),
                          ("1360527755", "Dhaka Product Manager 1212 BD"))
-        self.assertEqual(scan.successfactors_job("https://careers.ey.com/ey/job/New-York-VP%2C-GTM-10003/1375716455/"), ("1375716455", "New York VP, GTM 10003"))
-        self.assertIsNone(scan.successfactors_job("https://careers.optimizely.com/go/Engineering/123/"))
+        self.assertEqual(boards.successfactors_job("https://careers.ey.com/ey/job/New-York-VP%2C-GTM-10003/1375716455/"), ("1375716455", "New York VP, GTM 10003"))
+        self.assertIsNone(boards.successfactors_job("https://careers.optimizely.com/go/Engineering/123/"))
 
     def test_workday(self):
-        self.assertEqual(scan.workday_job(f"https://{WD_HOST}/External_Career_Site/job/United-Kingdom---London/Principal-AI-Architect_JR362633"),
+        self.assertEqual(boards.workday_job(f"https://{WD_HOST}/External_Career_Site/job/United-Kingdom---London/Principal-AI-Architect_JR362633"),
                          ("JR362633", "Principal AI Architect"))
-        self.assertEqual(scan.workday_job(f"https://{WD_HOST}/S/job/Director--Performance_JR367588-1"), ("JR367588-1", "Director Performance"))
+        self.assertEqual(boards.workday_job(f"https://{WD_HOST}/S/job/Director--Performance_JR367588-1"), ("JR367588-1", "Director Performance"))
 
 
 class Pages(unittest.TestCase):
     def test_successfactors_page(self):
-        row = scan.successfactors_page(sample("successfactors_job.html").decode())
+        row = boards.successfactors_page(sample("successfactors_job.html").decode())
         self.assertEqual((row["title"], row["location"], row["posted"]), ("Product Manager", "Dhaka, BD, 1212 BD", "2026-10-10"))
         self.assertEqual(row["description"], "Own the roadmap for our platform. Work with design & engineering.")
 
     def test_britain_is_named_so_location_rules_can_match(self):
         text = sample("successfactors_job.html").decode().replace("Dhaka, BD, 1212 BD", "Bristol, GB, BS1 4QA")
-        self.assertEqual(scan.successfactors_page(text)["location"], "Bristol, United Kingdom, BS1 4QA")
+        self.assertEqual(boards.successfactors_page(text)["location"], "Bristol, United Kingdom, BS1 4QA")
 
     def test_workday_page_gives_every_place(self):
-        row = scan.workday_page(sample("workday_job.json").decode())
+        row = boards.workday_page(sample("workday_job.json").decode())
         self.assertEqual((row["title"], row["posted"]), ("Senior Product Manager", "2026-11-06"))
         self.assertEqual(row["location"], "California - San Francisco / United Kingdom - London")
         self.assertEqual(row["description"], "Own the roadmap for Agentforce.")
 
     def test_expired_ads_hold_no_job(self):
-        self.assertIsNone(scan.successfactors_page(sample("successfactors_gone.html").decode()))
-        self.assertIsNone(scan.workday_page('{"jobPostingInfo": {"posted": false}}'))
-        self.assertIsNone(scan.workday_page('{"errorCode": "S21"}'))
+        self.assertIsNone(boards.successfactors_page(sample("successfactors_gone.html").decode()))
+        self.assertIsNone(boards.workday_page('{"jobPostingInfo": {"posted": false}}'))
+        self.assertIsNone(boards.workday_page('{"errorCode": "S21"}'))
 
     def test_a_job_address_points_at_its_data(self):
-        self.assertEqual(scan.workday_job_data(f"https://{WD_HOST}/External_Career_Site/job/UK---London/PM_JR1"),
+        self.assertEqual(boards.workday_job_data(f"https://{WD_HOST}/External_Career_Site/job/UK---London/PM_JR1"),
                          f"https://{WD_HOST}/wday/cxs/salesforce/External_Career_Site/job/UK---London/PM_JR1")
 
 
@@ -254,8 +256,8 @@ class Optimizely(Base):
         jobs, errors = self.run_scan(successfactors_site())
         self.assertEqual(errors, {})
         self.assertEqual([j["title"] for j in jobs], ["Product Manager"] * 3)
-        cfg = scan.load_config()
-        self.assertFalse([j for j in jobs if scan.matches(j, cfg)])
+        cfg = matching.load_config()
+        self.assertFalse([j for j in jobs if matching.matches(j, cfg)])
 
     def test_reads_job_pages_only_for_wanted_titles(self):
         site = successfactors_site()
@@ -277,7 +279,7 @@ class Optimizely(Base):
     def test_a_london_role_is_kept(self):
         page = sample("successfactors_job.html").replace(b"Dhaka, BD, 1212 BD", b"London, GB, WC2N 4JS")
         jobs, _ = self.run_scan(successfactors_site(**{f"{SF}/job/": page}))
-        self.assertTrue(all(scan.matches(j, scan.load_config()) for j in jobs))
+        self.assertTrue(all(matching.matches(j, matching.load_config()) for j in jobs))
         self.assertTrue(all(j["id"].startswith(f"sf:{SF}:") for j in jobs))
 
     def test_a_saved_role_needs_no_page_and_counts_as_live(self):
@@ -289,7 +291,7 @@ class Optimizely(Base):
         self.assertIn(f"sf:{SF}:1360527755", {j["id"] for j in jobs})
 
     def test_stops_at_the_limit_and_finishes_next_scan(self):
-        with mock.patch.object(scan, "PAGES_PER_SCAN", 2):
+        with mock.patch.object(boards, "PAGES_PER_SCAN", 2):
             first = successfactors_site()
             self.run_scan(first)
             second = successfactors_site()
@@ -297,7 +299,7 @@ class Optimizely(Base):
         self.assertEqual((len(first.pages()), len(second.pages())), (2, 1))
 
     def test_waits_between_pages(self):
-        with mock.patch.object(scan, "PAGE_PAUSE", 7), mock.patch.object(scan.time, "sleep") as sleep:
+        with mock.patch.object(boards, "PAGE_PAUSE", 7), mock.patch.object(boards.time, "sleep") as sleep:
             self.run_scan(successfactors_site())
         self.assertEqual([c.args[0] for c in sleep.call_args_list], [0, 7, 7])
 
@@ -373,11 +375,11 @@ class Refusals(Base):
         soon = successfactors_site()
         self.run_scan(soon)
         self.assertEqual(soon.pages(), [])
-        seen = json.loads(scan.LOOKED_UP.read_text())
+        seen = json.loads(boards.LOOKED_UP.read_text())
         for entry in seen.values():
             if entry.get("unread"):
                 entry["unread"] = "2020-01-01"
-        scan.LOOKED_UP.write_text(json.dumps(seen))
+        boards.LOOKED_UP.write_text(json.dumps(seen))
         page = sample("successfactors_job.html").replace(b"Dhaka, BD, 1212 BD", b"London, GB, WC2N 4JS")
         later = successfactors_site(**{f"{SF}/job/": page})
         jobs, errors = self.run_scan(later)
@@ -387,7 +389,7 @@ class Refusals(Base):
         """The only new page this scan is an ad that has just closed: the board is fine."""
         for gone in (refused(SF, 404), refused(SF, 410), sample("successfactors_gone.html")):
             self.clear()
-            scan.LOOKED_UP.unlink(missing_ok=True)
+            boards.LOOKED_UP.unlink(missing_ok=True)
             one = b"<urlset><url><loc>https://careers.optimizely.com/job/London-Product-Manager/1/</loc></url></urlset>"
             jobs, errors = self.run_scan(successfactors_site(**{f"{SF}/sitemap.xml": one, f"{SF}/job/": gone}))
             self.assertEqual((jobs, errors), ([], {}))
@@ -419,7 +421,7 @@ class Closing(Base):
         for _ in range(2):
             self.run_scan(site_for())
             store = json.loads(scan.JOBS.read_text())
-            scan.mark_closed(store, scan._boards_answered, set(scan._listed), "now")
+            scan.mark_closed(store, scan._boards_answered, set(boards.listed_ids), "now")
             scan.JOBS.write_text(json.dumps(store))
         return store[jid]
 
@@ -452,12 +454,12 @@ class Closing(Base):
         self.assertEqual(self.workday_twice(site_for).get("ad_closed"), "now")
 
     def test_saved_roles_beyond_the_check_limit_stay_open(self):
-        with mock.patch.object(scan, "SAVED_CHECKS", 0):
+        with mock.patch.object(boards, "SAVED_CHECKS", 0):
             role = self.workday_twice(lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)}))
         self.assertIsNone(role.get("ad_closed"))
 
     def test_a_list_cut_short_closes_nothing(self):
-        with mock.patch.object(scan, "WORKDAY_LIST_PAGES", 1):
+        with mock.patch.object(boards, "WORKDAY_LIST_PAGES", 1):
             role = self.workday_twice(lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)}))
         self.assertIsNone(role.get("ad_closed"))
         self.assertIsNone(role.get("missed"))
@@ -472,7 +474,7 @@ class Salesforce(Base):
         jobs, errors = self.run_scan(workday_site())
         self.assertEqual(errors, {})
         self.assertEqual(jobs[0]["id"], f"wd:{WD}:JR360001")
-        self.assertTrue(scan.matches(jobs[0], scan.load_config()))
+        self.assertTrue(matching.matches(jobs[0], matching.load_config()))
         self.assertEqual(jobs[0]["url"], f"https://{WD_HOST}/External_Career_Site/job/United-Kingdom---London/Senior-Product-Manager_JR360001")
 
     def test_reads_details_only_for_wanted_titles(self):
@@ -561,18 +563,18 @@ class GoogleCareers(Base):
         self.search = SEARCH
 
     def run_scan(self, site):
-        real = scan.load_config
+        real = matching.load_config
 
         def with_search():
             return {**real(), "google_careers_search": self.search}
-        with mock.patch.object(scan, "load_config", with_search):
+        with mock.patch.object(matching, "load_config", with_search):
             return super().run_scan(site)
 
     def state(self):
         return json.loads((self.dir / "google_careers.json").read_text())
 
     def a_day_later(self):
-        state = {**self.state(), "read": self.state()["read"] - scan.GOOGLE_EVERY - 1}
+        state = {**self.state(), "read": self.state()["read"] - boards.GOOGLE_EVERY - 1}
         (self.dir / "google_careers.json").write_text(json.dumps(state))
 
     def pages(self, site):
@@ -687,11 +689,11 @@ class GoogleCareers(Base):
     def test_a_role_already_found_elsewhere_is_not_added_twice(self):
         (self.dir / "jobs.json").write_text(json.dumps({"adzuna:1": {
             "id": "adzuna:1", "company": "Google", "title": "Senior Product Manager, AI Ecosystems, Frontier AI, DeepMind", "location": "London"}}))
-        real = scan.load_config
+        real = matching.load_config
 
         def with_search():
             return {**real(), "google_careers_search": self.search, "source_hn": False}
-        with self.fetch(google_site()), mock.patch.object(scan, "load_config", with_search), mock.patch.object(sys, "argv", ["scan"]):
+        with self.fetch(google_site()), mock.patch.object(matching, "load_config", with_search), mock.patch.object(sys, "argv", ["scan"]):
             scan.main()
         store = json.loads((self.dir / "jobs.json").read_text())
         self.assertNotIn("gc:search:129187054603903686", store)
@@ -725,8 +727,8 @@ class Teamtailor(Base):
 
     def test_a_role_in_two_cities_matches_on_either(self):
         jobs, _ = self.run_scan(teamtailor_site())
-        cfg = {**scan.load_config(), "title_include": re.compile("product manager", re.I), "location_include": re.compile("London", re.I)}
-        self.assertTrue(scan.matches(self.role(jobs), cfg))
+        cfg = {**matching.load_config(), "title_include": re.compile("product manager", re.I), "location_include": re.compile("London", re.I)}
+        self.assertTrue(matching.matches(self.role(jobs), cfg))
 
     def test_a_remote_role_is_marked_without_the_country_the_feed_gives(self):
         jobs, _ = self.run_scan(teamtailor_site())
@@ -734,7 +736,7 @@ class Teamtailor(Base):
 
     def test_a_place_named_after_its_country_is_not_repeated(self):
         job = {"jobLocation": [{"address": {"addressLocality": "United States", "addressCountry": "US"}}]}
-        self.assertEqual(scan.teamtailor_place(job), "United States")
+        self.assertEqual(boards.teamtailor_place(job), "United States")
 
     def test_a_job_with_no_place_is_kept_without_faulting_the_board(self):
         jobs, errors = self.run_scan(teamtailor_site(**{f"{TT}/jobs.json": feed({"id": "1", "title": "PM", "url": "https://x.io/jobs/1"})}))
@@ -777,10 +779,10 @@ class Teamtailor(Base):
 
     def scan_twice(self, site):
         """Two full scans, as closing a role takes two misses, then what's saved."""
-        cfg = {**scan.load_config(), "source_hn": False}
+        cfg = {**matching.load_config(), "source_hn": False}
         for _ in range(2):
             self.clear()
-            with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
+            with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
                 scan.main()
         return json.loads((self.dir / "jobs.json").read_text())
 
@@ -859,7 +861,7 @@ class Gem(Base):
 
     def test_the_description_falls_back_to_the_html(self):
         job = {"id": "1", "title": "PM", "absolute_url": "https://x.io/1", "content": "<p>A &amp; B</p>"}
-        self.assertEqual(scan.gem_job("Acme", "acme", job)["description"], "A & B")
+        self.assertEqual(boards.gem_job("Acme", "acme", job)["description"], "A & B")
 
     def test_every_office_counts_not_just_the_first(self):
         jobs, _ = self.run_scan(gem_site())
@@ -871,8 +873,8 @@ class Gem(Base):
 
     def test_a_city_hidden_in_the_office_name_matches(self):
         jobs, _ = self.run_scan(gem_site())
-        cfg = {**scan.load_config(), "title_include": re.compile("product", re.I), "location_include": re.compile("London", re.I)}
-        self.assertTrue(scan.matches(self.role(jobs), cfg))
+        cfg = {**matching.load_config(), "title_include": re.compile("product", re.I), "location_include": re.compile("London", re.I)}
+        self.assertTrue(matching.matches(self.role(jobs), cfg))
 
     def test_remote_offices_keep_the_area_they_cover(self):
         jobs, _ = self.run_scan(gem_site())
@@ -883,10 +885,10 @@ class Gem(Base):
         self.assertEqual(self.role(self.run_scan(gem_site())[0], "Product Manager, Growth")["location"], "Poland - Remote")
 
     def test_a_remote_job_naming_no_office_is_marked_remote(self):
-        self.assertEqual(scan.gem_place({"location_type": "remote", "offices": []}), "Remote")
+        self.assertEqual(boards.gem_place({"location_type": "remote", "offices": []}), "Remote")
 
     def test_with_no_offices_the_top_level_location_is_used(self):
-        self.assertEqual(scan.gem_place({"location": {"name": "London, United Kingdom"}, "offices": []}), "London, United Kingdom")
+        self.assertEqual(boards.gem_place({"location": {"name": "London, United Kingdom"}, "offices": []}), "London, United Kingdom")
 
     def test_a_job_with_no_place_is_kept_without_faulting_the_board(self):
         post = {"id": "1", "title": "PM", "absolute_url": "https://x.io/1"}
@@ -918,8 +920,8 @@ class Gem(Base):
 
     def test_the_gateway_403_only_means_no_file_on_gems_api(self):
         site = Site({"elsewhere.example.com/robots.txt": gateway_403})
-        with self.fetch(site), self.assertRaises(scan.Refused):
-            scan.site_rules("elsewhere.example.com")
+        with self.fetch(site), self.assertRaises(web.Refused):
+            web.site_rules("elsewhere.example.com")
 
     def test_a_refusal_is_recorded_once_and_the_scan_moves_on(self):
         for code in (403, 429):
@@ -951,10 +953,10 @@ class Gem(Base):
 
     def scan_twice(self, site):
         """Two full scans, as closing a role takes two misses, then what's saved."""
-        cfg = {**scan.load_config(), "source_hn": False}
+        cfg = {**matching.load_config(), "source_hn": False}
         for _ in range(2):
             self.clear()
-            with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
+            with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg), mock.patch.object(sys, "argv", ["scan"]):
                 scan.main()
         return json.loads((self.dir / "jobs.json").read_text())
 
@@ -1061,7 +1063,7 @@ class Resolving(Base):
     def test_a_refusal_means_no_board(self):
         with self.fetch(successfactors_site(**{f"{SF}/sitemap.xml": refused(SF)})):
             self.assertIsNone(resolve.probe("successfactors", SF))
-        scan._robots.clear()
+        web._robots.clear()
         with self.fetch(Site({"robots.txt": refused(SF)})):
             self.assertIsNone(resolve.try_board("workday", "salesforce.wd12"))
 
@@ -1075,7 +1077,7 @@ class Resolving(Base):
         with mock.patch.object(resolve, "try_board", lambda ats, slug: tried.append(ats)):
             resolve.resolve("Acme")
         self.assertTrue(tried)
-        self.assertFalse(set(tried) & set(scan.SITE_BOARDS))
+        self.assertFalse(set(tried) & set(boards.SITE_BOARDS))
 
     def test_missing_lists_active_companies_with_no_board(self):
         (self.dir / "companies.json").write_text(json.dumps({
@@ -1107,11 +1109,11 @@ class AmazonJobs(Base):
         self.search = AMAZON_SEARCH
 
     def run_scan(self, site):
-        real = scan.load_config
+        real = matching.load_config
 
         def with_search():
             return {**real(), "amazon_jobs_search": self.search}
-        with mock.patch.object(scan, "load_config", with_search):
+        with mock.patch.object(matching, "load_config", with_search):
             return super().run_scan(site)
 
     def pages(self, site):
@@ -1141,7 +1143,7 @@ class AmazonJobs(Base):
 
     def test_a_long_list_is_read_page_by_page_until_a_short_page(self):
         full = json.loads(sample("amazon_jobs_search.json"))
-        with mock.patch.object(scan, "AMAZON_PAGE", 2):
+        with mock.patch.object(boards, "AMAZON_PAGE", 2):
             def reply(url):
                 offset = int(re.search(r"offset=(\d+)", url)[1])
                 return json.dumps({"hits": 3, "jobs": full["jobs"][offset:offset + 2]}).encode()
@@ -1149,15 +1151,15 @@ class AmazonJobs(Base):
             jobs, errors = self.run_scan(site)
         self.assertEqual((len(jobs), errors), (3, {}))
         self.assertEqual([re.search(r"offset=(\d+)", u)[1] for u in self.pages(site)], ["0", "2"])
-        self.assertNotIn("amazon", scan._cut_short)
+        self.assertNotIn("amazon", boards.cut_short)
 
     def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
         full = json.loads(sample("amazon_jobs_search.json"))
-        with mock.patch.object(scan, "AMAZON_PAGE", 1), mock.patch.object(scan, "AMAZON_PAGES", 2):
+        with mock.patch.object(boards, "AMAZON_PAGE", 1), mock.patch.object(boards, "AMAZON_PAGES", 2):
             site = amazon_site(lambda url: json.dumps({"hits": 3, "jobs": full["jobs"][:1]}).encode())
             jobs, _ = self.run_scan(site)
         self.assertEqual(len(self.pages(site)), 2)
-        self.assertIn("amazon", scan._cut_short)
+        self.assertIn("amazon", boards.cut_short)
 
     def test_it_reads_once_a_day_however_often_scans_run(self):
         site = amazon_site()
@@ -1191,7 +1193,7 @@ class GitHubCareers(Base):
     def setUp(self):
         super().setUp()
         self.watch(["GitHub", "githubcareers", "github", "devtools"])
-        patcher = mock.patch.object(scan, "GITHUB_PAUSE", 0)
+        patcher = mock.patch.object(boards, "GITHUB_PAUSE", 0)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -1220,7 +1222,7 @@ class GitHubCareers(Base):
 
     def test_a_long_list_is_read_page_by_page_until_a_short_page(self):
         full = json.loads(sample("github_careers_jobs.json"))
-        with mock.patch.object(scan, "GITHUB_PAGE", 2):
+        with mock.patch.object(boards, "GITHUB_PAGE", 2):
             def reply(url):
                 page = int(re.search(r"page=(\d+)", url)[1])
                 return json.dumps({"jobs": full["jobs"][(page - 1) * 2:page * 2]}).encode()
@@ -1228,20 +1230,20 @@ class GitHubCareers(Base):
             jobs, errors = self.run_scan(site)
         self.assertEqual((len(jobs), errors), (3, {}))
         self.assertEqual([re.search(r"page=(\d+)", u)[1] for u in self.pages(site)], ["1", "2"])
-        self.assertNotIn("github", scan._cut_short)
+        self.assertNotIn("github", boards.cut_short)
 
     def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
         full = json.loads(sample("github_careers_jobs.json"))
-        with mock.patch.object(scan, "GITHUB_PAGE", 1), mock.patch.object(scan, "GITHUB_PAGES", 2):
+        with mock.patch.object(boards, "GITHUB_PAGE", 1), mock.patch.object(boards, "GITHUB_PAGES", 2):
             site = github_site(lambda url: json.dumps({"jobs": full["jobs"][:1]}).encode())
             self.run_scan(site)
         self.assertEqual(len(self.pages(site)), 2)
-        self.assertIn("github", scan._cut_short)
+        self.assertIn("github", boards.cut_short)
 
     def test_it_waits_between_pages_as_the_robots_file_asks(self):
         full = json.loads(sample("github_careers_jobs.json"))
-        with mock.patch.object(scan, "GITHUB_PAGE", 1), mock.patch.object(scan, "GITHUB_PAGES", 3), mock.patch.object(scan, "GITHUB_PAUSE", 5), \
-                mock.patch.object(scan.time, "sleep") as slept:
+        with mock.patch.object(boards, "GITHUB_PAGE", 1), mock.patch.object(boards, "GITHUB_PAGES", 3), mock.patch.object(boards, "GITHUB_PAUSE", 5), \
+                mock.patch.object(boards.time, "sleep") as slept:
             site = github_site(lambda url: json.dumps({"jobs": full["jobs"][:1]}).encode())
             self.run_scan(site)
         self.assertEqual(slept.call_args_list, [mock.call(5), mock.call(5)])
@@ -1302,8 +1304,8 @@ class MindTheProduct(Base):
 
     def run_scan(self, site, on=True):
         self.clear()
-        cfg = {**scan.load_config(), "source_hn": False, "source_mindtheproduct": on}
-        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg):
+        cfg = {**matching.load_config(), "source_hn": False, "source_mindtheproduct": on}
+        with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg):
             jobs, _ = scan.fetch_all()
         return jobs, json.loads((self.dir / "board_errors.json").read_text())
 
@@ -1311,13 +1313,13 @@ class MindTheProduct(Base):
         return [u for u in site.asked if MTP_JOB in u]
 
     def test_addresses(self):
-        self.assertEqual(scan.mtp_job(f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/"), ("b704f3b80c7aeaaf", "group product manager"))
-        self.assertEqual(scan.mtp_job(f"https://{MTP}/jobs/listing/head-of-product-kn6ur1/"), ("kn6ur1", "head of product"))
-        self.assertIsNone(scan.mtp_job(f"https://{MTP}/jobs/role/product-management/"))
-        self.assertIsNone(scan.mtp_job("https://elsewhere.example/jobs/listing/product-manager-abc123/"))
+        self.assertEqual(boards.mtp_job(f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/"), ("b704f3b80c7aeaaf", "group product manager"))
+        self.assertEqual(boards.mtp_job(f"https://{MTP}/jobs/listing/head-of-product-kn6ur1/"), ("kn6ur1", "head of product"))
+        self.assertIsNone(boards.mtp_job(f"https://{MTP}/jobs/role/product-management/"))
+        self.assertIsNone(boards.mtp_job("https://elsewhere.example/jobs/listing/product-manager-abc123/"))
 
     def test_a_page_gives_company_title_and_place(self):
-        row = scan.mtp_page(sample("mindtheproduct_job.html").decode())
+        row = boards.mtp_page(sample("mindtheproduct_job.html").decode())
         self.assertEqual((row["company"], row["title"], row["location"]), ("Acme", "Group Product Manager", "London, United Kingdom"))
         self.assertIn("Five years in product", row["description"])
         self.assertNotIn("<p>", row["description"])
@@ -1325,25 +1327,25 @@ class MindTheProduct(Base):
 
     def test_the_link_is_the_employers_ad_so_a_role_on_its_own_board_is_one_role(self):
         ad = "https://jobs.lever.co/acme/e0ba7aee-1a0a-43ab-a4c0-d8856c6c2ce3"
-        self.assertEqual(scan.mtp_page(mtp_page(applicationUrl=ad + "/app").decode())["url"], ad)
-        self.assertEqual(scan.mtp_page(mtp_page(applicationUrl="https://jobs.ashbyhq.com/acme/1/application").decode())["url"], "https://jobs.ashbyhq.com/acme/1")
-        self.assertNotIn("url", scan.mtp_page(mtp_page(applicationUrl="mailto:jobs@acme.example").decode()))
+        self.assertEqual(boards.mtp_page(mtp_page(applicationUrl=ad + "/app").decode())["url"], ad)
+        self.assertEqual(boards.mtp_page(mtp_page(applicationUrl="https://jobs.ashbyhq.com/acme/1/application").decode())["url"], "https://jobs.ashbyhq.com/acme/1")
+        self.assertNotIn("url", boards.mtp_page(mtp_page(applicationUrl="mailto:jobs@acme.example").decode()))
         saved = {"lever:acme:1": {"id": "lever:acme:1", "company": "Acme Ltd", "title": "Group Product Manager", "location": "London",
                                   "description": "", "url": ad, "stage": "skipped"}}
         scan.JOBS.write_text(json.dumps(saved))
         self.clear()
-        cfg = {**scan.load_config(), "source_hn": False, "source_mindtheproduct": True}
+        cfg = {**matching.load_config(), "source_hn": False, "source_mindtheproduct": True}
         site = mtp_site(**{f"{MTP}{MTP_JOB}": mtp_page(applicationUrl=ad + "/app")})
-        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg), mock.patch.object(scan.sys, "argv", ["scan"]):
+        with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg), mock.patch.object(scan.sys, "argv", ["scan"]):
             scan.main()
         store = json.loads(scan.JOBS.read_text())
         self.assertEqual(sorted(store), ["lever:acme:1"])  # a skipped role stays skipped, with these as sightings
         self.assertTrue(any(k.startswith("mtp:jobs:") for k in store["lever:acme:1"]["also"]))
 
     def test_an_expired_ad_has_gone_and_a_page_without_a_job_is_unreadable(self):
-        self.assertEqual(scan.mtp_page(mtp_page(expiresAt="2020-01-01T00:00:00.000Z").decode()), scan.GONE)
-        self.assertIsNone(scan.mtp_page("<html><body>Not found</body></html>"))
-        self.assertIsNone(scan.mtp_page(mtp_page(company="").decode()))
+        self.assertEqual(boards.mtp_page(mtp_page(expiresAt="2020-01-01T00:00:00.000Z").decode()), boards.GONE)
+        self.assertIsNone(boards.mtp_page("<html><body>Not found</body></html>"))
+        self.assertIsNone(boards.mtp_page(mtp_page(company="").decode()))
 
     def test_off_means_nothing_is_asked(self):
         site = mtp_site()
@@ -1358,7 +1360,7 @@ class MindTheProduct(Base):
         self.assertFalse([u for u in self.pages(site) if "designer" in u])
         self.assertFalse([u for u in site.asked if "/api/" in u])
         self.assertTrue(all(j["company"] == "Acme" and j["id"].startswith("mtp:jobs:") for j in jobs))
-        self.assertTrue(all(scan.matches(j, scan.load_config()) for j in jobs))
+        self.assertTrue(all(matching.matches(j, matching.load_config()) for j in jobs))
 
     def test_a_role_already_read_isnt_read_again(self):
         self.run_scan(mtp_site(**{f"{MTP}{MTP_JOB}": mtp_page(location="Berlin", country="Germany")}))
@@ -1385,7 +1387,7 @@ class MindTheProduct(Base):
         self.assertEqual(next(j for j in jobs if j["id"] == jid)["url"], f"https://{MTP}/jobs/listing/group-product-manager-b704f3b80c7aeaaf/")
 
     def test_reads_more_pages_per_scan_than_a_company_board(self):
-        with mock.patch.object(scan, "PAGES_PER_SCAN", 1), mock.patch.object(scan, "BIG_BOARD_PAGES", 2):
+        with mock.patch.object(boards, "PAGES_PER_SCAN", 1), mock.patch.object(boards, "BIG_BOARD_PAGES", 2):
             elsewhere = {f"{MTP}{MTP_JOB}": mtp_page(location="Berlin", country="Germany")}
             first, second = mtp_site(**elsewhere), mtp_site(**elsewhere)
             self.run_scan(first)
@@ -1398,7 +1400,7 @@ class MindTheProduct(Base):
         for _ in range(2):
             self.run_scan(mtp_site())
             store = json.loads(scan.JOBS.read_text())
-            scan.mark_closed(store, scan._boards_answered, set(scan._listed), "now")
+            scan.mark_closed(store, scan._boards_answered, set(boards.listed_ids), "now")
             scan.JOBS.write_text(json.dumps(store))
         self.assertEqual(store[jid].get("ad_closed"), "now")
 
@@ -1434,8 +1436,8 @@ class Getro(Base):
 
     def run_scan(self, site, boards=f"https://{GETRO}/jobs"):
         self.clear()
-        cfg = {**scan.load_config(), "source_hn": False, "getro_boards": boards}
-        with self.fetch(site), mock.patch.object(scan, "load_config", lambda: cfg):
+        cfg = {**matching.load_config(), "source_hn": False, "getro_boards": boards}
+        with self.fetch(site), mock.patch.object(matching, "load_config", lambda: cfg):
             jobs, _ = scan.fetch_all()
         return jobs, json.loads((self.dir / "board_errors.json").read_text())
 
@@ -1443,24 +1445,24 @@ class Getro(Base):
         return [u for u in site.asked if "/jobs/" in u]
 
     def test_addresses(self):
-        self.assertEqual(scan.getro_job(f"https://{GETRO}/companies/acme/jobs/95290675-senior-product-manager"), ("95290675", "senior product manager"))
-        self.assertEqual(scan.getro_job(f"https://{GETRO}/companies/acme/jobs/95290677"), ("95290677", ""))
-        self.assertIsNone(scan.getro_job(f"https://{GETRO}/companies/acme"))
+        self.assertEqual(boards.getro_job(f"https://{GETRO}/companies/acme/jobs/95290675-senior-product-manager"), ("95290675", "senior product manager"))
+        self.assertEqual(boards.getro_job(f"https://{GETRO}/companies/acme/jobs/95290677"), ("95290677", ""))
+        self.assertIsNone(boards.getro_job(f"https://{GETRO}/companies/acme"))
 
     def test_boards_in_settings_become_hosts(self):
-        self.assertEqual(scan.getro_hosts("careers.atomico.com/jobs\nhttps://jobs.pointnine.com/jobs\n\nCAREERS.ATOMICO.COM\nlocalhost\n10.0.0.1"),
+        self.assertEqual(boards.getro_hosts("careers.atomico.com/jobs\nhttps://jobs.pointnine.com/jobs\n\nCAREERS.ATOMICO.COM\nlocalhost\n10.0.0.1"),
                          ["careers.atomico.com", "jobs.pointnine.com"])
 
     def test_a_page_gives_company_places_and_the_employers_ad(self):
-        row = scan.getro_page(sample("getro_job.html").decode())
+        row = boards.getro_page(sample("getro_job.html").decode())
         self.assertEqual((row["company"], row["title"], row["location"]), ("Acme", "Senior Product Manager, Payments", "London, UK / Remote, Europe"))
         self.assertEqual(row["url"], "https://boards.greenhouse.io/acme/jobs/4415182009")
         self.assertNotIn("<p>", row["description"])
 
     def test_a_closed_job_has_gone_and_a_page_without_one_is_unreadable(self):
-        self.assertEqual(scan.getro_page(getro_page(status="closed").decode()), scan.GONE)
-        self.assertEqual(scan.getro_page(getro_page(closedAt="2026-11-01T00:00:00Z").decode()), scan.GONE)
-        self.assertIsNone(scan.getro_page("<html><body>Not found</body></html>"))
+        self.assertEqual(boards.getro_page(getro_page(status="closed").decode()), boards.GONE)
+        self.assertEqual(boards.getro_page(getro_page(closedAt="2026-11-01T00:00:00Z").decode()), boards.GONE)
+        self.assertIsNone(boards.getro_page("<html><body>Not found</body></html>"))
 
     def test_no_boards_means_nothing_is_asked(self):
         site = getro_site()
@@ -1474,7 +1476,7 @@ class Getro(Base):
         self.assertEqual(len(self.pages(site)), 2)  # not the engineer, the untitled ad, or another host's
         self.assertFalse([u for u in site.asked if "elsewhere.example" in u or "backend" in u])
         self.assertEqual({j["id"] for j in jobs}, {f"getro:{GETRO}:95290675", f"getro:{GETRO}:95290678"})
-        self.assertTrue(all(j["company"] == "Acme" and scan.matches(j, scan.load_config()) for j in jobs))
+        self.assertTrue(all(j["company"] == "Acme" and matching.matches(j, matching.load_config()) for j in jobs))
 
     def test_a_job_already_read_isnt_read_again(self):
         self.run_scan(getro_site(**{f"{GETRO}{GETRO_JOB}": getro_page(locations=[{"name": "Berlin, Germany"}])}))
@@ -1488,7 +1490,7 @@ class Getro(Base):
         for _ in range(2):
             self.run_scan(getro_site())
             store = json.loads(scan.JOBS.read_text())
-            scan.mark_closed(store, scan._boards_answered, set(scan._listed), "now")
+            scan.mark_closed(store, scan._boards_answered, set(boards.listed_ids), "now")
             scan.JOBS.write_text(json.dumps(store))
         self.assertEqual(store[jid].get("ad_closed"), "now")
 

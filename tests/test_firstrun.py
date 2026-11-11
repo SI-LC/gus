@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from radar import firstrun, scan, settings
+from radar import boards, firstrun, matching, paths, settings, web
 
 READ = {"keywords": ["payments", "roadmap"], "level": "senior"}
 
@@ -63,7 +63,7 @@ class NewInstall(unittest.TestCase):
 
 class NewDefaults(unittest.TestCase):
     def test_a_new_install_inherits_nobodys_search(self):
-        text = (scan.ROOT / "config.json").read_text().lower()
+        text = (paths.ROOT / "config.json").read_text().lower()
         defaults = json.loads(text)
         for word in ("london", "product manager", "£"):
             for key, value in defaults.items():
@@ -74,7 +74,7 @@ class NewDefaults(unittest.TestCase):
         rows = firstrun.starter()
         self.assertGreater(len(rows), 40)
         self.assertLess(sum(r["slug"] == "" for r in rows), 1)
-        self.assertTrue(all(r["ats"] in scan.SOURCES for r in rows))
+        self.assertTrue(all(r["ats"] in boards.SOURCES for r in rows))
         self.assertEqual(len({r["slug"] for r in rows}), len(rows))
 
 
@@ -111,11 +111,11 @@ class Shortlist(unittest.TestCase):
 
     def test_the_same_test_as_the_daily_scan(self):
         cfg = firstrun.matcher(["product designer"], ["Berlin", "Remote"])
-        self.assertTrue(scan.matches(job("Senior Product Designer", "Berlin, Germany"), cfg))
-        self.assertTrue(scan.matches(job("Product Designer", "Remote"), cfg))
-        self.assertFalse(scan.matches(job("Product Designer", "Remote - US"), cfg))
-        self.assertFalse(scan.matches(job("Product Designer", "Tokyo"), cfg))
-        self.assertFalse(scan.matches(job("Product Designer Intern", "Berlin"), cfg))
+        self.assertTrue(matching.matches(job("Senior Product Designer", "Berlin, Germany"), cfg))
+        self.assertTrue(matching.matches(job("Product Designer", "Remote"), cfg))
+        self.assertFalse(matching.matches(job("Product Designer", "Remote - US"), cfg))
+        self.assertFalse(matching.matches(job("Product Designer", "Tokyo"), cfg))
+        self.assertFalse(matching.matches(job("Product Designer Intern", "Berlin"), cfg))
 
     def test_your_city_beats_your_country_and_remote(self):
         self.assertGreater(self.rank(job(location="Berlin")), self.rank(job(location="Munich, Germany")))
@@ -135,7 +135,7 @@ class Shortlist(unittest.TestCase):
 
 class TimeLimit(unittest.TestCase):
     def tearDown(self):
-        scan.time_limit(None)
+        web.time_limit(None)
 
     def test_a_board_that_trickles_is_dropped_at_the_limit(self):
         class Slow(io.BytesIO):
@@ -146,10 +146,10 @@ class TimeLimit(unittest.TestCase):
                 return b"x"
 
         with mock.patch("urllib.request.urlopen", lambda *a, **k: Slow()):
-            scan.time_limit(time.monotonic() + .2)
+            web.time_limit(time.monotonic() + .2)
             started = time.monotonic()
             with self.assertRaises(TimeoutError):
-                scan.fetch_bytes("https://example.com/slow")
+                web.fetch_bytes("https://example.com/slow")
             self.assertLess(time.monotonic() - started, 1)
 
     def test_no_retries_once_time_limited(self):
@@ -160,9 +160,9 @@ class TimeLimit(unittest.TestCase):
             raise OSError("down")
 
         with mock.patch("urllib.request.urlopen", down):
-            scan.time_limit(time.monotonic() + 5)
+            web.time_limit(time.monotonic() + 5)
             with self.assertRaises(OSError):
-                scan.fetch_bytes("https://example.com/down")
+                web.fetch_bytes("https://example.com/down")
         self.assertEqual(len(calls), 1)
 
 

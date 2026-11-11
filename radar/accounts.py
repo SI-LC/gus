@@ -10,7 +10,6 @@ A move is only accepted if it cites an event from the last FRESH_DAYS days at an
 account, to a person mapped there with evidence. That's enforced here, not left to the
 agent's judgement.
 
-    python3 -m radar.accounts migrate              # one-off: people from roles → people.json, tiers
     python3 -m radar.accounts brief                # what the planner sees: fresh events by account
     python3 -m radar.accounts plan FILE.json       # validate proposed moves, keep the best 5
     python3 -m radar.accounts funnel               # events → moves → replies → conversations
@@ -22,36 +21,20 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from radar import events as E
-from radar.events import EVENTS, FRESH_DAYS, parse_date
-from radar.scan import DATA, JOBS
+from radar.events import FRESH_DAYS, parse_date, slug, today
+from radar.paths import COMPANIES, EVENTS, JOBS, MOVES, PEOPLE
+from radar.schema import PERSON_KINDS
 from radar.store import locked, read
 
-COMPANIES = DATA / "companies.json"
-PEOPLE = DATA / "people.json"
-MOVES = DATA / "moves.json"
 MAX_MOVES = 5
-COOLDOWN_DAYS = 21  # don't contact the same account again this soon without a new signal
-
-EVENT_LABEL = E.LABEL
-KINDS = ["product_leader", "hiring_manager", "peer_pm", "recruiter", "warm", "announcer"]
-PERSON_STAGES = ["mapped", "contacted", "replied", "conversation", "referred", "closed"]
-OUTCOMES = ["no_reply", "replied", "conversation", "interview", "referral", "not_now"]
-
-
-def today():
-    return date.today()
-
+COOLDOWN_DAYS = 21  # don't contact the same account again this soon without a new event
 
 def week_id(d=None):
     y, w, _ = (d or today()).isocalendar()
     return f"{y}-W{w:02d}"
-
-
-def slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
 
 
 def person_id(name, company):
@@ -70,8 +53,8 @@ def tier(c: dict) -> str:
     return "A" if fit >= 8 else "B" if fit >= 7 else "C"
 
 
-def events(name: str, c: dict | None = None, jobs: dict | None = None, stored: dict | None = None) -> list[dict]:
-    """An account's events from data/events.json, fresh and strong first. `c` and `jobs` are accepted for older callers."""
+def events(name: str, stored: dict | None = None) -> list[dict]:
+    """An account's events from data/events.json, fresh and strong first."""
     return E.for_account(name, read(EVENTS, {}) if stored is None else stored)
 
 
@@ -204,31 +187,6 @@ def funnel(days=90) -> dict:
     }
 
 
-def migrate():
-    """One-off: people found per role become account people; accounts get tiers."""
-    jobs = read(JOBS, {})
-    kind_map = {"hiring_manager": "hiring_manager", "announcer": "announcer", "recruiter": "recruiter"}
-    added = 0
-    with locked(PEOPLE) as people:
-        for j in jobs.values():
-            for p in j.get("people") or []:
-                if not p.get("name") or not p.get("url"):
-                    continue
-                pid = person_id(p["name"], j["company"])
-                rec = people.setdefault(pid, {
-                    "name": p["name"], "company": j["company"], "role": p.get("role"),
-                    "kind": kind_map.get(p.get("kind"), "product_leader"), "platform": p.get("platform"),
-                    "url": p["url"], "evidence": p.get("evidence"), "confidence": p.get("confidence"),
-                    "warm": False, "stage": "contacted" if p.get("sent_at") else "mapped",
-                    "added": str(today()), "source": "role people search",
-                })
-                rec.setdefault("job_ids", [])
-                if j["id"] not in rec["job_ids"]:
-                    rec["job_ids"].append(j["id"])
-                added += 1
-    print(f"{added} people links from roles → {len(read(PEOPLE, {}))} people")
-
-
 def add_person(name: str, company: str, role: str = "", url: str = "", kind: str = "", evidence: str = "") -> tuple[str, bool]:
     """Record a person by hand (an inbound recruiter, someone you've met). Returns (id, created).
     An existing person is left as they are, apart from filling in fields they don't have yet."""
@@ -239,8 +197,8 @@ def add_person(name: str, company: str, role: str = "", url: str = "", kind: str
     if company.lower() not in known:
         raise ValueError(f"{company} isn't a tracked account yet")
     company = known[company.lower()]
-    if kind and kind not in KINDS:
-        raise ValueError(f"kind must be one of {KINDS}")
+    if kind and kind not in PERSON_KINDS:
+        raise ValueError(f"kind must be one of {PERSON_KINDS}")
     if url and not re.match(r"https?://", url):
         raise ValueError("url must be a web link")
     pid = person_id(name, company)
@@ -259,9 +217,7 @@ def add_person(name: str, company: str, role: str = "", url: str = "", kind: str
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "brief"
-    if cmd == "migrate":
-        migrate()
-    elif cmd == "brief":
+    if cmd == "brief":
         print(json.dumps(brief(), indent=2, ensure_ascii=False))
     elif cmd == "plan":
         plan(sys.argv[2])

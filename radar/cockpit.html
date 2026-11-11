@@ -110,7 +110,6 @@
   .fr-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
   .fr-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); background: var(--surface); padding: 5px 9px; font-size: 13px; color: var(--text); cursor: pointer; }
   .fr-chip.on { border-color: var(--accent); background: var(--accent-soft); }
-  .fr-chip.bad { color: var(--muted); }
   .fr-chips input { min-width: 150px; flex: 1; }
   .fr-go { margin-top: 28px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
   .fr-talk { margin-top: 8px; font-size: 13px; }
@@ -474,7 +473,7 @@ function roleCard(j, actions) {
 }
 
 
-let F = null, frPoll = null, frTyping = null, frAdding = "";
+let F = null, frPoll = null, frTyping = null;
 const frSend = async body => { const d = await post("/api/first-run", body); if (d) { F = d; frDraw(); } return d; };
 const frChip = (text, onclick, cls = "") => `<button class="fr-chip ${cls}" onclick="${onclick}">${esc(text)}</button>`;
 const frList = key => F[key] || [];
@@ -854,7 +853,6 @@ async function removeFeed(name) {
   const d = await post("/api/feeds/remove", { name });
   if (d) { SET = d; toast("Removed"); render(true); }
 }
-const GROUPS = { AI: "AI provider", Matching: "Matching", Schedule: "Schedule", Social: "Social media", Sources: "Other sources", Feeds: "Feeds", Notifications: "Notifications" };
 async function loadSettings() {
   SET = await (await fetch("/api/settings", { cache: "no-store" })).json();
   if ((location.hash || "").startsWith("#settings")) render(true);
@@ -866,7 +864,7 @@ function input(f, v) {
   if (f.type === "select:claude_model") return `<select id="${id}" ${on}>${SET.models.map(m => `<option ${m === v ? "selected" : ""}>${m}</option>`).join("")}</select>`;
   if (f.type.startsWith("int")) { const [lo, hi] = f.type.split(":")[1].split("-"); return `<input type="number" id="${id}" min="${lo}" max="${hi}" step="1" value="${esc(v)}" ${on} style="max-width:120px">`; }
   if (f.type === "lines") return `<textarea id="${id}" rows="${Math.min(8, Math.max(3, String(v || "").split("\n").length + 1))}" ${on}>${esc(v)}</textarea>`;
-  return `<input type="text" id="${id}" value="${esc(v)}" ${on} ${f.type === "regex" ? 'style="font-family:var(--mono);font-size:13px"' : ""}>`;
+  return `<input type="text" id="${id}" value="${esc(v)}" ${on}>`;
 }
 async function saveField(key, el) {
   const value = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
@@ -927,7 +925,7 @@ function drawTicker() {
   drawProgress();
   const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
   $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')">${busy === "run" ? "Running…" : "Full run"}</button>
-    <button class="scan-now" title="Checks your job boards for new roles and scores them. Nothing else." onclick="startRun('scan')">${busy === "scan" ? "Checking…" : "Check roles"}</button>
+    <button class="scan-now" title="One scan: reads your job boards, feeds and email, scores new roles and maps people where there's fresh news. None of the research steps." onclick="startRun('scan')">${busy === "scan" ? "Checking…" : "Check roles"}</button>
     <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
     <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
     <span><b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
@@ -1020,7 +1018,7 @@ function watchRun() {
 async function startRun(job) {
   const d = await post("/api/run", { job });
   if (!d) return;
-  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : job === "sources" ? "Checking job sources. Only those due make requests, and it can take a while" : "Quick check started. It takes about 2 minutes");
+  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : job === "sources" ? "Checking job sources. Only those due make requests, and it can take a while" : "Checking roles. It takes about 2 minutes");
   await load(); watchRun();
 }
 function eventForm(name) {

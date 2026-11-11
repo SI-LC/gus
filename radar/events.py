@@ -5,6 +5,7 @@ An event comes from a signal the discover agent promoted, from the watchlist age
 that scored ROLE_EVENT_SCORE or more, or from you. Every one needs a link and a real date.
 
     python3 -m radar.events sync          # housekeeping: role events from jobs, migrate older shapes
+    python3 -m radar.events add ACCOUNT TYPE SUMMARY URL DATE   # record one event, checked before it's saved
     python3 -m radar.events alert         # push fresh hiring news at A/B accounts to your phone, once each
     python3 -m radar.events list "Acme"   # an account's events, fresh first
 
@@ -22,18 +23,13 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 
-from radar.scan import DATA, JOBS
+from radar.paths import COMPANIES, EVENTS, JOBS, MOVES, SIGNALS
+from radar.schema import EVENT_TYPES as TYPES
 from radar.store import locked, read
 
-EVENTS = DATA / "events.json"
-COMPANIES = DATA / "companies.json"
-MOVES = DATA / "moves.json"
-SIGNALS = DATA / "signals.json"
-
-ROLE_EVENT_SCORE = 7  # the one place the "a role this good is a signal" threshold lives
+ROLE_EVENT_SCORE = 7  # the one place the "a role this good is an event" threshold lives
 FRESH_DAYS = 30
 
-TYPES = ["post_hiring", "role_posted", "leader_hire", "funding", "london_office", "launch", "mention"]
 # how strongly each kind of event says "act now"
 STRENGTH = {"post_hiring": 5, "role_posted": 4, "leader_hire": 4, "funding": 3, "london_office": 3, "launch": 2, "mention": 1}
 LABEL = {"post_hiring": "Posted about hiring", "role_posted": "Role posted", "leader_hire": "New product leader",
@@ -218,7 +214,7 @@ def main():
     elif cmd == "add":
         import argparse
         ap = argparse.ArgumentParser(prog="radar.events add")
-        for f in ("account", "type", "summary", "url", "date"):
+        for f in FIELDS:
             ap.add_argument(f)
         a = ap.parse_args(sys.argv[2:])
         try:

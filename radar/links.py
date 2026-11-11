@@ -23,8 +23,12 @@ from urllib.parse import urlparse
 from radar import ai
 from radar.companies import COMPANIES
 from radar.resolve import resolve
-from radar.scan import JOBS, ROOT, SOURCES, fetch_bytes, load_config, watchlist_path
-from radar.sources import LABEL, same_company, same_title
+from radar.boards import SOURCES
+from radar.matching import load_config
+from radar.paths import watchlist_path, JOBS, ROOT
+from radar.web import fetch_bytes
+from radar.jobs import same_company, same_title
+from radar.sources import LABEL
 from radar.store import locked, read
 
 LOOKUP_SOURCES = set(LABEL) | {"web", "email", "x"}  # found somewhere other than the employer's board

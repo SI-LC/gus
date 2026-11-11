@@ -17,7 +17,8 @@ import urllib.request
 from datetime import date
 
 from radar import usage
-from radar.scan import DATA, ROOT, load_config
+from radar.matching import load_config
+from radar.paths import DATA, ROOT
 from radar.settings import secret
 
 
@@ -65,7 +66,7 @@ def login_works():
         pass
 
 
-def _check_budget(cfg):
+def check_budget(cfg):
     limit = float(cfg.get("ai_daily_budget_usd") or 0)  # 0 means no AI runs at all, never "no limit"
     if usage.today_cost() >= limit:
         flag = DATA / "budget_notified"
@@ -101,15 +102,15 @@ def _claude_env(provider):
 
 def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, timeout: int = 900,
         deny: list[str] | None = None, budget: bool = True) -> str:
-    """task picks the model (scoring | people | agent | quick). tools are Claude Code tool rules."""
+    """task picks the model (scoring | people | agent | quick; anything else, such as links, uses the default). tools are Claude Code tool rules."""
     cfg = load_config()
     if budget:
-        _check_budget(cfg)
+        check_budget(cfg)
     provider = cfg.get("ai_provider", "claude_subscription")
     if provider == "openai_compatible":
         if tools:
             raise NeedsTools(f"{task} needs web search and tools, which only the Claude providers have")
-        return _openai(prompt, cfg)
+        return _openai(prompt, cfg, task)
     model = cfg.get(f"model_{task}", "sonnet")
     args = ["claude", "-p", "--model", model, "--output-format", "json"]
     if tools:
@@ -142,7 +143,7 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
     return d.get("result") or out.stdout
 
 
-def _openai(prompt, cfg):
+def _openai(prompt, cfg, task):
     base = cfg.get("openai_base_url", "https://api.openai.com/v1").rstrip("/")
     headers = {"Content-Type": "application/json"}
     if secret("openai_api_key"):
@@ -152,7 +153,7 @@ def _openai(prompt, cfg):
     with urllib.request.urlopen(req, timeout=300) as r:
         d = json.load(r)
     u = d.get("usage") or {}
-    usage.record(kind="ai", task="scoring", provider="openai_compatible", model=cfg.get("openai_model"), cost_usd=None,
+    usage.record(kind="ai", task=task, provider="openai_compatible", model=cfg.get("openai_model"), cost_usd=None,
                  input_tokens=u.get("prompt_tokens"), output_tokens=u.get("completion_tokens"), ok=True)
     return d["choices"][0]["message"]["content"]
 

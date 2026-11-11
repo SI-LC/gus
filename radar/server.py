@@ -18,15 +18,17 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from radar.companies import COMPANIES, veto
-from radar.scan import DATA, JOBS, ROOT, role_type, where
+from radar.companies import veto
+from radar.jobs import same_company
+from radar.matching import role_type, where
+from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS
+from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES
 from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked, read
 
 CLI_HOSTS: set = set()
 PAGE = ROOT / "radar" / "cockpit.html"
-PROFILE = ROOT / "profile" / "profile.md"
 MAX_BODY = 5_000_000
 STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-32.png": ("icon-32.png", "image/png"), "/icon-180.png": ("icon-180.png", "image/png"),
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
@@ -38,8 +40,6 @@ MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "di
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 RUN_TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ")
-ROLE_STAGES = ["new", "shortlisted", "preparing", "applied", "interviewing", "closed", "skipped"]
-STAGES = set(ROLE_STAGES)
 
 
 def now():
@@ -61,8 +61,8 @@ def state():
     cfg = settings.load()
     places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
     jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location"), places), "role_type": role_type(j.get("title"), kinds),
-             "can_watch": bool(j.get("board")) and sources.same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
-    signals = read(DATA / "signals.json", {})
+             "can_watch": bool(j.get("board")) and same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
+    signals = read(SIGNALS, {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
     from radar import accounts as A, events as E
     from radar.network import distances, summary as net_summary
@@ -111,8 +111,8 @@ def state():
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
-        "labels": {"events": A.EVENT_LABEL, "event_types": E.TYPES, "outcomes": A.OUTCOMES, "person_stages": A.PERSON_STAGES,
-                   "role_stages": ROLE_STAGES},
+        "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES,
+                   "role_stages": JOB_STAGES},
         "health": {
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
@@ -277,7 +277,7 @@ def add_company(body):
         return {"error": "Needs a company name"}
     if careers and not re.match(r"https?://", careers):
         return {"error": "The careers address needs to start with http"}
-    if name.lower() in {n.lower() for n in read(COMPANIES, {})} or sources.same_company(name) in links.watched():
+    if name.lower() in {n.lower() for n in read(COMPANIES, {})} or same_company(name) in links.watched():
         return {"error": f"{name} is already on your list"}
     hit = resolve.resolve(name, careers)  # network, outside the lock
     if hit:
@@ -299,7 +299,7 @@ def update_job(body):
         j = store.get(body.get("id"))
         if not j:
             return {"error": "No such role"}
-        if body.get("stage") in STAGES and body["stage"] != j.get("stage"):
+        if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
             j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
             j["stage"] = body["stage"]
         if "note" in body:
@@ -429,7 +429,7 @@ class Handler(BaseHTTPRequestHandler):
                     if body.get("status") in ("todo", "done", "skipped"):
                         m["status"] = body["status"]
                         m["done_at"] = now() if body["status"] == "done" else None
-                    if body.get("outcome") in A.OUTCOMES + [None]:
+                    if body.get("outcome") in OUTCOMES + [None]:
                         m["outcome"], m["outcome_at"] = body.get("outcome"), now()
                     if "draft" in body:
                         m["draft"] = str(body["draft"])[:3000]
@@ -437,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
                 with locked(A.PEOPLE) as people:  # the person's stage follows the move
                     p = people.get(pid)
                     if p:
-                        order = A.PERSON_STAGES
+                        order = PERSON_STAGES
                         target = {"replied": "replied", "conversation": "conversation", "interview": "conversation",
                                   "referral": "referred"}.get(outcome) or ("contacted" if status == "done" else None)
                         if target and order.index(target) > order.index(p.get("stage", "mapped")):
@@ -456,7 +456,7 @@ class Handler(BaseHTTPRequestHandler):
                     p = people.get(body.get("id"))
                     if not p:
                         return self.send(200, {"error": "No such person"})
-                    if body.get("stage") in A.PERSON_STAGES:
+                    if body.get("stage") in PERSON_STAGES:
                         p["stage"] = body["stage"]
                         p.setdefault("history", []).append({"stage": body["stage"], "at": now()})
                     if "note" in body:

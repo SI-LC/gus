@@ -7,11 +7,11 @@ from pathlib import Path
 from unittest import mock
 
 from radar import sources
-from radar.scan import left_out, load_config
+from radar.matching import left_out, load_config
 from radar.settings import to_pattern
 from sample_search import loaded
 
-with mock.patch("radar.scan.load", loaded):
+with mock.patch("radar.matching.load", loaded):
     CFG = {**load_config(), "source_adzuna": True, "source_jsearch": True, "adzuna_pages_per_search": 3}
 TODAY = date.today()
 

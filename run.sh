@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One scan, run by the scheduler or the Scan now button. Claude is only used when something is new.
+# One scan: the Check roles button, and the first step of a full run. AI is only used when something is new.
 cd "$(dirname "$0")" || exit 1
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 mkdir -p data
@@ -20,5 +20,4 @@ python3 -m radar.companies health >>data/companies.log 2>&1
 python3 -m radar.events sync >>data/companies.log 2>&1  # roles scoring 7+ become events; closed ones stop counting
 python3 -m radar.prune --apply >>data/companies.log 2>&1  # old closed roles lose their text; old ignored signals and closed events are archived
 python3 -c "from radar.notify import release_held; release_held()"
-python3 -m radar.dashboard >/dev/null
 echo "$(date -u +%FT%TZ) ok" >> data/heartbeat.log

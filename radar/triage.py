@@ -1,7 +1,7 @@
 """Score untriaged roles against profile/profile.md using headless Claude Code,
 then notify for strong matches.
 
-Runs only when scan found something, so Claude is called rarely.
+Runs on every scan and scores whatever is waiting, so the model is only called when there's a new role.
 """
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ import sys
 
 from radar import ai, salary
 from radar.notify import notify
-from radar.scan import JOBS, ROOT, load_config
+from radar.matching import load_config
+from radar.paths import JOBS, ROOT
 from radar.store import locked, read
 
 PROMPT = (ROOT / "prompts" / "triage.md").read_text()

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from radar import scan
+from radar import boards, matching, paths, scan, web
 from sample_search import use_sample
 
 LIST = "https://boards-api.greenhouse.io/v1/boards/acme/jobs"
@@ -16,8 +16,10 @@ class RepeatRequests(unittest.TestCase):
     def setUp(self):
         use_sample(self)
         self.dir = Path(tempfile.mkdtemp())
-        for name, value in (("DATA", self.dir), ("JOBS", self.dir / "jobs.json"), ("LOOKED_UP", self.dir / "seen.json"), ("WATCHLIST", self.dir / "w.csv")):
-            patcher = mock.patch.object(scan, name, value)
+        jobs = self.dir / "jobs.json"
+        for module, name, value in ((scan, "DATA", self.dir), (boards, "DATA", self.dir), (scan, "JOBS", jobs), (boards, "JOBS", jobs),
+                                    (boards, "LOOKED_UP", self.dir / "seen.json"), (paths, "WATCHLIST", self.dir / "w.csv")):
+            patcher = mock.patch.object(module, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
         with (self.dir / "w.csv").open("w", newline="") as f:
@@ -33,10 +35,10 @@ class RepeatRequests(unittest.TestCase):
         return {"content": "<p>The ad</p>", "offices": [{"name": self.office}]}
 
     def scan(self):
-        scan._known, scan._looked_up = None, None
-        scan._listed.clear()
-        cfg = {**scan.load_config(), "source_hn": False}
-        with mock.patch.object(scan, "get_json", self.reply), mock.patch.object(scan, "load_config", lambda: cfg):
+        boards._known, boards._looked_up = None, None
+        boards.listed_ids.clear()
+        cfg = {**matching.load_config(), "source_hn": False}
+        with mock.patch.object(web, "get_json", self.reply), mock.patch.object(matching, "load_config", lambda: cfg):
             jobs, _errors = scan.fetch_all()
         self.addCleanup(setattr, scan, "_looked_up", None)
         self.addCleanup(setattr, scan, "_known", None)
@@ -58,14 +60,14 @@ class RepeatRequests(unittest.TestCase):
     def test_if_your_locations_change_the_role_is_fetched_for_its_ad(self):
         self.scan()
         looked = {"gh:acme:1": {"updated": self.updated, "location": "London"}}  # as if you'd moved to where it is
-        scan.LOOKED_UP.write_text(json.dumps(looked))
+        boards.LOOKED_UP.write_text(json.dumps(looked))
         jobs, details = self.scan()
         self.assertEqual((len(details), jobs[0]["description"]), (1, "The ad"))
 
     def test_a_board_that_didnt_answer_keeps_what_it_knows(self):
         self.scan()
-        scan.save_looked_up(set())
-        self.assertIn("gh:acme:1", json.loads(scan.LOOKED_UP.read_text()))
+        boards.save_looked_up(set())
+        self.assertIn("gh:acme:1", json.loads(boards.LOOKED_UP.read_text()))
 
 
 if __name__ == "__main__":

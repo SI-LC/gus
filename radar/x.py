@@ -15,11 +15,11 @@ import urllib.request
 from datetime import date
 
 from radar import usage
-from radar.scan import DATA, load_config
+from radar.matching import load_config
+from radar.paths import DATA, SIGNALS
 from radar.settings import load as settings_load
 from radar.store import read
 
-SIGNALS = DATA / "signals.json"
 STATE = DATA / "x_state.json"
 
 HIRING = '("hiring" OR "we\'re hiring" OR "my team is hiring" OR "join my team")'

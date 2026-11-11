@@ -19,8 +19,10 @@ from datetime import date, datetime, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 
-from radar.calendar_invites import is_invite, keep
-from radar.scan import DATA, load_config, strip_html
+from radar.calendar_invites import is_invite, save_meetings
+from radar.matching import load_config
+from radar.paths import DATA
+from radar.web import strip_html
 from radar.settings import to_pattern
 from radar.settings import secret
 from radar.store import locked
@@ -109,7 +111,7 @@ def fetch(box, cfg) -> list[dict]:
     return found
 
 
-def save(box, found) -> int:
+def save(box, found) -> tuple[int, int]:
     added = 0
     invites = []
     with locked(EMAILS) as emails:
@@ -134,7 +136,7 @@ def save(box, found) -> int:
             emails[key] = {"source": "email", "kind": "email", "title": m["subject"], "sender": m["sender"],
                            "text": body_text(msg)[:SNIPPET], "date": when, "status": "new"}
             added += 1
-    return added, keep(invites)
+    return added, save_meetings(invites)
 
 
 def test() -> dict:

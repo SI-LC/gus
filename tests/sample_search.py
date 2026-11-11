@@ -26,6 +26,6 @@ def loaded() -> dict:
 
 def use_sample(test) -> None:
     """Call in setUp."""
-    patcher = mock.patch("radar.scan.load", loaded)
+    patcher = mock.patch("radar.matching.load", loaded)
     patcher.start()
     test.addCleanup(patcher.stop)

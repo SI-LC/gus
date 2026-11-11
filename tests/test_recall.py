@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from radar import recall, scan
+from radar import matching, paths, recall
 from sample_search import use_sample
 
 
@@ -42,7 +42,7 @@ class Titles(unittest.TestCase):
 class Checking(unittest.TestCase):
     def setUp(self):
         use_sample(self)
-        self.cfg = scan.load_config()
+        self.cfg = matching.load_config()
 
     def check(self, expected, store=None, companies=None, watched=None, board=None):
         return recall.check([expected], store or {}, companies or {}, watched or {}, self.cfg,
@@ -115,8 +115,9 @@ class YourList(unittest.TestCase):
             p = mock.patch.object(recall, name, value)
             p.start()
             self.addCleanup(p.stop)
-        for name, value in (("DATA", self.dir), ("JOBS", self.dir / "jobs.json"), ("WATCHLIST", self.dir / "w.csv")):
-            p = mock.patch.object(scan, name, value)
+        for module, name, value in ((recall, "JOBS", self.dir / "jobs.json"), (recall, "COMPANIES", self.dir / "companies.json"),
+                                    (paths, "WATCHLIST", self.dir / "w.csv")):
+            p = mock.patch.object(module, name, value)
             p.start()
             self.addCleanup(p.stop)
 

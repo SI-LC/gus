@@ -8,9 +8,11 @@ id: shortlist-a-role
 requirement: When I shortlist a role, it moves to my pipeline and stays there.
 given: scanned
 check:
-  - open Roles
+  - open Role Inbox
   - click "Shortlist"
   - open Pipeline
+  - see "Senior Product Manager"
+  - reload
   - see "Senior Product Manager"
 judge: Is it clear the role has moved, and where to find it?
 ```

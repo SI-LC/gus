@@ -7,6 +7,7 @@ does the cheap, deterministic parts that run on every scan.
 Usage:
     python3 -m radar.companies sync               # every watchlist company has a record
     python3 -m radar.companies mentions           # flag watched companies named in new signals
+    python3 -m radar.companies health             # flag watched companies whose board keeps failing
     python3 -m radar.companies due                # list what the agent should (re)assess
     python3 -m radar.companies veto "Spotify"     # remove from watchlist, never re-add
 """
@@ -18,11 +19,9 @@ import re
 import sys
 from datetime import date, timedelta
 
-from radar.scan import DATA, WATCHLIST, watchlist_path
+from radar.paths import COMPANIES, DATA, SIGNALS, watchlist_path
 from radar.store import read
 
-COMPANIES = DATA / "companies.json"
-SIGNALS = DATA / "signals.json"
 BOARD_ERRORS = DATA / "board_errors.json"
 STALE_DAYS = 30
 NEIGHBOUR_DAYS = 28
@@ -131,7 +130,7 @@ def veto(name: str):
     c = load()
     rows = watchlist()
     keep = [r for r in rows if r["company"].lower() != name.lower()]
-    with WATCHLIST.open("w", newline="") as f:
+    with watchlist_path().open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ["company", "ats", "slug", "sector"])
         w.writeheader()
         w.writerows(keep)

@@ -10,7 +10,7 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from radar.scan import DATA
+from radar.paths import DATA
 
 LOG = DATA / "usage.jsonl"
 
