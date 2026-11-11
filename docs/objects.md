@@ -70,7 +70,7 @@ Something that happened at an account which makes it worth acting on now: the re
 | `account` | The account's name, as in `companies.json` |
 | `type` | `post_hiring`, `role_posted`, `leader_hire`, `funding`, `london_office`, `launch`, `mention` |
 | `summary`, `url`, `date` | One line, the link, and the real date (`YYYY-MM-DD`). All three required |
-| `source` | Where it came from: `signal:<id>`, `job:<id>`, `agent`, `account` (migrated), `move` (migrated), `manual` |
+| `source` | Where it came from: `signal:<id>`, `job:<id>`, `agent` (an agent's own research or web search), `account` (migrated), `move` (migrated), `manual` |
 | `job_id`, `closed` | On a `role_posted` event: the role, and the date its ad closed, after which it stops counting |
 | `notified` | When `radar.events alert` pushed it to your phone, or `role alert` if the role's own alert covered it |
 | `added` | |

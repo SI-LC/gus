@@ -716,3 +716,13 @@ class NothingReadsThem(unittest.TestCase):
             text = (prompts / name).read_text()
             self.assertIn("python3 -m radar.jobs add", text)
             self.assertIn("Never write a role into `data/jobs.json` by hand", text)
+
+    def test_the_playbooks_tell_agents_which_source_an_event_takes(self):
+        """An agent that found news by web search once wrote `web`, a role's source, which the schema turns down on an event."""
+        from pathlib import Path
+        from radar.schema import EVENT_SOURCES
+        prompts = Path(__file__).resolve().parent.parent / "prompts"
+        self.assertIn("agent", EVENT_SOURCES)
+        self.assertNotIn("web", EVENT_SOURCES)
+        self.assertIn("`agent` when you found it yourself", (prompts / "discover.md").read_text())
+        self.assertIn('"source": "agent"', (prompts / "watchlist.md").read_text())

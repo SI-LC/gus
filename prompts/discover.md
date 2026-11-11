@@ -39,7 +39,8 @@ a launch in the candidate's area, or someone posting about hiring), record it in
 `<account slug>:<type>:<YYYY-MM-DD>` (add `-2`, `-3` if that day already has one):
 `{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url",
 "date": "YYYY-MM-DD", "source": "signal:<signal id>"}`. Only with a link and a real date, and never twice for the same link at the same
-account. `london_office` is an old name: it means a new office in any of the candidate's target locations. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
+account. `source` is `signal:<signal id>` when a signal led you to it and `agent` when you found it yourself, by a web search say: no
+other value. `london_office` is an old name: it means a new office in any of the candidate's target locations. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
 `role_posted` event); don't record them. These events are what weekly moves are built on.
 
 ## 2. Companies
