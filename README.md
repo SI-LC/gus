@@ -37,7 +37,7 @@ Gus does one full run a day, or whenever you press **Full run**. It's one job, i
 7. **Score what's new**, and map the people at strong accounts
 8. **Plan moves:** pick this week's moves, once a week
 
-Scanning uses no AI. Scoring does, but only for new roles, and so does mapping people at an account with fresh news. **Check roles** does just step 1. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
+Scanning uses no AI. Scoring does, but only for new roles, and so does mapping people at an account with fresh news. **Check roles** does just step 1. While either runs, a strip at the top of the cockpit says what it's doing right now and how long it has taken, and when it ends, what it found. Everything is configurable in the cockpit, including the daily time, your provider and models, and a daily AI limit (0 turns AI off).
 
 **No event, no move.** A move is rejected in code unless it cites a dated, linked event from the last 30 days, at an A or B account, for a mapped person with evidence, and that company hasn't been contacted recently. Raw signals never count on their own: an agent has to turn one into an event first.
 

@@ -19,6 +19,7 @@ import time
 import traceback
 from datetime import date, datetime
 
+from radar import doing
 from radar.matching import load_config
 from radar.paths import DATA, JOBS, MOVES, ROOT
 from radar.store import read
@@ -42,9 +43,14 @@ def _save_schedule_state(s):
 
 
 def _check_roles():
-    """One scan, start to finish: everything in run.sh."""
+    """One scan, start to finish: everything in run.sh. Says what it found, as the full run does."""
+    before = _counts()
     out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=1800, cwd=ROOT)
-    return out.returncode == 0, (out.stdout + out.stderr).strip()[-300:] or "Scan finished"
+    if out.returncode:
+        return False, "Didn't finish: " + ((out.stdout + out.stderr).strip()[-250:] or f"exit code {out.returncode}")
+    after = _counts()
+    new = after["roles"] - before["roles"]
+    return True, f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox"
 
 
 def _sources():
@@ -136,6 +142,7 @@ def full_run():
             step.update(status="skipped", detail=reason)
             continue
         step["status"] = "running"
+        doing.say(step["name"])  # the step's own parts say more as they go
         try:
             good, detail = fn()
             step["status"] = "done" if good else "failed"
@@ -155,7 +162,7 @@ def full_run():
         _save_schedule_state(s)
     after = _counts()
     new = after["roles"] - before["roles"]
-    summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong, {_moves_this_week()} moves this week"
+    summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox, {_moves_this_week()} moves this week"
     summary += f". {sources_note}" if sources_note else ""
     return ok and not stop, f"{stop}. {summary}" if stop else summary
 
@@ -178,12 +185,14 @@ def worker():
     while True:
         job = _queue.get()
         progress.clear()
-        progress.update(job=job, steps=[])
+        progress.update(job=job, steps=[], started=datetime.now().isoformat(timespec="seconds"))
+        doing.say("Starting")
         try:
             ok, summary = _run_job(job)
         except Exception as e:
             ok, summary = False, f"{e}"
             traceback.print_exc()
+        doing.clear()
         with _lock:
             running.pop(job, None)
             last[job] = {"at": datetime.now().isoformat(timespec="seconds"), "ok": ok, "summary": summary,
@@ -241,7 +250,7 @@ def status() -> dict:
     with _lock:
         cfg = load_config()
         return {"running": dict(running), "last": {**s.get("results", {}), **last},
-                "progress": json.loads(json.dumps(progress)) if running else {},
+                "progress": {**json.loads(json.dumps(progress)), "now": doing.read()} if running else {},
                 "run_time": run_time(cfg), "enabled": bool(cfg.get("scheduler_enabled"))}
 
 
