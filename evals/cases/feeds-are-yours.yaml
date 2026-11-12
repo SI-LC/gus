@@ -1,0 +1,12 @@
+id: feeds-are-yours
+requirement: Every newsletter and feed Gus reads is one of mine, which I can turn off or remove; none is built in.
+given: scanned
+check:
+  - open Settings
+  - click "Newsletters"
+  - see "Your feeds"
+  - see "TechCrunch"
+  - see "Remove"
+  - see "Suggested"
+  - not see "Built in"
+judge: Is it clear that suggested feeds aren't read until I add them?
