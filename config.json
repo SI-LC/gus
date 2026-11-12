@@ -80,7 +80,7 @@
   "inbox_subjects": "interview*\nyour application\nnext steps\n*recruit*\n*hiring*\nopportunit*\nrole at",
   "my_employers": "",
   "feeds_disabled": "",
-  "feeds_extra": "",
+  "feeds_extra": "TechCrunch | https://techcrunch.com/feed/ | signals | 30\nHN Jobs | https://hnrss.org/jobs | jobs | 10",
 
   "notify_ntfy_server": "https://ntfy.sh",
   "quiet_hours": "22:00-07:00",

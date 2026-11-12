@@ -1,4 +1,4 @@
-"""Pull RSS/Atom feeds listed in feeds.csv into data/signals.json.
+"""Pull the RSS/Atom feeds you chose (Settings, Newsletters) into data/signals.json.
 
 Newsletters, funding news, job posts and community threads all become signals; the
 discovery agent turns them into account events, roles and people.
@@ -6,7 +6,6 @@ discovery agent turns them into account events, roles and people.
 """
 from __future__ import annotations
 
-import csv
 import html
 import json
 import re
@@ -16,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from radar.matching import load_config
-from radar.paths import DATA, ROOT, SIGNALS
+from radar.paths import DATA, SIGNALS
 from radar.web import fetch_bytes, strip_html
 from radar.store import read
 
@@ -56,7 +55,8 @@ def fetch(url: str, full: bool = False):
         }
 
 
-SUGGESTED = [  # checked to have working feeds
+SUGGESTED = [  # checked to have working feeds; nothing here is read until you add it
+    ("Lenny's Newsletter", "https://www.lennysnewsletter.com/feed", "newsletter"),
     ("The Pragmatic Engineer", "https://newsletter.pragmaticengineer.com/feed", "newsletter"),
     ("Product Growth (Aakash Gupta)", "https://www.news.aakashg.com/feed", "newsletter"),
     ("Product Compass", "https://www.productcompass.pm/feed", "newsletter"),
@@ -65,9 +65,18 @@ SUGGESTED = [  # checked to have working feeds
     ("Latent Space", "https://www.latent.space/feed", "newsletter"),
     ("Import AI", "https://importai.substack.com/feed", "newsletter"),
     ("One Useful Thing", "https://www.oneusefulthing.org/feed", "newsletter"),
+    ("Exponential View", "https://www.exponentialview.co/feed", "newsletter"),
+    ("Nonlinear News", "https://nonlinearnews.com/feed", "newsletter"),
     ("Not Boring", "https://www.notboring.co/feed", "newsletter"),
     ("The Generalist", "https://www.generalist.com/feed", "newsletter"),
     ("Stratechery", "https://stratechery.com/feed/", "newsletter"),
+    ("Sifted", "https://sifted.eu/feed", "signals"),
+    ("EU-Startups", "https://www.eu-startups.com/feed/", "signals"),
+    ("UKTN", "https://www.uktech.news/feed", "signals"),
+    ("job hunting sux", "https://www.jobhuntingsux.com/feed", "jobs"),
+    ("a16z Jobs", "https://a16zbuild.substack.com/feed", "jobs"),
+    ("Ali Rohde Jobs", "https://alirohdejobs.substack.com/feed", "jobs"),
+    ("next play", "https://nextplayso.substack.com/feed", "jobs"),
 ]
 
 
@@ -154,16 +163,17 @@ def is_signal(text: str, places=None) -> bool:
 
 
 def all_feeds():
-    """Built-in feeds (feeds.csv) plus yours from Settings, minus the ones you turned off."""
+    """Your feeds, from Settings, each marked on or off. A new install starts with the few in config.json; every one is
+    yours to turn off or remove."""
     from radar.settings import load
     cfg = load()
     off = {x.strip().lower() for x in (cfg.get("feeds_disabled") or "").splitlines() if x.strip()}
-    rows = [dict(r, builtin=True) for r in csv.DictReader((ROOT / "feeds.csv").open())]
+    rows = []
     for line in (cfg.get("feeds_extra") or "").splitlines():
         parts = [p.strip() for p in line.split("|")]
         if len(parts) >= 2 and parts[1].startswith("http"):
             rows.append({"name": parts[0], "url": parts[1], "kind": parts[2] if len(parts) > 2 else "signals",
-                         "every_min": parts[3] if len(parts) > 3 else "30", "builtin": False})
+                         "every_min": parts[3] if len(parts) > 3 else "30"})
     for r in rows:
         r["enabled"] = r["name"].lower() not in off
     return rows

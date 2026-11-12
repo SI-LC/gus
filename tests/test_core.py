@@ -107,6 +107,43 @@ class AppIcon(unittest.TestCase):
             self.assertIn(icon["src"], server.STATIC)
 
 
+class FeedsAreYours(unittest.TestCase):
+    """Gus has no feeds of its own. A new install starts with a few, and every feed can be turned off or removed."""
+
+    def setUp(self):
+        import json, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from radar import feeds, settings
+        self.feeds, self.settings = feeds, settings
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.user = Path(folder.name) / "settings.json"
+        patcher = mock.patch.object(settings, "USER", self.user)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.json = json
+
+    def test_a_new_install_starts_with_a_few_feeds_and_none_are_built_in(self):
+        rows = self.feeds.all_feeds()
+        self.assertEqual([r["name"] for r in rows], ["TechCrunch", "HN Jobs"])
+        self.assertTrue(all(r["enabled"] and "builtin" not in r for r in rows))
+
+    def test_a_starter_feed_can_be_removed(self):
+        self.feeds.remove_feed("TechCrunch")
+        self.assertEqual([r["name"] for r in self.feeds.all_feeds()], ["HN Jobs"])
+
+    def test_your_own_list_replaces_the_starter_feeds(self):
+        self.user.write_text(self.json.dumps({"feeds_extra": "Mine | https://mine.example/feed | jobs | 10", "feeds_disabled": "mine"}))
+        self.assertEqual([(r["name"], r["kind"], r["enabled"]) for r in self.feeds.all_feeds()], [("Mine", "jobs", False)])
+
+    def test_no_suggestion_is_read_until_you_add_it(self):
+        reading = {r["url"].rstrip("/") for r in self.feeds.all_feeds()}
+        offered = {u.rstrip("/") for _, u, _ in self.feeds.SUGGESTED}
+        self.assertFalse(reading & offered)
+        self.assertTrue(all(k in ("newsletter", "signals", "jobs", "community") for _, _, k in self.feeds.SUGGESTED))
+
+
 class CockpitStyles(unittest.TestCase):
     """The stylesheet Gus serves is built by Tailwind from radar/cockpit.css and the classes the page uses."""
 
