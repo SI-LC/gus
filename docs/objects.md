@@ -29,6 +29,7 @@ copy furthest along and moving its events and moves across.
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
 | `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role |
+| `readvertised` | When a new ad appeared for a role you're pursuing (shortlisted to interviewing): the same company, title and place on the board its old ad was on, or after that ad closed. The new ad is recorded under `also`, not added as a new role |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |

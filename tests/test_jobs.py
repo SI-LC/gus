@@ -197,3 +197,60 @@ class AddedByAnAgent(unittest.TestCase):
     def test_a_role_without_its_own_address_is_turned_down(self):
         for change in ({"url": "revolut.example/careers"}, {"url": ""}, {"company": ""}):
             self.assertEqual(self.add(**change)[0][0][0], "no")
+
+
+class AdvertisedAgain(unittest.TestCase):
+    """A role you're pursuing, put up again, is your application and not a new role in the inbox."""
+
+    def setUp(self):
+        self.store = {"gh:acme:1": {"id": "gh:acme:1", "company": "Acme", "title": "Senior Product Manager", "location": "London",
+                                    "stage": "applied", "first_seen": "2026-10-01T09:00:00"}}
+        self.again = {"id": "gh:acme:2", "company": "Acme", "title": "Senior Product Manager", "location": "London",
+                      "url": "https://boards.example/acme/2", "source": "board"}
+
+    def test_a_new_ad_for_the_role_you_applied_for_is_that_role(self):
+        self.assertEqual(J.find_match(self.store, self.again), "gh:acme:1")
+
+    def test_it_is_still_that_role_after_the_first_ad_closed(self):
+        self.store["gh:acme:1"]["ad_closed"] = "2026-10-20T09:00:00"
+        self.assertEqual(J.find_match(self.store, self.again), "gh:acme:1")
+
+    def test_every_stage_from_shortlisted_to_interviewing_counts(self):
+        for stage in ("shortlisted", "preparing", "applied", "interviewing"):
+            self.store["gh:acme:1"]["stage"] = stage
+            self.assertEqual(J.find_match(self.store, self.again), "gh:acme:1", stage)
+
+    def test_a_role_you_have_not_chosen_stays_two_roles_on_one_board(self):
+        for stage in ("new", "skipped", "closed"):
+            self.store["gh:acme:1"]["stage"] = stage
+            self.assertIsNone(J.find_match(self.store, self.again), stage)
+
+    def test_the_same_title_in_another_city_is_another_opening(self):
+        self.assertIsNone(J.find_match(self.store, {**self.again, "location": "Berlin"}))
+
+    def test_the_employers_own_vacancy_numbers_decide_where_it_gives_them(self):
+        self.store["gh:acme:1"]["ref"] = "R100"
+        self.assertIsNone(J.find_match(self.store, {**self.again, "ref": "R200"}))
+        self.assertEqual(J.find_match(self.store, {**self.again, "ref": "R100"}), "gh:acme:1")
+
+    def test_a_different_title_at_the_company_is_a_new_role(self):
+        self.assertIsNone(J.find_match(self.store, {**self.again, "title": "Product Lead"}))
+
+    def test_when_it_was_advertised_again_is_kept_once(self):
+        mine = self.store["gh:acme:1"]
+        J.absorb(mine, self.again, "2026-11-12T08:00:00")
+        self.assertEqual(mine["readvertised"], "2026-11-12T08:00:00")
+        self.assertEqual(mine["also"]["gh:acme:2"]["url"], "https://boards.example/acme/2")
+        J.absorb(mine, self.again, "2026-11-13T08:00:00")  # the next scan sees the same ad
+        self.assertEqual(mine["readvertised"], "2026-11-12T08:00:00")
+
+    def test_the_same_ad_listed_on_a_job_site_is_not_advertised_again(self):
+        mine = self.store["gh:acme:1"]
+        J.absorb(mine, {**self.again, "id": "adzuna:99", "source": "adzuna"}, "2026-11-12T08:00:00")
+        self.assertNotIn("readvertised", mine)
+
+    def test_a_role_still_in_the_inbox_is_never_marked(self):
+        mine = {**self.store["gh:acme:1"], "stage": "new", "ref": "R1"}
+        J.absorb(mine, {**self.again, "ref": "R1"}, "2026-11-12T08:00:00")
+        self.assertNotIn("readvertised", mine)
+

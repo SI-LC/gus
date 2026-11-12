@@ -45,7 +45,7 @@ Scanning uses no AI. Scoring does, but only for new roles, and so does mapping p
 
 A small web app, and the place you work. Each page is one object from the list above:
 
-- **Role Inbox:** new roles scored against your profile, best first, filtered by place and type. Shortlist or skip each one
+- **Role Inbox:** new roles scored against your profile, best first, filtered by place and type. Shortlist or skip each one. A company with three or more roles shows its best, with the rest a click away and one button to skip them all; the same role in several places is one row; and a role at a company where you already have one in play says so. A role you're pursuing that is advertised again joins your application in Pipeline, marked, and doesn't come back as new
 - **Pipeline:** every conversation and application by stage, and the page the cockpit opens on
 - **To do:** this week's moves, each with the event behind it, your angle and a draft, plus the funnel from events to interviews
 - **Companies:** your accounts by tier, with what's happened at each and who to talk to there. Add a company, set its tier, mark the ones you love, add news Gus missed or dismiss news that isn't

@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from radar.companies import veto
-from radar.jobs import same_company
+from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES
@@ -61,6 +61,7 @@ def state():
     cfg = settings.load()
     places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
     jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location"), places), "role_type": role_type(j.get("title"), kinds),
+             "co": role_key(j)[0], "tk": role_key(j)[1],  # the same employer, and the same title, however each ad spells them
              "can_watch": bool(j.get("board")) and same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
     signals = read(SIGNALS, {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
