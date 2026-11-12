@@ -581,20 +581,19 @@ const SETTINGS_TABS = [
     <section class="group"><h2>Details</h2>${fieldsOf("Source details")}</section>`],
   ["social", "Social", () => `<section class="group"><h2>Social media</h2><p class="sub">Catch people posting about roles you want.</p>${fieldsOf("Social")}</section>`],
   ["feeds", "Newsletters", () => {
-    const yours = SET.feeds.filter(f => !f.builtin), built = SET.feeds.filter(f => f.builtin);
+    const yours = SET.feeds;
     const have = new Set(SET.feeds.map(f => f.url.replace(/\/$/, "")));
     const sugg = SET.suggested.filter(s => !have.has(s.url.replace(/\/$/, "")));
     const row = f => `<tr><td><b>${esc(f.name)}</b><div class="sub break-all">${esc(f.url)}</div></td><td class="hide-sm"><span class="pill">${esc(f.kind)}</span></td>
       <td class="whitespace-nowrap"><input type="checkbox" class="switch" aria-label="${esc(f.name)} on" ${f.enabled ? "checked" : ""} onchange="toggleFeed(${jsq(f.name)}, this.checked)">
-      ${f.builtin ? "" : `<button onclick="removeFeed(${jsq(f.name)})">Remove</button>`}</td></tr>`;
+      <button onclick="removeFeed(${jsq(f.name)})">Remove</button></td></tr>`;
     return `<section class="group"><h2>Add a newsletter or feed</h2>
       <p class="sub">Add what you read and Gus picks out jobs and company news. Paste a name, link or RSS feed.</p>
       <div class="row mt-3"><input type="text" id="feed-add" placeholder="lenny, oneusefulthing.org, medium.com/@name" class="flex-1 min-w-[220px]" onkeydown="if(event.key==='Enter')addFeed()">
       <select id="feed-kind" aria-label="Kind"><option value="newsletter">Newsletter</option><option value="signals">News (keyword-filtered)</option><option value="jobs">Job posts</option><option value="community">Community</option></select>
       <button class="primary" onclick="addFeed()">Add</button></div><div id="feed-msg" class="sub mt-1.5"></div></section>
-      ${sugg.length ? `<section class="group"><h2>Suggested for PMs</h2><div class="row">${sugg.map(s => `<button onclick="addFeed(${jsq(s.url)})">+ ${esc(s.name)}</button>`).join("")}</div></section>` : ""}
+      ${sugg.length ? `<section class="group"><h2>Suggested</h2><div class="row">${sugg.map(s => `<button onclick="addFeed(${jsq(s.url)}, ${jsq(s.kind)})">+ ${esc(s.name)}</button>`).join("")}</div></section>` : ""}
       <section class="group"><h2>Your feeds · ${yours.length}</h2>${yours.length ? `<table>${yours.map(row).join("")}</table>` : `<div class="sub">None yet.</div>`}</section>
-      <section class="group"><h2>Built in · ${built.length}</h2><table>${built.map(row).join("")}</table></section>
       <section class="group"><h2>Other sources</h2>${fieldsOf("Feeds", ["feeds_disabled", "feeds_extra"])}</section>`;
   }],
   ["network", "Network", () => {
@@ -640,12 +639,12 @@ const SETTINGS_TABS = [
   ["appearance", "Appearance", () => `<section class="group"><h2>Appearance</h2>${themeField()}</section>`],
 ];
 const jsq = s => esc(JSON.stringify(String(s)));
-async function addFeed(text) {
+async function addFeed(text, kind) {
   const box = $("feed-add"), msg = $("feed-msg");
   text = text || (box && box.value.trim());
   if (!text) { if (msg) msg.innerHTML = '<span class="bad">Paste a newsletter name or link first.</span>'; return; }
   if (msg) msg.textContent = "Looking for the feed…";
-  const d = await post("/api/feeds/add", { text, kind: $("feed-kind") ? $("feed-kind").value : "newsletter" });
+  const d = await post("/api/feeds/add", { text, kind: kind || ($("feed-kind") ? $("feed-kind").value : "newsletter") });
   if (!d) { if (msg) msg.textContent = ""; return; }
   SET = d; toast("Added " + d.title); render(true);
 }

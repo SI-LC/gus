@@ -115,7 +115,7 @@ SCHEMA = [
     ("source_reddit", "Reddit", "bool", "Social", "Needs a free Reddit 'script' app: client id and secret in the Keys tab."),
     ("social_reddit_subs", "Subreddits", "lines", "Social", "Without r/."),
 
-    ("feeds_disabled", "Feeds turned off", "lines", "Feeds", "Names of built-in feeds to skip, one per line."),
+    ("feeds_disabled", "Feeds turned off", "lines", "Feeds", "Names of feeds to skip, one per line."),
     ("feeds_extra", "Your feeds", "lines", "Feeds",
      "One per line: Name | https://feed.url | kind | minutes. kind is signals (keyword-filtered), newsletter, jobs (reads the full post) or community."),
 

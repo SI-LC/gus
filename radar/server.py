@@ -135,7 +135,7 @@ def settings_payload():
         "models": settings.CLAUDE_MODELS,
         "secret_keys": {k: {"label": l, "help": h} for k, (l, h) in settings.SECRET_KEYS.items()},
         "secrets": settings.secrets_masked(),
-        "feeds": [{k: f[k] for k in ("name", "url", "kind", "enabled", "builtin")} for f in all_feeds()],
+        "feeds": [{k: f[k] for k in ("name", "url", "kind", "enabled")} for f in all_feeds()],
         "suggested": [{"name": n, "url": u, "kind": k} for n, u, k in SUGGESTED],
         "run": service.status(),
         "sources": sources.status(),
