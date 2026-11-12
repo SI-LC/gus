@@ -1,0 +1,12 @@
+{
+ "status": 200,
+ "error": {
+  "message": "",
+  "body": ""
+ },
+ "data": {
+  "id": 1970393557000001,
+  "name": "Principal Product Manager, Made-up Platform",
+  "jobDescription": "<b>Overview</b><br><p>Made-up ad for the tests. You will own the platform roadmap.</p><b>Qualifications</b><ul><li>Product management experience</li></ul>"
+ }
+}

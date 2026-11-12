@@ -1,0 +1,78 @@
+{
+ "status": 200,
+ "error": {
+  "message": "",
+  "body": ""
+ },
+ "data": {
+  "positions": [
+   {
+    "id": 1970393557070385,
+    "displayJobId": "200066642",
+    "name": "Senior Business Development Manager",
+    "locations": [
+     "United Kingdom, London, London"
+    ],
+    "standardizedLocations": [
+     "London, England, GB"
+    ],
+    "postedTs": 1794433161,
+    "solrScore": null,
+    "stars": 0,
+    "department": "Business Development",
+    "creationTs": 1794309172,
+    "isHot": 0,
+    "workLocationOption": "onsite",
+    "locationFlexibility": null,
+    "atsJobId": "200066642",
+    "positionUrl": "/careers/job/1970393557070385"
+   },
+   {
+    "id": 1970393557000001,
+    "displayJobId": "200000001",
+    "name": "Principal Product Manager, Made-up Platform",
+    "locations": [
+     "United Kingdom, London, London",
+     "United Kingdom, Gloucestershire, Cheltenham"
+    ],
+    "standardizedLocations": [
+     "London, England, GB",
+     "Cheltenham, England, GB"
+    ],
+    "postedTs": 1794418212,
+    "solrScore": null,
+    "stars": 0,
+    "department": "Security Research",
+    "creationTs": 1793946793,
+    "isHot": 0,
+    "workLocationOption": "onsite",
+    "locationFlexibility": null,
+    "atsJobId": "200000001",
+    "positionUrl": "/careers/job/1970393557000001"
+   },
+   {
+    "id": 1970393557070382,
+    "displayJobId": "200066641",
+    "name": "Cambridge Internship Program: MSRC AI Security Research",
+    "locations": [
+     "United Kingdom, Cambridgeshire, Cambridge"
+    ],
+    "standardizedLocations": [
+     "Cambridge, England, GB"
+    ],
+    "postedTs": 1794413388,
+    "solrScore": null,
+    "stars": 0,
+    "department": "Research Sciences",
+    "creationTs": 1794307956,
+    "isHot": 0,
+    "workLocationOption": "onsite",
+    "locationFlexibility": null,
+    "atsJobId": "200066641",
+    "positionUrl": "/careers/job/1970393557070382"
+   }
+  ],
+  "count": 3,
+  "sortBy": "timestamp"
+ }
+}
