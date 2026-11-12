@@ -38,6 +38,9 @@ The scan also runs `tests/test_smoke.py`, a fresh install going through a full r
 checks in `evals/cases/`, in a real browser. When a change adds or alters something the candidate relies on, add or
 update a case (`evals/README.md`).
 
+The cockpit's styles are `radar/cockpit.css`, built by Tailwind into `radar/static/cockpit.css`. After changing that file, or a
+class in `radar/cockpit.html`, run `python3 -m radar.css` and commit the built file: the tests fail if it's stale.
+
 Then deploy from `main` with `bash deploy/deploy.sh` (add `minor` or `major` for a bigger version bump): it runs the
 code scan, updates the Pi, checks it's working and publishes a numbered GitHub release, so the latest release is
 what's on the Pi. If the new commit doesn't work, the Pi goes back to the last commit by itself and no release is

@@ -32,12 +32,12 @@ PAGE = ROOT / "radar" / "cockpit.html"
 MAX_BODY = 5_000_000
 STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-32.png": ("icon-32.png", "image/png"), "/icon-180.png": ("icon-180.png", "image/png"),
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
-          "/favicon.ico": ("icon-32.png", "image/png")}
+          "/favicon.ico": ("icon-32.png", "image/png"), "/cockpit.css": ("cockpit.css", "text/css; charset=utf-8")}
 MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "display": "standalone",
-                       "background_color": "#0b0b0a", "theme_color": "#0b0b0a",
+                       "background_color": "#08090a", "theme_color": "#08090a",
                        "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
                                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}).encode()
-CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; "
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 RUN_TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ")
 

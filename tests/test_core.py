@@ -107,6 +107,31 @@ class AppIcon(unittest.TestCase):
             self.assertIn(icon["src"], server.STATIC)
 
 
+class CockpitStyles(unittest.TestCase):
+    """The stylesheet Gus serves is built by Tailwind from radar/cockpit.css and the classes the page uses."""
+
+    def test_the_built_stylesheet_matches_its_source(self):
+        from radar import css
+        self.assertEqual(css.built_from(), css.stamp(),
+                         "radar/cockpit.css or a class in radar/cockpit.html changed: rebuild with python3 -m radar.css")
+
+    def test_the_page_loads_the_stylesheet_gus_serves(self):
+        from radar import server
+        self.assertIn('<link rel="stylesheet" href="/cockpit.css">', server.PAGE.read_text())
+        self.assertIn("/cockpit.css", server.STATIC)
+        self.assertIn("style-src 'self'", server.CSP)
+
+    def test_a_change_to_the_pages_script_needs_no_rebuild(self):
+        from unittest import mock
+        from radar import css
+        before = css.stamp()
+        page = css.PAGE.read_text()
+        with mock.patch.object(css, "PAGE", mock.Mock(read_text=lambda: page.replace("let S =", "let  S ="))):
+            self.assertEqual(css.stamp(), before)
+        with mock.patch.object(css, "PAGE", mock.Mock(read_text=lambda: page.replace('class="toast"', 'class="toast mt-8"'))):
+            self.assertNotEqual(css.stamp(), before)
+
+
 class Schedule(unittest.TestCase):
     CFG = {"run_time": "08:00"}
 
