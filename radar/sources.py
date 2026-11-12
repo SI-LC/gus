@@ -21,6 +21,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
+from radar import doing
 from radar import jobs as J
 from radar.jobs import same_company, same_title  # one definition, shared with scan and links
 from radar.matching import left_out, load_config, matches
@@ -319,6 +320,7 @@ def collect(name, cfg, st, limit, age):
             if time.monotonic() - started > TIME_LIMIT:
                 run["stopped"] = "stopped: taking too long"
                 return run
+            doing.say(f"{LABEL[name]}: searching \"{term}\", page {page} ({run['spent'] + 1} of at most {limit} requests)")
             spend(st, name)  # before the call: a request that times out may still have counted
             run["spent"] += 1
             try:

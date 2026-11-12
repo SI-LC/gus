@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 
-from radar import ai, salary
+from radar import ai, doing, salary
 from radar.notify import notify
 from radar.matching import load_config
 from radar.paths import JOBS, ROOT
@@ -88,6 +88,7 @@ def main():
         todo = [j for j in store.values() if j.get("score") is None and j["id"] not in seen]
         if not todo:
             return
+        doing.say(f"Scoring new roles with AI: {len(todo)} waiting, {min(15, len(todo))} at a time")
         seen |= {j["id"] for j in todo[:15]}  # a role Claude skips isn't retried forever
         score_batch(profile_path, todo)
 

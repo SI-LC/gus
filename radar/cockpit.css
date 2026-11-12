@@ -88,9 +88,23 @@
   .ticker b { color: var(--color-ink); font-weight: 500; }
   .banner { padding: 10px 32px; background: var(--color-accent-soft); border-bottom: 1px solid var(--color-accent); color: var(--color-ink); }
   .banner[hidden] { display: none; } .banner a { color: var(--color-accent); font-weight: 600; }
-  .progress { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 10px 32px; border-bottom: 1px solid var(--color-line); background: var(--color-surface); font: 12px var(--font-mono); }
-  .progress[hidden] { display: none; } .step { color: var(--color-muted); } .step.running { color: var(--color-accent); font-weight: 600; }
+  /* A run in progress, then what it found: what it's doing now, the step, time so far, a moving bar */
+  .progress { position: relative; overflow: hidden; padding: 12px 32px 14px; border-bottom: 1px solid var(--color-line); background: var(--color-accent-soft); font-size: 14px; color: var(--color-ink); }
+  .progress[hidden] { display: none; } .progress.ok { background: var(--color-surface); } .progress.bad { border-left: 3px solid var(--color-bad); }
+  .prog-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .prog-head b { font-weight: 600; } .prog-head .sub { font: 12px var(--font-mono); color: var(--color-muted); }
+  .prog-head .spacer { flex: 1; } .prog-head button { min-height: 26px; padding: 3px 10px; font: 500 12px var(--font-mono); }
+  .prog-mark { font: 700 13px var(--font-mono); color: var(--color-accent); } .progress.ok .prog-mark { color: var(--color-hi); } .progress.bad .prog-mark { color: var(--color-bad); }
+  .prog-mark.beat { animation: pulse 1.4s infinite; }
+  .prog-now { margin-top: 6px; font: 13px var(--font-mono); } .prog-now b { font-weight: 600; }
+  .prog-what { margin-top: 4px; color: var(--color-muted); font-size: 13px; }
+  .prog-steps { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font: 12px var(--font-mono); }
+  .step { color: var(--color-muted); } .step.running { color: var(--color-accent); font-weight: 600; }
   .step.done { color: var(--color-hi); } .step.failed { color: var(--color-bad); }
+  .prog-bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--color-accent); transition: width .5s; }
+  .prog-bar.ind { width: 30%; animation: slide 1.6s ease-in-out infinite; }
+  @keyframes slide { from { left: -30%; } to { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .prog-bar.ind { animation: none; width: 100%; opacity: .5; } .prog-mark.beat { animation: none; } }
   .scan-now { min-height: 28px; padding: 3px 12px; font: 500 12px var(--font-mono); flex: none; }
   .scan-now.run { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
   .live { color: var(--color-ink); } .live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px; background: var(--color-accent); animation: pulse 2s infinite; }

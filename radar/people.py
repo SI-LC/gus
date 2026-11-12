@@ -13,7 +13,7 @@ import sys
 import urllib.parse
 from datetime import date, timedelta
 
-from radar import ai
+from radar import ai, doing
 from radar.accounts import brief, person_id
 from radar.paths import COMPANIES, PEOPLE
 from radar.store import read
@@ -102,7 +102,8 @@ def main():
     except ai.BudgetReached as e:
         print(f"  people mapping skipped: {e}")
         return
-    for name in targets[:4]:  # a few per run keeps each scan quick
+    for n, name in enumerate(targets[:4], 1):  # a few per run keeps each scan quick
+        doing.say(f"Mapping people at {name} ({n} of {len(targets[:4])})")
         with locked(COMPANIES) as companies:  # hard accounts wait a week, rather than being searched every run
             companies.setdefault(name, {})["people_checked"] = str(date.today())
         try:

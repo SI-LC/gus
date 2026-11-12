@@ -239,6 +239,42 @@ class FullRun(unittest.TestCase):
         self.assertEqual(steps["Plan moves"], "skipped")
 
 
+class RunProgress(unittest.TestCase):
+    """While a scan runs, the cockpit can say what it's doing, and when it ends, what it found."""
+
+    def check(self, returncode, counts):
+        import subprocess
+        from unittest import mock
+        from radar import service
+        done = subprocess.CompletedProcess([], returncode, stdout="", stderr="board timed out")
+        with mock.patch.object(service.subprocess, "run", return_value=done), \
+             mock.patch.object(service, "_counts", side_effect=counts):
+            return service._check_roles()
+
+    def test_check_roles_says_what_it_found(self):
+        ok, summary = self.check(0, [{"roles": 10, "strong": 1}, {"roles": 13, "strong": 2}])
+        self.assertTrue(ok)
+        self.assertEqual(summary, "3 new roles, 2 strong in your inbox")
+
+    def test_check_roles_says_when_it_failed(self):
+        ok, summary = self.check(1, [{"roles": 10, "strong": 1}])
+        self.assertFalse(ok)
+        self.assertIn("Didn't finish", summary)
+        self.assertIn("board timed out", summary)
+
+    def test_status_carries_what_is_happening_now(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from radar import doing, service
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(doing, "DATA", Path(d)), \
+                mock.patch.object(doing, "NOW", Path(d) / "doing.txt"), mock.patch.dict(service.running, {"scan": "2026-11-12T10:00:00"}):
+            doing.say("Reading job boards: 3 of 9 done")
+            self.assertEqual(service.status()["progress"]["now"], "Reading job boards: 3 of 9 done")
+            doing.clear()
+            self.assertEqual(service.status()["progress"]["now"], "")
+
+
 class Budget(unittest.TestCase):
     def test_zero_blocks_every_run(self):
         from unittest import mock

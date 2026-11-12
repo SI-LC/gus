@@ -1,0 +1,13 @@
+id: scan-progress
+requirement: While a scan runs, I can see what it is doing right now and how long it has taken, and when it ends I can see what it found until I put it away.
+given: scanned
+check:
+  - click "Check roles" in the status bar
+  - progress says "Checking roles"
+  - progress says "so far"
+  - progress says "Now:"
+  - progress says "Check roles finished"
+  - progress says "new role"
+  - click "Dismiss" in the progress
+  - no progress
+judge: Could I tell at a glance that a scan is running, what it's on, and what it found?

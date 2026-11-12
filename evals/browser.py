@@ -16,6 +16,8 @@ from evals.world import World
 
 CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
+RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
+PLACES = {"status bar": "#ticker", "progress": "#progress"}
 GIVENS = ("empty", "signed out", "scanned", "scanned, signed out")
 
 
@@ -39,6 +41,12 @@ def step(page, text):
     elif m := re.fullmatch(r'"(.+)" appears before "(.+)"', text):
         shown = page.locator("#main").inner_text()
         assert m[1] in shown and m[2] in shown and shown.index(m[1]) < shown.index(m[2]), f"{m[1]!r} isn't before {m[2]!r}"
+    elif m := re.fullmatch(r'progress says "(.+)"', text):  # the strip under the status bar while a scan runs, and after
+        page.locator("#progress:not([hidden])").get_by_text(m[1]).first.wait_for(timeout=RUN_MS)
+    elif text == "no progress":
+        page.locator("#progress[hidden]").wait_for(state="attached", timeout=WAIT_MS)
+    elif m := re.fullmatch(r'click "(.+)" in the (status bar|progress)', text):
+        page.locator(PLACES[m[2]]).get_by_text(m[1], exact=True).first.click()
     elif m := re.fullmatch(r'click "(.+)"', text):
         page.locator("#main").get_by_text(m[1], exact=True).first.click()
     elif m := re.fullmatch(r'pick "(.+)"', text):
