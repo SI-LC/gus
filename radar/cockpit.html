@@ -63,6 +63,7 @@ async function load() {
   if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
   S = await r.json(); checkRoleFilters();
   if (S.labels.role_stages) PIPE = S.labels.role_stages.filter(st => !["new", "skipped"].includes(st));
+  if ((S.running || []).length) watchRun();
   if (S.setup.needed && location.hash !== "#welcome") location.hash = "#welcome";
   else if (location.hash === "#welcome" && !S.setup.can_run) location.hash = "#pipeline";
   render();
@@ -735,8 +736,8 @@ function drawTicker() {
   const lastRun = ((S.last_runs || {}).run || {}).at || h.last_scan, fresh = lastRun && Date.now() - new Date(lastRun) < 26 * 36e5;
   drawProgress();
   const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
-  $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')">${busy === "run" ? "Running…" : "Full run"}</button>
-    <button class="scan-now" title="One scan: reads your job boards, feeds and email, scores new roles and maps people where there's fresh news. None of the research steps." onclick="startRun('scan')">${busy === "scan" ? "Checking…" : "Check roles"}</button>
+  $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')"${busy === "run" ? " disabled" : ""}>${busy === "run" ? "Running…" : "Full run"}</button>
+    <button class="scan-now" title="One scan: reads your job boards, feeds and email, scores new roles and maps people where there's fresh news. None of the research steps." onclick="startRun('scan')"${busy === "scan" ? " disabled" : ""}>${busy === "scan" ? "Checking…" : "Check roles"}</button>
     <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
     <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
     <span><b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
@@ -808,30 +809,68 @@ async function setDegree(id, value) {
   if (await post("/api/person", { id, degree: sel ? Number(sel) : null, via })) { toast(sel ? "Distance confirmed" : "Cleared"); load(); }
 }
 const STEP_MARK = { done: "✓", running: "●", failed: "✗", skipped: "–", waiting: "○" };
-function drawProgress() {
-  const el = $("progress"), p = S.progress || {}, r = (S.last_runs || {}).run, steps = (p.steps && p.steps.length) ? p.steps : null;
-  const show = steps || ((S.running || []).length ? [] : null);
-  el.hidden = !show;
-  if (!show) return;
-  el.innerHTML = `<b>${p.job === "scan" ? "Check roles: scanning and scoring" : p.job === "sources" ? "Job sources" : "Full run"}</b>` + show.map(s =>
-    `<span class="step ${esc(s.status)}" title="${esc(s.detail)}">${STEP_MARK[s.status] || ""} ${esc(s.name)}${s.name === "Job sources" && s.detail ? `: ${esc(s.detail)}` : ""}</span>`).join("");
+const JOB = {  // what each job is called while it runs, once it's done, and what it's doing
+  scan: { now: "Checking roles", done: "Check roles", what: "Reading your job boards, feeds and email, then scoring anything new. Usually about 2 minutes.", link: ["#roles", "Open Role Inbox"] },
+  sources: { now: "Checking job sources", done: "Job sources check", what: "Asking the job sources that are due for new roles, then scoring them. This can take a while.", link: ["#roles", "Open Role Inbox"] },
+  run: { now: "Full run", done: "Full run", what: "Checks for roles, then finds and refreshes companies and plans your moves.", link: ["#week", "See this week's moves"] },
+};
+const jobName = (j, k) => (JOB[j] || {})[k] || j;
+const elapsed = iso => {
+  const t = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000)), m = Math.floor(t / 60), pad = n => String(n).padStart(2, "0");
+  return t < 60 ? t + "s" : m < 60 ? `${m}m ${pad(t % 60)}s` : `${Math.floor(m / 60)}h ${pad(m % 60)}m`;
+};
+function seenRun() { try { return localStorage.getItem("radar-run-seen") || ""; } catch (e) { return ""; } }
+function dismissRun(at) { try { localStorage.setItem("radar-run-seen", at); } catch (e) {} drawProgress(); }
+function lastFinished() {  // the most recent job to finish, if it's recent and you haven't put it away
+  const [job, r] = Object.entries(S.last_runs || {}).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at)))[0] || [];
+  return r && r.at && Date.now() - new Date(r.at) < 30 * 6e4 && r.at > seenRun() ? { job, ...r } : null;
 }
+function drawProgress() {
+  const el = $("progress"), running = S.running || [], p = S.progress || {};
+  if (running.length) {
+    const job = p.job || running[0], steps = p.steps || [], queued = running.filter(j => j !== job);
+    const at = steps.findIndex(x => x.status === "running"), left = steps.filter(x => x.status === "waiting").length;
+    el.className = "progress"; el.hidden = false;
+    document.title = `● ${jobName(job, "now")} · Gus`;
+    el.innerHTML = `<div class="prog-head"><span class="prog-mark beat" aria-hidden="true">●</span><b>${esc(jobName(job, "now"))}</b>
+        ${steps.length && at >= 0 ? `<span class="sub">step ${at + 1} of ${steps.length}: ${esc(steps[at].name)}</span>` : ""}
+        ${p.started ? `<span class="sub">· <span id="prog-elapsed">${elapsed(p.started)}</span> so far</span>` : `<span class="sub">· starting</span>`}
+        ${queued.length ? `<span class="sub">· then ${esc(queued.map(j => jobName(j, "done")).join(", "))}</span>` : ""}</div>
+      ${p.now && p.now !== (steps[at] || {}).name ? `<div class="prog-now">Now: <b>${esc(p.now)}</b></div>` : ""}
+      <div class="prog-what">${esc(jobName(job, "what"))} You can keep using Gus meanwhile; this updates by itself.</div>`
+      + (steps.length ? `<div class="prog-steps">${steps.map(x => `<span class="step ${esc(x.status)}" title="${esc(x.detail)}">${STEP_MARK[x.status] || ""} ${esc(x.name)}${x.name === "Job sources" && x.detail ? `: ${esc(x.detail)}` : ""}</span>`).join("")}</div>` : "")
+      + (steps.length ? `<div class="prog-bar" style="width:${Math.round(100 * (steps.length - left - (at >= 0 ? 0.5 : 0)) / steps.length)}%"></div>` : `<div class="prog-bar ind"></div>`);
+    return;
+  }
+  document.title = "Gus";
+  const r = lastFinished();
+  el.hidden = !r;
+  if (!r) return;
+  const failed = (r.steps || []).filter(x => x.status === "failed"), [href, label] = (JOB[r.job] || {}).link || ["#roles", "Open Role Inbox"];
+  el.className = "progress " + (r.ok ? "ok" : "bad");
+  el.innerHTML = `<div class="prog-head"><span class="prog-mark" aria-hidden="true">${r.ok ? "✓" : "✗"}</span>
+      <b>${esc(jobName(r.job, "done"))} ${r.ok ? "finished" : "didn't finish cleanly"}</b><span class="sub">${ago(r.at)}</span>
+      <span class="spacer"></span>${r.ok ? `<a href="${href}" onclick="dismissRun(${jsq(r.at)})">${label}</a>` : ""}
+      <button onclick="dismissRun(${jsq(r.at)})" aria-label="Dismiss">Dismiss</button></div>
+    <div class="prog-what">${esc(r.summary || "")}${failed.length ? `. Failed: ${esc(failed.map(x => x.name + (x.detail ? ` (${x.detail})` : "")).join("; "))}` : ""}</div>`;
+}
+setInterval(() => { const e = $("prog-elapsed"); if (e && S.progress && S.progress.started) e.textContent = elapsed(S.progress.started); }, 1000);
 let watching = null;
-function watchRun() {
-  clearInterval(watching);
+function watchRun() {  // while anything runs, check every few seconds, whoever started it
+  if (watching) return;
   watching = setInterval(async () => {
     await load();
     if ((S.running || []).length) return;
     clearInterval(watching); watching = null;
-    const r = Object.values(S.last_runs || {}).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
-    toast(r ? `Finished: ${r.summary}`.slice(0, 320) : "Finished");
+    const r = lastFinished();
+    if (r) toast(`${jobName(r.job, "done")} ${r.ok ? "finished" : "didn't finish cleanly"}: ${r.summary}`.slice(0, 320));
   }, 4000);
 }
 async function startRun(job) {
   const d = await post("/api/run", { job });
   if (!d) return;
-  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : job === "run" ? "Full run started. It can take a while; progress shows at the top" : job === "sources" ? "Checking job sources. Only those due make requests, and it can take a while" : "Checking roles. It takes about 2 minutes");
-  await load(); watchRun();
+  toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : `${jobName(job, "now")}. Progress shows at the top`);
+  await load();
 }
 function eventForm(name) {
   const k = "ev" + name.replace(/[^a-z0-9]/gi, "");
