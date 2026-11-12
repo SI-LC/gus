@@ -65,6 +65,11 @@ def role_key(j: dict) -> tuple:
     return ONE_EMPLOYER.get(company, company), same_title(j.get("title"))
 
 
+def same_vacancy(a: dict, b: dict) -> bool:
+    """The employer's own number for the vacancy is on both: an ad taken down and put up again gets a new id and keeps it."""
+    return bool(a.get("ref")) and a.get("ref") == b.get("ref")
+
+
 def is_live(j: dict) -> bool:
     return not j.get("ad_closed") and j.get("stage") not in ("closed", "skipped")
 
@@ -87,7 +92,8 @@ def aliases(store: dict) -> dict:
 
 def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None:
     """The id of the stored role this one is, or None. By id (or an id it was absorbed under), then by address, then by
-    company and title among roles whose ad is still open, found somewhere other than this one's own board."""
+    company and title among roles whose ad is still open, found somewhere other than this one's own board, or on it under
+    the same vacancy number: the ad put up again."""
     alias = aliases(store) if alias is None else alias
     rid = role.get("id")
     if rid in alias:
@@ -98,7 +104,7 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
     for jid, j in store.items():
         if url and (same_url(j.get("url")) == url or any(same_url(a.get("url")) == url for a in (j.get("also") or {}).values())):
             return jid
-        if by_key is None and key[0] and key[1] and still_open(j) and role_key(j) == key and board_of(jid) != board_of(rid):
+        if by_key is None and key[0] and key[1] and still_open(j) and role_key(j) == key and (board_of(jid) != board_of(rid) or same_vacancy(j, role)):
             by_key = jid
     return by_key
 
@@ -109,7 +115,7 @@ def absorb(existing: dict, role: dict, now: str) -> None:
     if rid and rid != existing.get("id"):
         existing.setdefault("also", {})[rid] = {k: v for k, v in (("url", role.get("url")), ("source", role.get("source")), ("seen", now)) if v}
     existing["last_seen"] = now
-    for k in ("location", "posted", "salary_max"):
+    for k in ("location", "posted", "salary_max", "ref"):
         if not existing.get(k) and role.get(k):
             existing[k] = role[k]
     if role.get("description") and (not existing.get("description") or
@@ -125,7 +131,8 @@ def rank(j: dict) -> tuple:
 
 
 def groups(store: dict) -> list[list[str]]:
-    """Ids that are one role: the same address, or the same company and title on different boards, among live roles."""
+    """Ids that are one role: the same address, or the same company and title on different boards, or on one board under
+    the same vacancy number, among live roles."""
     parent = {jid: jid for jid in store}
 
     def find(x):
@@ -153,6 +160,10 @@ def groups(store: dict) -> list[list[str]]:
         if len(set(boards)) == len(boards):  # a title two live roles share on one board is two roles: too ambiguous to merge by title
             for other in ids[1:]:
                 union(ids[0], other)
+        reposted = {}
+        for i in ids:
+            if store[i].get("ref"):
+                union(i, reposted.setdefault((board_of(i), store[i]["ref"]), i))
     out = {}
     for jid in store:
         out.setdefault(find(jid), []).append(jid)

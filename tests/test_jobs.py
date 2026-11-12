@@ -36,6 +36,12 @@ class Matching(unittest.TestCase):
         store = {"gh:acme:9": role("gh:acme:9", stage="new")}
         self.assertIsNone(J.find_match(store, role("gh:acme:10")))
 
+    def test_an_ad_put_up_again_on_its_board_is_the_role_you_applied_for(self):
+        store = {"sr:acme:1": role("sr:acme:1", stage="applied", ref="R100")}
+        self.assertEqual(J.find_match(store, role("sr:acme:2", ref="R100")), "sr:acme:1")
+        self.assertIsNone(J.find_match(store, role("sr:acme:3", ref="R200")))  # another vacancy with the same title
+        self.assertIsNone(J.find_match(store, role("sr:acme:4", title="Product Manager, Payments", ref="R100")))  # one number can cover several ads
+
     def test_a_closed_role_doesnt_claim_a_fresh_one(self):
         store = {"adzuna:1": role("adzuna:1", ad_closed="x"), "gh:acme:2": role("gh:acme:2", stage="closed")}
         self.assertIsNone(J.find_match(store, role("jsearch:3")))
@@ -66,6 +72,11 @@ class Dedupe(unittest.TestCase):
         self.assertEqual(groups, [["adzuna:2", "gh:acme:1"]])  # jsearch:3 could be either PM role on Acme's board: left alone
         del store["gh:acme:4"]
         self.assertEqual(sorted(sorted(g) for g in J.groups(store)), [["adzuna:2", "gh:acme:1", "jsearch:3"]])
+
+    def test_groups_an_ad_with_its_re_post_on_the_same_board(self):
+        store = {"sr:acme:1": role("sr:acme:1", stage="applied", ref="R100"), "sr:acme:2": role("sr:acme:2", stage="new", ref="R100"),
+                 "sr:acme:3": role("sr:acme:3", stage="new", ref="R200"), "sr:acme:4": role("sr:acme:4", stage="new")}
+        self.assertEqual(sorted(sorted(g) for g in J.groups(store)), [["sr:acme:1", "sr:acme:2"]])
 
     def test_merge_keeps_the_furthest_along_and_the_earliest_date(self):
         store = {"adzuna:1": role("adzuna:1", stage="new", first_seen="2026-11-01", score=8, why="good", history=[]),

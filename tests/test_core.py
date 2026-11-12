@@ -673,11 +673,12 @@ class NothingMissed(unittest.TestCase):
         def reply(url):
             asked.append(url)
             start = int(url.split("offset=")[1])
-            return {"totalFound": 250, "content": [{"id": n, "name": "Product Manager", "location": {"city": "London", "country": "gb"}}
+            return {"totalFound": 250, "content": [{"id": n, "name": "Product Manager", "refNumber": "R7", "location": {"city": "London", "country": "gb"}}
                                                    for n in range(start, min(start + 100, 250))]}
         with mock.patch.object(web, "get_json", reply), mock.patch.object(boards, "PAGE_PAUSE", 0):
             jobs = boards.smartrecruiters("Wise", "wise")
         self.assertEqual((len(jobs), len(asked), len({j["id"] for j in jobs})), (250, 3, 250))
+        self.assertEqual(jobs[0]["ref"], "R7")  # the vacancy's number, which a re-post keeps
 
     def test_an_ad_with_no_place_is_judged_by_its_title(self):
         from radar import matching

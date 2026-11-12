@@ -105,6 +105,8 @@ def main():
             continue
         if j["id"] in store:
             store[j["id"]]["last_seen"] = now
+            if j.get("ref"):
+                store[j["id"]].setdefault("ref", j["ref"])
             continue
         if (have := J.find_match(store, j, alias)) is not None:  # the same ad, found before through another source
             J.absorb(store[have], {**j, "source": "hn" if hn else "board"}, now)

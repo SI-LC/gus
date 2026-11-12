@@ -163,6 +163,7 @@ def smartrecruiters(company: str, slug: str):
             "url": f"https://jobs.smartrecruiters.com/{slug}/{j['id']}",
             "posted": j.get("releasedDate"),
             "description": "",
+            "ref": j.get("refNumber") or None,  # the vacancy's number: a re-post gets a new id and keeps this
         })
     return out
 
