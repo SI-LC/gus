@@ -3,8 +3,8 @@ plain dicts: id, company, title, location, url, posted, description. `SOURCES` m
 
 Three kinds. Job board systems with a public API (Greenhouse, Ashby, Lever, Workable, SmartRecruiters, Recruitee) answer in one
 or a few requests. Careers sites with no API (SuccessFactors, Workday, Mind the Product, Getro) give a list of job addresses,
-and `read_site` opens a page only for a wanted title. Teamtailor, Gem and GitHub publish one list, and the Google and Amazon
-saved searches are read once a day. Everything on a company's own site goes through `web.polite_fetch`.
+and `read_site` opens a page only for a wanted title. Teamtailor, Gem and GitHub publish one list, and the Google, Amazon,
+Microsoft and Apple saved searches are read once a day. Everything on a company's own site goes through `web.polite_fetch`.
 
 A scan also needs to know which roles have gone, so readers note every live id in `listed_ids`, and add a board to `cut_short`
 when its list didn't finish and a missing role proves nothing.
@@ -34,6 +34,7 @@ cut_short: set = set()  # boards whose list didn't finish, so a missing role pro
 # Boards that list every job, so a missing role really has gone. SmartRecruiters is left out: only its first 100 come back.
 PREFIX = {"greenhouse": "gh", "ashby": "ashby", "lever": "lever", "workable": "workable", "recruitee": "recruitee",
           "successfactors": "sf", "workday": "wd", "teamtailor": "tt", "gem": "gem", "googlecareers": "gc", "amazonjobs": "amz", "githubcareers": "ghc",
+          "microsoftcareers": "ms", "applejobs": "apl",
           "mindtheproduct": "mtp", "getro": "getro"}
 
 
@@ -201,6 +202,12 @@ GOOGLE_NAMES = {"DeepMind": "Google DeepMind"}
 AMAZON_HOST = "https://www.amazon.jobs"
 AMAZON_PAGE = 100  # jobs per request, the most the site gives
 AMAZON_PAGES = 5  # requests per read, so 500 roles; a longer list is cut short
+MICROSOFT_HOST = "https://apply.careers.microsoft.com"
+MICROSOFT_PAGES = 10  # requests per read, of 10 roles each, so 100 roles; a longer list is cut short
+MICROSOFT_PAUSE = 10  # seconds between requests: the site turns away anything much faster
+APPLE_HOST = "https://jobs.apple.com"
+APPLE_PAGES = 10  # requests per read, of 20 roles each, so 200 roles; a longer list is cut short
+APPLE_DATA = re.compile(r'window\.__staticRouterHydrationData\s*=\s*JSON\.parse\("(.*?)"\);', re.S)
 GITHUB_HOST = "https://www.github.careers"
 GITHUB_PAGE = 100  # jobs per request, the most the site gives
 GITHUB_PAGES = 10  # requests per read, so 1,000 roles; a longer list is cut short
@@ -790,6 +797,143 @@ def amazon_jobs(company: str, slug: str):
     return read_daily(slug, address, DATA / "amazon_jobs.json", read_amazon)
 
 
+def new_and_wanted(jobs: list) -> list:
+    """The roles in a list worth opening for their full ad: your titles and places, and not saved already."""
+    cfg, have = matching.load_config(), J.aliases(known_jobs())
+    return [j for j in jobs if j["id"] not in have and matching.matches(j, cfg)]
+
+
+def microsoft_address(text: str) -> str:
+    """The search to read on Microsoft's careers site: the one you pasted, as the request its own page makes, newest first.
+    Keywords, location and filters stay as you set them on the site."""
+    parts = urlparse(text.strip())
+    if f"{parts.scheme}://{parts.netloc}" != MICROSOFT_HOST or parts.path.rstrip("/") != "/careers":
+        raise Refused("This isn't a search on Microsoft's careers site")
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in ("start", "num", "sort_by", "domain", "pid")]
+    return f"{MICROSOFT_HOST}/api/pcsx/search?{urlencode([('domain', 'microsoft.com')] + query + [('sort_by', 'timestamp')])}"
+
+
+def microsoft_data(url: str) -> dict:
+    try:
+        return json.loads(web.polite_fetch(url))["data"]
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise Refused("Microsoft's careers site asked Gus to slow down. The next daily read tries again") from e
+        raise
+    except (ValueError, KeyError, TypeError) as e:
+        raise Refused("The site no longer answers with job results Gus can read") from e
+
+
+def microsoft_job(p: dict) -> dict:
+    return {
+        "id": f"ms:microsoft:{p['id']}",
+        "company": "Microsoft",
+        "title": html.unescape(p["name"]).strip(),
+        "location": " / ".join(dict.fromkeys(p.get("locations") or p.get("standardizedLocations") or [])),
+        "url": f"{MICROSOFT_HOST}{p['positionUrl']}",
+        "posted": datetime.fromtimestamp(p["postedTs"], timezone.utc).isoformat(timespec="seconds") if p.get("postedTs") else None,
+        "description": "",
+    }
+
+
+def read_microsoft(address: str) -> list:
+    """Every page of the search, newest first, slowly. The list has no ad text, so a new role with one of your titles has its own
+    page read too; if that fails the role still arrives, to be judged on its title."""
+    jobs = []
+    for page in range(MICROSOFT_PAGES):
+        time.sleep(MICROSOFT_PAUSE if page else 0)
+        d = microsoft_data(f"{address}&start={len(jobs)}")
+        try:
+            found = [microsoft_job(p) for p in d["positions"]]
+            total = int(d.get("count") or 0)
+        except (KeyError, TypeError, ValueError) as e:
+            raise Refused("The site no longer answers with job results Gus can read") from e
+        jobs += found
+        if not found or len(jobs) >= total:
+            break
+    else:
+        cut_short.add("microsoft")  # more pages than Gus reads: a role missing from these may just be further down
+    for j in new_and_wanted(jobs):
+        time.sleep(MICROSOFT_PAUSE)
+        try:
+            ad = microsoft_data(f"{MICROSOFT_HOST}/api/pcsx/position_details?{urlencode({'position_id': j['id'].split(':')[2], 'domain': 'microsoft.com'})}")
+            j["description"] = web.strip_html(ad.get("jobDescription") or "")
+        except (Refused, urllib.error.URLError):
+            break  # turned away: stop asking, and keep what the list gave
+    return jobs
+
+
+def microsoft_careers(company: str, slug: str):
+    """Microsoft's own careers site, which isn't one of the job board systems: a saved search, read once a day."""
+    address = microsoft_address(matching.load_config().get("microsoft_careers_search") or "")
+    return read_daily(slug, address, DATA / "microsoft_careers.json", read_microsoft)
+
+
+def apple_address(text: str) -> tuple:
+    """(the search to read on jobs.apple.com, its country part such as en-gb): the one you pasted, newest first."""
+    parts = urlparse(text.strip())
+    m = re.fullmatch(r"/([a-z]{2}-[a-z]{2})/search/?", parts.path)
+    if f"{parts.scheme}://{parts.netloc}" != APPLE_HOST or not m:
+        raise Refused("This isn't a search on jobs.apple.com")
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in ("page", "sort")]
+    return f"{APPLE_HOST}/{m[1]}/search?{urlencode(query + [('sort', 'newest')])}", m[1]
+
+
+def apple_data(page: str, part: str) -> dict:
+    """What an Apple jobs page was built from, which is the only place its results are. Apple can change this at any time, so
+    anything unexpected is reported rather than read as "no jobs"."""
+    try:
+        return json.loads(json.loads(f'"{APPLE_DATA.search(page)[1]}"'))["loaderData"][part]
+    except (ValueError, KeyError, TypeError) as e:
+        raise Refused("A bot check came back instead of its jobs" if web.BOT_CHECK.search(page) else "The page no longer has job results Gus can read") from e
+
+
+def apple_job(r: dict, locale: str) -> dict:
+    places = [", ".join(dict.fromkeys(filter(None, (p.get("name"), p.get("countryName"))))) for p in r.get("locations") or []]
+    return {
+        "id": f"apl:apple:{r['positionId']}",
+        "company": "Apple",
+        "title": html.unescape(r["postingTitle"]).strip(),
+        "location": " / ".join(dict.fromkeys(places)),
+        "url": f"{APPLE_HOST}/{locale}/details/{r['positionId']}/{r.get('transformedPostingTitle') or ''}".rstrip("/"),
+        "posted": r.get("postDateInGMT") or None,
+        "description": (r.get("jobSummary") or "").strip(),
+    }
+
+
+def read_apple(address: str, locale: str) -> list:
+    """Every page of the search, newest first. The list carries only each ad's opening, so a new role with one of your titles has
+    its own page read for the rest."""
+    jobs = []
+    for page in range(1, APPLE_PAGES + 1):
+        time.sleep(PAGE_PAUSE if page > 1 else 0)
+        d = apple_data(web.polite_fetch(f"{address}&page={page}"), "search")
+        try:
+            found = [apple_job(r, locale) for r in d["searchResults"]]
+            total = int(d.get("totalRecords") or 0)
+        except (KeyError, TypeError, ValueError) as e:
+            raise Refused("The page no longer has job results Gus can read") from e
+        jobs += found
+        if not found or len(jobs) >= total:
+            break
+    else:
+        cut_short.add("apple")  # more pages than Gus reads: a role missing from these may just be further down
+    for j in new_and_wanted(jobs):
+        time.sleep(PAGE_PAUSE)
+        try:
+            ad = apple_data(web.polite_fetch(j["url"]), "jobDetails")["jobsData"]
+            j["description"] = "\n".join(filter(None, (ad.get(k) for k in ("jobSummary", "description", "responsibilities", "minimumQualifications", "preferredQualifications")))).strip()
+        except (Refused, urllib.error.URLError, KeyError, TypeError):
+            pass  # the list's opening lines stand in
+    return jobs
+
+
+def apple_jobs(company: str, slug: str):
+    """Apple's own jobs site, which isn't one of the job board systems: a saved search, read once a day."""
+    address, locale = apple_address(matching.load_config().get("apple_jobs_search") or "")
+    return read_daily(slug, address, DATA / "apple_jobs.json", lambda a: read_apple(a, locale))
+
+
 def github_job(company: str, slug: str, j: dict) -> dict:
     """One ad from the list on github.careers: the ad text is in three parts, which the job page shows one after another."""
     place, country = j.get("location_name") or "", j.get("full_location") or ""
@@ -860,5 +1004,6 @@ def hn_who_is_hiring():
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
            "teamtailor": teamtailor, "gem": gem, "googlecareers": google_careers, "amazonjobs": amazon_jobs,
+           "microsoftcareers": microsoft_careers, "applejobs": apple_jobs,
            "githubcareers": github_careers, "mindtheproduct": mind_the_product,
            "getro": getro}
