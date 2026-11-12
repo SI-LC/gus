@@ -158,6 +158,7 @@ Everything is in `radar/`, one module per job. The fields of every object in `da
 | Module | What it does |
 |---|---|
 | `service`, `server`, `cockpit.html` | The always-on service: the cockpit, its API and the daily full run |
+| `cockpit.css`, `css` | The cockpit's look, written for [Tailwind](https://tailwindcss.com): colours and fonts are the tokens at the top of `cockpit.css`. `python3 -m radar.css` builds `static/cockpit.css` from it, and needs Tailwind's standalone program only on the machine you write code on |
 | `scan`, `boards`, `web`, `matching` | One scan: read every board (`boards`), politely (`web`), keep what matches your titles and places (`matching`) |
 | `sources`, `feeds`, `social`, `x`, `inbox`, `links`, `resolve` | Everything else that brings roles and signals in, and finds a company's job board |
 | `jobs`, `triage`, `salary` | One role however many places list it, and its score |
