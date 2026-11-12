@@ -133,6 +133,9 @@ SCHEMA = [
     ("notify_ntfy_server", "ntfy server", "text", "Notifications", "https://ntfy.sh, or your own server."),
     ("quiet_hours", "Quiet hours", "text", "Notifications", "e.g. 22:00-07:00. Notifications are held until it ends. Empty for none."),
     ("cockpit_url", "Cockpit address", "text", "Notifications", "Where notifications link to, e.g. http://raspberrypi:8484 or your Tailscale name."),
+
+    ("mcp_allow_writes", "Let Claude make changes", "bool", "Claude",
+     "Off, Claude can only read your roles, companies, people and moves. On, it can also change stages, add roles, companies, people and news, update moves and start a run."),
 ]
 
 PATTERN_ENDINGS = ("include", "exclude", "except")
@@ -286,12 +289,34 @@ def set_secret(key: str, value: str) -> None:
         s[key] = value.strip()
     else:
         s.pop(key, None)
+    _write_secrets(s)
+
+
+def _write_secrets(s: dict) -> None:
     tmp = SECRETS.with_suffix(".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # private from the first byte
     with os.fdopen(fd, "w") as f:
         json.dump(s, f, indent=2)
     tmp.replace(SECRETS)
     os.chmod(SECRETS, stat.S_IRUSR | stat.S_IWUSR)
+
+
+MCP_TOKEN = "mcp_token"  # not in SECRET_KEYS: only radar.mcp makes one, and only its hash is kept
+
+
+def mcp_token() -> dict:
+    """What Gus keeps about the token Claude connects with: its hash, last 4 characters, when it was made and whose it is."""
+    v = read(SECRETS).get(MCP_TOKEN)
+    return v if isinstance(v, dict) else {}
+
+
+def set_mcp_token(record: dict | None) -> None:
+    s = read(SECRETS)
+    if record:
+        s[MCP_TOKEN] = record
+    else:
+        s.pop(MCP_TOKEN, None)
+    _write_secrets(s)
 
 
 def secrets_masked() -> dict:

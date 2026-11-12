@@ -54,6 +54,18 @@ A small web app, and the place you work. Each page is one object from the list a
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
 
+## Use Gus from Claude
+
+Gus is also an MCP server, so Claude Code or the Claude desktop app can read your search and, if you allow it, act on it: "what's new in Gus", "who do I know at Acme", "I applied to the Acme role". On the computer Gus runs on, connect it once:
+
+```bash
+claude mcp add --transport http gus http://127.0.0.1:8484/mcp
+```
+
+From another device, such as a laptop reaching a Pi over Tailscale, open **Settings → Claude** in the cockpit and press **Create token**. Gus shows the full command once, with the token in it, and keeps only a fingerprint of the token.
+
+There are 19 tools and they mirror the cockpit: `list_`, `get_`, `create_` and `update_` for roles, companies, events, people and moves, plus `get_run`, `create_run` and `get_profile`. Claude can only read until you turn on **Let Claude make changes**. It can never see or change your settings or keys, rewrite your profile, or make a move: only the weekly planner does that.
+
 ## Quick start
 
 Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code) or an Anthropic API key. An OpenAI-compatible provider can score roles, but can't run the agents.
@@ -141,6 +153,7 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 - **Web agents** can read this repo and search the web, but can only write to `data/` and `watchlist.csv`. They can't read your keys or emails, reach files outside the repo, change code, or run anything but Gus's own commands.
 - **Email** is off until you connect it. It's then read-only and filtered before opening, and a separate agent with no internet access processes it, so a crafted email can't send your data out.
 - **The cockpit** has no login unless you set an access token. It listens on this machine only by default, and won't listen on a network without a token. Keep it behind a private network such as Tailscale, never on the public internet. The Pi install publishes it to your Tailscale devices, so anything on your tailnet can open it.
+- **Claude's connection** (`/mcp`) is separate from the cockpit's login. From the machine Gus runs on it needs nothing. From anywhere else it needs its own token, which opens nothing but the tools, and a token made over Tailscale only works for the Tailscale login that made it. Five wrong tokens in a minute lock it for ten minutes and send you an alert. Every call is listed under Settings → Claude, by tool and target only. Role descriptions and news are written by strangers and Claude reads them through these tools, so keep **Let Claude make changes** off unless you need it, and on a shared tailnet add an access rule so only your own devices reach the Pi.
 - **On other people's sites** Gus is a guest: it says who it is (`gus/<version>` with a link to this repo), follows `robots.txt` on every company careers site and job site it reads (the job board systems' public APIs are built to be read), waits between pages and between requests to one host, and reads the large sites once a day. If you run a site and would rather it didn't visit, open an issue here.
 - **Known limits:** web agents read your profile, so a page that tricks one could in theory leak it. They can't reach your keys or emails that way. A Claude login can also bring that account's connectors to the machine, such as mail, files and calendar, so check what your account has connected.
 
@@ -158,6 +171,7 @@ Everything is in `radar/`, one module per job. The fields of every object in `da
 | Module | What it does |
 |---|---|
 | `service`, `server`, `cockpit.html` | The always-on service: the cockpit, its API and the daily full run |
+| `mcp` | The same cockpit as tools for Claude, at `/mcp`: the naming rules, the 19 tools, and who may call them |
 | `cockpit.css`, `css` | The cockpit's look, written for [Tailwind](https://tailwindcss.com): colours and fonts are the tokens at the top of `cockpit.css`. `python3 -m radar.css` builds `static/cockpit.css` from it, and needs Tailwind's standalone program only on the machine you write code on |
 | `scan`, `boards`, `web`, `matching` | One scan: read every board (`boards`), politely (`web`), keep what matches your titles and places (`matching`) |
 | `sources`, `feeds`, `social`, `x`, `inbox`, `links`, `resolve` | Everything else that brings roles and signals in, and finds a company's job board |

@@ -1,0 +1,21 @@
+id: connect-claude
+requirement: Settings shows me how to connect Claude to Gus, makes a token I see once, and lets me decide whether Claude may change anything.
+given: scanned
+check:
+  - open Settings
+  - click "Claude"
+  - see "Connect Claude"
+  - see "claude mcp add --transport http gus"
+  - see "No token yet"
+  - see "Let Claude make changes"
+  - see "Claude hasn't connected yet."
+  - click "Create token"
+  - message says "Token created"
+  - see "Copy this now"
+  - see "Replace token"
+  - reload
+  - open Settings
+  - click "Claude"
+  - see "Token ending"
+  - not see "Copy this now"
+judge: Is it clear what Claude can and can't do once connected, and that the token must be copied now?

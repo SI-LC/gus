@@ -31,6 +31,8 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
 ## Security
 
 - Set a cockpit access token.
+- Create the Claude token on the Pi (Settings, Claude) and move the `apply-to-role` skill from SSH to the MCP tools. Decide whether **Let Claude make changes** stays on.
+- The Claude connection has no sign-in for claude.ai or the phone app: that needs OAuth and a public address, and is parked.
 - Turn off SSH password logins on the Pi.
 - Back up `data/` off the Pi: a nightly copy, with its status on the Health page. Today it exists only on the SD card.
 - The Pi's disk isn't encrypted, so keys and data are readable from the card.

@@ -123,6 +123,7 @@ def state():
             "sources": sources.status(),
             "last_agent_run": last_agent_run(),
             "boards": len(watched),
+            "claude": mcp_status(),
         },
     }
 
@@ -140,7 +141,13 @@ def settings_payload():
         "suggested": [{"name": n, "url": u, "kind": k} for n, u, k in SUGGESTED],
         "run": service.status(),
         "sources": sources.status(),
+        "claude": mcp_status(),
     }
+
+
+def mcp_status():
+    from radar import mcp
+    return mcp.status()
 
 
 def allowed_hosts() -> set:
@@ -266,6 +273,75 @@ def update_event(body):
             else:
                 e.pop("closed", None)
     return {"ok": True, "id": body["id"]}
+
+
+def update_move(body):
+    """Mark a move done or skipped, record what came of it, or edit its draft. The person's stage follows the move."""
+    from radar import accounts as A
+    with locked(A.MOVES) as moves:
+        m = moves.get(body.get("id"))
+        if not m:
+            return {"error": "No such move"}
+        if body.get("status") in ("todo", "done", "skipped"):
+            m["status"] = body["status"]
+            m["done_at"] = now() if body["status"] == "done" else None
+        if body.get("outcome") in OUTCOMES + [None]:
+            m["outcome"], m["outcome_at"] = body.get("outcome"), now()
+        if "draft" in body:
+            m["draft"] = str(body["draft"])[:3000]
+        pid, status, outcome = m["person_id"], m["status"], m.get("outcome")
+    with locked(A.PEOPLE) as people:
+        p = people.get(pid)
+        if p:
+            order = PERSON_STAGES
+            target = {"replied": "replied", "conversation": "conversation", "interview": "conversation",
+                      "referral": "referred"}.get(outcome) or ("contacted" if status == "done" else None)
+            if target and order.index(target) > order.index(p.get("stage", "mapped")):
+                p["stage"] = target
+                p.setdefault("history", []).append({"stage": target, "at": now()})
+    return {"ok": True}
+
+
+def update_person(body):
+    """Add a person by hand (a name and no id), or change the stage, note or LinkedIn degree of one Gus has."""
+    from radar import accounts as A
+    created = None
+    if not body.get("id") and body.get("name"):
+        try:
+            body["id"], created = A.add_person(*(str(body.get(k) or "") for k in ("name", "company", "role", "url", "kind", "evidence")))
+        except ValueError as e:
+            return {"error": str(e)}
+    with locked(A.PEOPLE) as people:
+        p = people.get(body.get("id"))
+        if not p:
+            return {"error": "No such person"}
+        if body.get("stage") in PERSON_STAGES:
+            p["stage"] = body["stage"]
+            p.setdefault("history", []).append({"stage": body["stage"], "at": now()})
+        if "note" in body:
+            p["note"] = str(body["note"])[:2000]
+        if "degree" in body:  # what LinkedIn shows on their profile
+            d = body["degree"]
+            if d in (1, 2, 3):
+                p["degree"], p["via"] = d, str(body.get("via") or "")[:80].strip()
+                p["degree_at"] = now()
+            else:
+                for k in ("degree", "via", "degree_at"):
+                    p.pop(k, None)
+    return {"ok": True, "id": body["id"]} | ({"created": created} if created is not None else {})
+
+
+def update_account(body):
+    """Set an account's tier yourself, or mark it as one you love."""
+    with locked(COMPANIES) as companies:
+        c = companies.get(body.get("name"))
+        if not c:
+            return {"error": "No such account"}
+        if body.get("tier") in ("A", "B", "C"):
+            c["tier"], c["tier_locked"] = body["tier"], True
+        if "favourite" in body:
+            c["favourite"] = bool(body["favourite"])
+    return {"ok": True}
 
 
 def add_company(body):
@@ -440,6 +516,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (ROOT / "radar" / "static" / name).read_bytes(), ctype)
         if path == "/manifest.webmanifest":
             return self.send(200, MANIFEST, "application/manifest+json")
+        if path == "/mcp":
+            return self.send(405, {"error": "Claude connects here with POST. See Settings, Claude."})
         if not self.authed():
             return self.send(401, b"Add ?t=<your cockpit token> to the URL.", "text/plain")
         if path == "/":
@@ -461,7 +539,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.host_ok():
             return self.send(403, {"error": "Unknown host"})
-        if not self.authed():
+        path = urlparse(self.path).path
+        who = None
+        if path == "/mcp":  # Claude, not the cockpit: its own token, and the cockpit's token doesn't open it
+            from radar import mcp
+            ok, who = mcp.allowed(self.headers)
+            if not ok:
+                return self.send(401, {"error": who})
+        elif not self.authed():
             return self.send(401, {"error": "Not signed in"})
         if self.headers.get("Origin") and urlparse(self.headers["Origin"]).netloc != self.headers.get("Host"):
             return self.send(403, {"error": "Cross-site request refused"})
@@ -479,7 +564,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "Bad JSON"})
         if not isinstance(body, dict):
             return self.send(400, {"error": "Bad JSON"})
-        path = urlparse(self.path).path
+        if path == "/mcp":
+            reply = mcp.handle(body, who)
+            return self.send(202, b"") if reply is None else self.send(200, reply)
+        if path == "/api/mcp-token":  # made here and shown once; Gus keeps only its hash
+            from radar import mcp
+            if body.get("action") == "remove":
+                mcp.remove_token()
+                return self.send(200, {"ok": True, "claude": mcp.status()})
+            token = mcp.new_token(self.headers.get("Tailscale-User-Login") or "")
+            return self.send(200, {"ok": True, "token": token, "claude": mcp.status()})
         if path == "/api/job":
             return self.send(200, update_job(body))
         if path == "/api/job/add":
@@ -511,69 +605,15 @@ class Handler(BaseHTTPRequestHandler):
                 PROFILE.write_text(str(body.get("text", "")))
                 return self.send(200, {"ok": True})
             if path == "/api/move":
-                from radar import accounts as A
-                with locked(A.MOVES) as moves:
-                    m = moves.get(body.get("id"))
-                    if not m:
-                        return self.send(200, {"error": "No such move"})
-                    if body.get("status") in ("todo", "done", "skipped"):
-                        m["status"] = body["status"]
-                        m["done_at"] = now() if body["status"] == "done" else None
-                    if body.get("outcome") in OUTCOMES + [None]:
-                        m["outcome"], m["outcome_at"] = body.get("outcome"), now()
-                    if "draft" in body:
-                        m["draft"] = str(body["draft"])[:3000]
-                    pid, status, outcome = m["person_id"], m["status"], m.get("outcome")
-                with locked(A.PEOPLE) as people:  # the person's stage follows the move
-                    p = people.get(pid)
-                    if p:
-                        order = PERSON_STAGES
-                        target = {"replied": "replied", "conversation": "conversation", "interview": "conversation",
-                                  "referral": "referred"}.get(outcome) or ("contacted" if status == "done" else None)
-                        if target and order.index(target) > order.index(p.get("stage", "mapped")):
-                            p["stage"] = target
-                            p.setdefault("history", []).append({"stage": target, "at": now()})
-                return self.send(200, {"ok": True})
+                return self.send(200, update_move(body))
             if path == "/api/person":
-                from radar import accounts as A
-                created = None
-                if not body.get("id") and body.get("name"):  # a new person, added by hand
-                    try:
-                        body["id"], created = A.add_person(*(str(body.get(k) or "") for k in ("name", "company", "role", "url", "kind", "evidence")))
-                    except ValueError as e:
-                        return self.send(200, {"error": str(e)})
-                with locked(A.PEOPLE) as people:
-                    p = people.get(body.get("id"))
-                    if not p:
-                        return self.send(200, {"error": "No such person"})
-                    if body.get("stage") in PERSON_STAGES:
-                        p["stage"] = body["stage"]
-                        p.setdefault("history", []).append({"stage": body["stage"], "at": now()})
-                    if "note" in body:
-                        p["note"] = str(body["note"])[:2000]
-                    if "degree" in body:  # what LinkedIn shows on their profile
-                        d = body["degree"]
-                        if d in (1, 2, 3):
-                            p["degree"], p["via"] = d, str(body.get("via") or "")[:80].strip()
-                            p["degree_at"] = now()
-                        else:
-                            for k in ("degree", "via", "degree_at"):
-                                p.pop(k, None)
-                return self.send(200, {"ok": True, "id": body["id"]} | ({"created": created} if created is not None else {}))
+                return self.send(200, update_person(body))
             if path == "/api/event":
                 return self.send(200, update_event(body))
             if path == "/api/company/add":
                 return self.send(200, add_company(body))
             if path == "/api/account":
-                with locked(COMPANIES) as companies:
-                    c = companies.get(body.get("name"))
-                    if not c:
-                        return self.send(200, {"error": "No such account"})
-                    if body.get("tier") in ("A", "B", "C"):
-                        c["tier"], c["tier_locked"] = body["tier"], True
-                    if "favourite" in body:
-                        c["favourite"] = bool(body["favourite"])
-                return self.send(200, {"ok": True})
+                return self.send(200, update_account(body))
             if path == "/api/network/import":
                 from radar import network
                 n = network.import_text(str(body.get("text", "")))
