@@ -260,7 +260,44 @@ async function boardGuess(name, accept) {
   if (d) { toast(accept ? "Watching its board. Roles arrive on the next check." : "Noted. Gus won't offer that board again."); load(); }
 }
 const roleTitle = (j, href) => /^https?:\/\//i.test(String(href || "")) ? `<a href="${link(href)}" target="_blank" rel="noopener">${esc(j.title)}</a>` : esc(j.title);  // a role you added by hand may have no ad to open
-function roleCard(j, actions) {
+const PURSUING = ["interviewing", "applied", "preparing", "shortlisted"];  // furthest along first
+function alreadyHere(j) {  // the role you're furthest along with at this company, if there is one
+  const mine = S.jobs.filter(o => o.id !== j.id && j.co && o.co === j.co && PURSUING.includes(o.stage))
+    .sort((a, b) => PURSUING.indexOf(a.stage) - PURSUING.indexOf(b.stage))[0];
+  if (!mine) return "";
+  const at = ((mine.history || []).filter(h => h.stage === mine.stage).pop() || {}).at, t = `<b>${esc(mine.title)}</b>`;
+  const said = { interviewing: `You're interviewing for ${t} here`, applied: `You applied for ${t} here${at ? " " + ago(at) : ""}`,
+                 preparing: `You're preparing an application for ${t} here`, shortlisted: `${t} here is on your shortlist` }[mine.stage];
+  return `<div class="here"><span class="pill warm">Already in play</span> ${said}</div>`;
+}
+const alsoIn = also => also.length ? `<div class="sub mt-1.5">Same role also in ${also.map(v => `<a href="${link(v.url)}" target="_blank" rel="noopener">${esc((v.location || "another place").slice(0, 40))}</a>`).join(" · ")}</div>` : "";
+const GROUP_FROM = 3;  // a company with this many different roles shows its best one, the rest a click away
+function inboxGroups(rows) {  // best first. One entry per role, its other locations folded in; a company with many roles is one group, where its best role stands
+  const entries = [], byCo = new Map();
+  for (const j of rows) {
+    const same = j.co && j.tk && entries.find(e => e.j.co === j.co && e.j.tk === j.tk);
+    if (same) { same.also.push(j); continue; }
+    entries.push({ j, also: [] });
+    byCo.set(j.co, (byCo.get(j.co) || 0) + 1);
+  }
+  const groups = new Map();
+  for (const e of entries) {
+    const key = e.j.co && byCo.get(e.j.co) >= GROUP_FROM ? e.j.co : e.j.id;
+    (groups.get(key) || groups.set(key, { key, company: e.j.company, entries: [] }).get(key)).entries.push(e);
+  }
+  return [...groups.values()];
+}
+let openCo = new Set();
+function toggleCo(key) { openCo.has(key) ? openCo.delete(key) : openCo.add(key); render(true); }
+async function setMany(ids, stage, msg) {  // one decision for several roles: every one is saved, then the page redrawn once
+  for (const id of ids) {
+    const d = await post("/api/job", { id, stage });
+    if (!d) break;
+    Object.assign(S.jobs.find(j => j.id === id), d.job);
+  }
+  toast(msg); render();
+}
+function roleCard(j, actions, extra = "") {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
@@ -268,7 +305,7 @@ function roleCard(j, actions) {
       <div class="title">${roleTitle(j, titleLink(j))}</div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
-      ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}
+      ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}${extra}
       <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
     </div></article>`;
 }
@@ -474,6 +511,7 @@ const V = {
           <div class="title">${roleTitle(j, j.url)}</div>
           ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
           ${j.ad_closed ? `<div class="sub"><span class="pill due">Ad closed</span></div>` : ""}
+          ${j.readvertised ? `<div class="sub"><span class="pill warm">Advertised again ${ago(j.readvertised)}</span></div>` : ""}
           <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
           ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>
           ${roleExtras(j)}</div>`;
@@ -503,13 +541,23 @@ const V = {
       ${chipRow("Where", [...S.places.map(p => [p, esc(p)]), ["all", "All"]], roleWhere, "roleWhere")}
       ${S.kinds.length ? chipRow("Type", [["all", "All"], ...S.kinds.map(k => [k, esc(k)])], roleKind, "roleKind") : ""}
       <p class="hint" ${roleView === "new" ? "" : "hidden"}><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
-      (rows.length ? rows.map(j => roleCard(j, roleView === "new" ? `
-        <button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button>
+      (rows.length ? (roleView === "new" ? inboxGroups(rows).map(g => {
+        const card = ({ j, also }) => {
+          const rest = also.map(v => v.id), all = jsa([j.id, ...rest]);
+          return roleCard(j, `
+        <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside'))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
         <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Company</button>
-        <button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>` : roleView === "skipped" ? `
+        <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>`, alreadyHere(j) + alsoIn(also));
+        };
+        const many = g.entries.length >= GROUP_FROM, open = openCo.has(g.key), hidden = g.entries.length - 1;
+        const ids = jsa(g.entries.flatMap(e => [e.j.id, ...e.also.map(v => v.id)]));
+        return (many && !open ? card(g.entries[0]) : g.entries.map(card).join("")) + (many ? `<div class="more">
+          <button onclick="toggleCo(${jsq(g.key)})">${open ? `Show only the best at ${esc(g.company)}` : `+${hidden} more at ${esc(g.company)}`}</button>
+          <button onclick="if(confirm('Skip all ${g.entries.length} roles at ' + ${jsq(g.company)} + '?'))setMany(${ids},'skipped','Skipped all at ' + ${jsq(g.company)})">Skip all ${g.entries.length}</button></div>` : "");
+      }).join("") : rows.map(j => roleCard(j, roleView === "skipped" ? `
         <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" : "Gus skipped this: it scored under 5"}</span>
         <button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>` : `
-        <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(j.stage) : ""}</span>`)).join("")
+        <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(j.stage) : ""}</span>`)).join(""))
       : `<div class="empty">${roleView === "new" ? "You're up to date. New roles appear here as Gus finds them." : roleView === "skipped" ? "Nothing skipped here." : "No closed ads here."}</div>`);
   },
   settings() {
@@ -640,6 +688,7 @@ const SETTINGS_TABS = [
   ["appearance", "Appearance", () => `<section class="group"><h2>Appearance</h2>${themeField()}</section>`],
 ];
 const jsq = s => esc(JSON.stringify(String(s)));
+const jsa = ids => esc(JSON.stringify(ids.map(String)));  // a list of ids, for an onclick
 async function addFeed(text, kind) {
   const box = $("feed-add"), msg = $("feed-msg");
   text = text || (box && box.value.trim());

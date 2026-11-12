@@ -70,6 +70,15 @@ def same_vacancy(a: dict, b: dict) -> bool:
     return bool(a.get("ref")) and a.get("ref") == b.get("ref")
 
 
+PURSUING = ("shortlisted", "preparing", "applied", "interviewing")  # you've chosen it and haven't finished with it
+
+
+def same_place(a: dict, b: dict) -> bool:
+    """Both ads name the same place, or one names none. The same title in another city is another opening."""
+    x, y = (re.sub(r"[^a-z0-9]+", " ", str(j.get("location") or "").lower()).strip() for j in (a, b))
+    return not x or not y or x == y
+
+
 def is_live(j: dict) -> bool:
     return not j.get("ad_closed") and j.get("stage") not in ("closed", "skipped")
 
@@ -92,27 +101,36 @@ def aliases(store: dict) -> dict:
 
 def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None:
     """The id of the stored role this one is, or None. By id (or an id it was absorbed under), then by address, then by
-    company and title among roles whose ad is still open, found somewhere other than this one's own board, or on it under
-    the same vacancy number: the ad put up again."""
+    company and title: first a role you're pursuing in the same place, which is that role advertised again unless the
+    employer's own vacancy numbers say otherwise; then among roles whose ad is still open, found somewhere other than this one's own
+    board, or on it under the same vacancy number."""
     alias = aliases(store) if alias is None else alias
     rid = role.get("id")
     if rid in alias:
         return alias[rid]
     url = same_url(role.get("url"))
     key = role_key(role)
-    by_key = None
+    by_key = yours = None
     for jid, j in store.items():
         if url and (same_url(j.get("url")) == url or any(same_url(a.get("url")) == url for a in (j.get("also") or {}).values())):
             return jid
-        if by_key is None and key[0] and key[1] and still_open(j) and role_key(j) == key and (board_of(jid) != board_of(rid) or same_vacancy(j, role)):
+        if not (key[0] and key[1]) or role_key(j) != key:
+            continue
+        numbered_apart = j.get("ref") and role.get("ref") and j["ref"] != role["ref"]  # the employer says it's another vacancy
+        if yours is None and j.get("stage") in PURSUING and same_place(j, role) and not numbered_apart:
+            yours = jid
+        if by_key is None and still_open(j) and (board_of(jid) != board_of(rid) or same_vacancy(j, role)):
             by_key = jid
-    return by_key
+    return yours or by_key
 
 
 def absorb(existing: dict, role: dict, now: str) -> None:
     """A second sighting of a role Gus has: remembered on the record, which fills any gaps from it."""
     rid = role.get("id")
     if rid and rid != existing.get("id"):
+        boards = {board_of(i) for i in (existing.get("id"), *(existing.get("also") or {})) if i}
+        if existing.get("stage") in PURSUING and rid not in (existing.get("also") or {}) and (existing.get("ad_closed") or board_of(rid) in boards):
+            existing["readvertised"] = now  # a new ad for the role you're pursuing, where its old one was or after that closed
         existing.setdefault("also", {})[rid] = {k: v for k, v in (("url", role.get("url")), ("source", role.get("source")), ("seen", now)) if v}
     existing["last_seen"] = now
     for k in ("location", "posted", "salary_max", "ref"):

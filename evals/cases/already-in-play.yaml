@@ -1,0 +1,10 @@
+id: already-in-play
+requirement: A new role at a company where I'm already pursuing one says so, and stays in my inbox for me to decide.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Shortlist"
+  - see "Product Manager, Growth"
+  - see "Already in play"
+  - see "here is on your shortlist"
+judge: Would I know at a glance that I already have an application in at this company?
