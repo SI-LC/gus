@@ -52,6 +52,10 @@ def fetch_all():
         tasks.append(("Google", "googlecareers", "search", None))
     if matching.load_config().get("amazon_jobs_search"):
         tasks.append(("Amazon", "amazonjobs", "amazon", None))
+    if matching.load_config().get("microsoft_careers_search"):
+        tasks.append(("Microsoft", "microsoftcareers", "microsoft", None))
+    if matching.load_config().get("apple_jobs_search"):
+        tasks.append(("Apple", "applejobs", "apple", None))
     if matching.load_config().get("source_mindtheproduct"):
         tasks.append(("Mind the Product", "mindtheproduct", "jobs", None))
     tasks += [(host, "getro", host, None) for host in boards.getro_hosts(matching.load_config().get("getro_boards"))]

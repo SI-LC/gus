@@ -1498,3 +1498,179 @@ class Getro(Base):
         empty = b'<?xml version="1.0"?><urlset><url><loc>https://careers.atomico.com/jobs</loc></url></urlset>'
         _, errors = self.run_scan(getro_site(**{f"{GETRO}/sitemap.xml": empty}))
         self.assertIn(GETRO, errors)
+
+
+MICROSOFT = "https://apply.careers.microsoft.com"
+MICROSOFT_SEARCH = f"{MICROSOFT}/careers?query=product+manager&location=United+Kingdom"
+MICROSOFT_LIST = f"{MICROSOFT}/api/pcsx/search?domain=microsoft.com&query=product+manager&location=United+Kingdom&sort_by=timestamp"
+MICROSOFT_AD = f"{MICROSOFT}/api/pcsx/position_details"
+
+
+def microsoft_site(reply=None, **more):
+    return Site({"apply.careers.microsoft.com/robots.txt": sample("microsoft_robots.txt"), f"{MICROSOFT}/api/pcsx/search": reply or sample("microsoft_search.json"),
+                 MICROSOFT_AD: sample("microsoft_position.json")}, **more)
+
+
+class SavedSearch(Base):
+    """A big employer's own careers site: the search you pasted in Settings, read once a day."""
+    setting = ""
+
+    def setUp(self):
+        super().setUp()
+        self.watch()
+        patcher = mock.patch.object(boards, "MICROSOFT_PAUSE", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_scan(self, site):
+        real = matching.load_config
+
+        def with_search():
+            return {**real(), self.setting: self.search}
+        with mock.patch.object(matching, "load_config", with_search):
+            return super().run_scan(site)
+
+    def pages(self, site):
+        return [u for u in site.asked if "robots" not in u]
+
+
+class MicrosoftCareers(SavedSearch):
+    """Microsoft hires on its own site. Its list has no ad text, and it turns away requests that come quickly."""
+    setting = "microsoft_careers_search"
+    search = MICROSOFT_SEARCH
+
+    def test_the_pasted_search_is_read_newest_first_from_the_start(self):
+        self.search = f"{MICROSOFT_SEARCH}&start=20&sort_by=relevance&pid=1970393557070385"
+        site = microsoft_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(self.pages(site)[0], f"{MICROSOFT_LIST}&start=0")
+        self.assertEqual(len(jobs), 3)
+
+    def test_it_reads_the_real_fields(self):
+        jobs, _ = self.run_scan(microsoft_site())
+        job = next(j for j in jobs if j["id"] == "ms:microsoft:1970393557070385")
+        self.assertEqual((job["company"], job["title"], job["location"]), ("Microsoft", "Senior Business Development Manager", "United Kingdom, London, London"))
+        self.assertEqual(job["url"], f"{MICROSOFT}/careers/job/1970393557070385")
+        self.assertEqual(job["posted"][:10], "2026-11-11")
+        self.assertTrue(all(matching.load_config()["location_include"].search(j["location"]) for j in jobs))
+
+    def test_only_a_new_role_with_one_of_your_titles_has_its_ad_read(self):
+        site = microsoft_site()
+        jobs, _ = self.run_scan(site)
+        self.assertEqual([u for u in site.asked if MICROSOFT_AD in u], [f"{MICROSOFT_AD}?position_id=1970393557000001&domain=microsoft.com"])
+        wanted = next(j for j in jobs if j["id"] == "ms:microsoft:1970393557000001")
+        self.assertIn("You will own the platform roadmap", wanted["description"])
+        self.assertNotIn("<", wanted["description"])
+        self.assertEqual([j["description"] for j in jobs if j is not wanted], ["", ""])
+
+    def test_a_role_still_arrives_when_its_ad_cant_be_read(self):
+        jobs, errors = self.run_scan(microsoft_site(**{MICROSOFT_AD: refused(MICROSOFT_AD, 429)}))
+        self.assertEqual((len(jobs), errors), (3, {}))
+
+    def test_a_long_list_is_read_page_by_page(self):
+        full = json.loads(sample("microsoft_search.json"))["data"]["positions"]
+
+        def reply(url):
+            start = int(re.search(r"start=(\d+)", url)[1])
+            return json.dumps({"data": {"count": 3, "positions": full[start:start + 2]}}).encode()
+        site = microsoft_site(reply)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((len(jobs), errors), (3, {}))
+        self.assertEqual([re.search(r"start=(\d+)", u)[1] for u in self.pages(site) if "/search" in u], ["0", "2"])
+        self.assertNotIn("microsoft", boards.cut_short)
+
+    def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
+        full = json.loads(sample("microsoft_search.json"))["data"]["positions"]
+        with mock.patch.object(boards, "MICROSOFT_PAGES", 2):
+            self.run_scan(microsoft_site(lambda url: json.dumps({"data": {"count": 30, "positions": full[:1]}}).encode()))
+        self.assertIn("microsoft", boards.cut_short)
+
+    def test_it_reads_once_a_day_however_often_scans_run(self):
+        site = microsoft_site()
+        self.run_scan(site)
+        asked = len(self.pages(site))
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((jobs, errors, len(self.pages(site))), ([], {}, asked))
+
+    def test_being_told_to_slow_down_is_shown_on_the_health_page(self):
+        jobs, errors = self.run_scan(microsoft_site(refused(MICROSOFT_LIST, 429)))
+        self.assertEqual(jobs, [])
+        self.assertIn("asked Gus to slow down", errors["Microsoft"])
+
+    def test_a_search_somewhere_else_is_refused(self):
+        self.search = "https://careers.microsoft.com/v2/global/en/home.html"
+        jobs, errors = self.run_scan(microsoft_site())
+        self.assertEqual(jobs, [])
+        self.assertIn("isn't a search on Microsoft's careers site", errors["Microsoft"])
+
+
+APPLE = "https://jobs.apple.com"
+APPLE_SEARCH = f"{APPLE}/en-gb/search?search=product+manager&location=united-kingdom-GBR"
+APPLE_AD = f"{APPLE}/en-gb/details/"
+
+
+def apple_site(reply=None, **more):
+    return Site({"jobs.apple.com/robots.txt": sample("apple_robots.txt"), f"{APPLE}/en-gb/search": reply or sample("apple_jobs_search.html"),
+                 APPLE_AD: sample("apple_job_details.html")}, **more)
+
+
+class AppleJobs(SavedSearch):
+    """Apple hires on its own site. A search page carries its results as data, with only the opening of each ad."""
+    setting = "apple_jobs_search"
+    search = APPLE_SEARCH
+
+    def test_the_pasted_search_is_read_newest_first_from_page_one(self):
+        self.search = f"{APPLE_SEARCH}&sort=relevance&page=4"
+        site = apple_site()
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(errors, {})
+        self.assertEqual(self.pages(site)[0], f"{APPLE_SEARCH}&sort=newest&page=1")
+        self.assertEqual(len(jobs), 3)
+
+    def test_it_reads_the_real_fields_and_says_which_country(self):
+        jobs, _ = self.run_scan(apple_site())
+        job = next(j for j in jobs if j["id"] == "apl:apple:200600001")
+        self.assertEqual((job["company"], job["title"], job["location"]), ("Apple", "Product Manager, Developer Tools", "London, United Kingdom"))
+        self.assertEqual(job["url"], f"{APPLE_AD}200600001/product-manager-developer-tools")
+        self.assertTrue(job["posted"].startswith("2026-11"))
+        self.assertIn("Cambridge, United Kingdom", [j["location"] for j in jobs])  # a town your places don't name still counts as the UK
+
+    def test_only_a_new_role_with_one_of_your_titles_has_its_whole_ad_read(self):
+        site = apple_site()
+        jobs, _ = self.run_scan(site)
+        self.assertEqual([u for u in site.asked if APPLE_AD in u], [f"{APPLE_AD}200600001/product-manager-developer-tools"])
+        wanted = next(j for j in jobs if j["id"] == "apl:apple:200600001")
+        self.assertIn("Five years in product management", wanted["description"])
+        self.assertTrue(all(j["description"] for j in jobs))  # the others keep the opening the list gave
+
+    def test_the_opening_stands_in_when_the_ad_cant_be_read(self):
+        jobs, errors = self.run_scan(apple_site(**{APPLE_AD: b"<html>nothing here</html>"}))
+        self.assertEqual(errors, {})
+        self.assertIn("Made-up ad", next(j for j in jobs if j["id"] == "apl:apple:200600001")["description"])
+
+    def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
+        page = sample("apple_jobs_search.html").replace(b'\\"totalRecords\\": 3', b'\\"totalRecords\\": 300')
+        with mock.patch.object(boards, "APPLE_PAGES", 2):
+            site = apple_site(page)
+            self.run_scan(site)
+        self.assertEqual(len([u for u in self.pages(site) if "/search" in u]), 2)
+        self.assertIn("apple", boards.cut_short)
+
+    def test_it_reads_once_a_day_however_often_scans_run(self):
+        site = apple_site()
+        self.run_scan(site)
+        asked = len(self.pages(site))
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((jobs, errors, len(self.pages(site))), ([], {}, asked))
+
+    def test_a_search_somewhere_else_is_refused(self):
+        self.search = "https://www.apple.com/careers/uk/"
+        jobs, errors = self.run_scan(apple_site())
+        self.assertEqual(jobs, [])
+        self.assertIn("isn't a search on jobs.apple.com", errors["Apple"])
+
+    def test_a_page_that_is_not_job_results_is_reported_not_read_as_no_jobs(self):
+        jobs, errors = self.run_scan(apple_site(b"<html>Please verify you are a human</html>"))
+        self.assertEqual(jobs, [])
+        self.assertIn("job", errors["Apple"])
