@@ -4,7 +4,7 @@ given: empty
 check:
   - click "Skip for now"
   - see "Nothing in your pipeline yet"
-  - see "Conversations"
-  - see "Applications"
+  - see "Finished"
+  - not see "Conversations"
   - not see "No one to contact yet this week"
 judge: Is it obvious this is the pipeline, and what to do first?
