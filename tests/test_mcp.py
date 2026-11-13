@@ -1,6 +1,10 @@
 """Claude's way into Gus (radar/mcp.py): the tool names, the protocol, each tool on made-up data, and who is let in."""
+import io
 import json
+import os
 import re
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -21,6 +25,7 @@ MATRIX = {"list_roles", "get_role", "create_role", "update_role",
           "get_run", "create_run",
           "get_profile"}
 TODAY = str(date.today())
+ROOT = Path(__file__).resolve().parent.parent
 LOCAL = {"Host": "127.0.0.1:8484"}
 TAILNET = {"Host": "pi.example.ts.net", "X-Forwarded-For": "100.64.0.2", "Tailscale-User-Login": "me@example.com"}
 
@@ -388,6 +393,55 @@ class OverHttp(World):
         self.assertEqual(self.send({"jsonrpc": "2.0", "id": 1, "method": "ping"}, {"Origin": "https://evil.example"})[0], 403)
         self.assertEqual(self.send({"jsonrpc": "2.0", "id": 1, "method": "ping"}, {"Host": "evil.example"})[0], 403)
         self.assertEqual(self.send(method="GET")[0], 405)
+
+
+class Bridge(OverHttp):
+    """The program the Claude desktop app starts: messages in on one pipe, Gus's replies out on the other."""
+
+    def talk(self, *msgs, token="", url=None):
+        out = io.StringIO()
+        with mock.patch("sys.stderr", io.StringIO()):
+            mcp.bridge(url or self.base + "/mcp", token, [m if isinstance(m, str) else json.dumps(m) + "\n" for m in msgs], out)
+        return [json.loads(line) for line in out.getvalue().splitlines()]
+
+    def test_it_passes_each_message_on_and_hands_back_only_the_replies(self):
+        replies = self.talk({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+                            {"jsonrpc": "2.0", "method": "notifications/initialized"}, "\n",
+                            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+                            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_roles", "arguments": {}}})
+        self.assertEqual([r["id"] for r in replies], [1, 2, 3])
+        self.assertEqual(replies[0]["result"]["serverInfo"]["name"], "gus")
+        self.assertEqual({t["name"] for t in replies[1]["result"]["tools"]}, {n for n in MATRIX if not mcp.is_write(n)})
+        self.assertEqual(json.loads(replies[2]["result"]["content"][0]["text"])["total"], 2)
+
+    def test_it_adds_nothing_of_its_own(self):
+        self.writes()
+        ask = {"jsonrpc": "2.0", "id": 7, "method": "tools/list"}
+        self.assertEqual(self.talk(ask), [json.loads(self.send(ask)[1])])
+
+    def test_a_refusal_or_a_gus_that_is_not_there_comes_back_in_words(self):
+        ping = {"jsonrpc": "2.0", "id": 4, "method": "ping"}
+        with mock.patch.object(mcp, "is_local", return_value=False):
+            self.assertIn("Make a token", self.talk(ping)[0]["error"]["message"])
+            token = mcp.new_token()
+            self.assertEqual(self.talk(ping, token=token), [{"jsonrpc": "2.0", "id": 4, "result": {}}])
+            self.assertIn("Wrong or missing token", self.talk(ping, token="nope")[0]["error"]["message"])
+            self.assertEqual(self.talk({"jsonrpc": "2.0", "method": "notifications/initialized"}, token="nope"), [])
+        gone = self.talk(ping, url="http://127.0.0.1:9/mcp")[0]
+        self.assertEqual((gone["id"], gone["error"]["code"]), (4, -32000))
+        self.assertIn("isn't answering", gone["error"]["message"])
+        self.assertEqual(self.talk("not json\n")[0]["error"]["code"], -32700)
+
+    def test_started_as_a_program_it_reads_the_token_from_its_surroundings_and_prints_only_replies(self):
+        with mock.patch.object(mcp, "is_local", return_value=False):
+            token = mcp.new_token()
+            done = subprocess.run([sys.executable, "-m", "radar.mcp", "--url", self.base + "/mcp"], cwd=ROOT, text=True, capture_output=True, timeout=30,
+                                  input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}) + "\n", env={**os.environ, mcp.TOKEN_ENV: token})
+        self.assertEqual((done.returncode, done.stdout), (0, '{"jsonrpc": "2.0", "id": 1, "result": {}}\n'))
+
+    def test_the_cockpit_says_where_gus_is_for_the_desktop_app(self):
+        self.assertEqual(mcp.status()["folder"], str(mcp.ROOT))
+        self.assertIn("radar.mcp", (ROOT / "radar" / "cockpit.html").read_text())
 
 
 if __name__ == "__main__":

@@ -682,15 +682,20 @@ const SETTINGS_TABS = [
   ["claude", "Claude", () => {
     const c = SET.claude, t = c.token, url = location.origin + "/mcp", local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
     const cmd = tok => `claude mcp add --transport http gus ${url}` + (tok ? ` --header "Authorization: Bearer ${tok}"` : "");
+    const desktop = tok => JSON.stringify({ mcpServers: { gus: { command: "python3", args: ["-m", "radar.mcp", "--url", url],
+      env: Object.assign({ PYTHONPATH: local ? c.folder : "/the/folder/Gus/is/in" }, tok ? { GUS_MCP_TOKEN: tok } : {}) } } });
+    const desktopHelp = `In the Claude desktop app, open Settings, Developer, Edit Config, add this to the file and restart the app.`;
     const fresh = window._mcpToken;
     window._mcpToken = null;  // shown once: it's gone the next time this draws
     return `<section class="group"><h2>Connect Claude</h2>
       <p class="sub">Lets Claude Code or the Claude desktop app read your roles, companies, people and moves straight from Gus, with no terminal. It can't see or change your settings, keys or profile text beyond reading the profile.</p>
-      ${local ? `<div class="field"><label>On this computer</label><div><code class="break-all">${esc(cmd())}</code></div><div class="help">Run this once in a terminal. On the computer Gus runs on, no token is needed.</div></div>` : ""}
+      ${local ? `<div class="field"><label>On this computer</label><div><code class="break-all">${esc(cmd())}</code></div><div class="help">Run this once in a terminal, for Claude Code. On the computer Gus runs on, no token is needed.</div>
+        <div class="mt-2"><code class="break-all" id="mcp-desktop">${esc(desktop())}</code></div><div class="help">For the Claude desktop app. ${desktopHelp}</div></div>` : ""}
       <div class="field"><label>${local ? "From another device" : "Access token"}</label>
         <div class="row"><span class="sub" id="mcp-token-state">${t ? `Token ending ${esc(t.last4)}, made ${ago(t.created_at)}${t.login ? `, for ${esc(t.login)}` : ""}` : "No token yet"}</span>
         <button onclick="mcpToken('create')">${t ? "Replace token" : "Create token"}</button>${t ? `<button onclick="mcpToken('remove')">Remove</button>` : ""}</div>
-        ${fresh ? `<div class="mt-2"><code class="break-all" id="mcp-command">${esc(cmd(fresh))}</code></div><div class="help"><b>Copy this now: the token isn't shown again.</b> Run it on the device where you use Claude. Gus keeps only a fingerprint of the token.</div>` : ""}
+        ${fresh ? `<div class="mt-2"><code class="break-all" id="mcp-command">${esc(cmd(fresh))}</code></div><div class="help"><b>Copy this now: the token isn't shown again.</b> Run it on the device where you use Claude Code. Gus keeps only a fingerprint of the token.</div>
+        <div class="mt-2"><code class="break-all" id="mcp-desktop-token">${esc(desktop(fresh))}</code></div><div class="help">For the Claude desktop app on that device. ${desktopHelp}${local ? "" : " It needs a copy of Gus on that device: put its folder where this says."}</div>` : ""}
         ${t && t.old ? `<div class="help bad">This token is ${t.age_days} days old. Replace it now and then.</div>` : ""}
         <div class="help">Needed from any device but this one. ${t && t.login ? "It only works for the Tailscale login it was made with. " : ""}Replacing it stops the old one at once.</div></div>
       ${fieldsOf("Claude")}
