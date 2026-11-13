@@ -537,6 +537,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"error": "Not found"})
 
     def do_POST(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = -1
+        if not 0 <= n <= MAX_BODY:
+            return self.send(413, {"error": "Too large"})
+        raw = self.rfile.read(n)  # before any refusal: closing on unread data resets the connection, and the caller never learns why
         if not self.host_ok():
             return self.send(403, {"error": "Unknown host"})
         path = urlparse(self.path).path
@@ -553,13 +560,7 @@ class Handler(BaseHTTPRequestHandler):
         if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
             return self.send(415, {"error": "Send JSON"})  # plain forms from other sites can't set this
         try:
-            n = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            n = -1
-        if not 0 <= n <= MAX_BODY:
-            return self.send(413, {"error": "Too large"})
-        try:
-            body = json.loads(self.rfile.read(n) or b"{}")
+            body = json.loads(raw or b"{}")
         except ValueError:
             return self.send(400, {"error": "Bad JSON"})
         if not isinstance(body, dict):

@@ -64,6 +64,8 @@ claude mcp add --transport http gus http://127.0.0.1:8484/mcp
 
 From another device, such as a laptop reaching a Pi over Tailscale, open **Settings → Claude** in the cockpit and press **Create token**. Gus shows the full command once, with the token in it, and keeps only a fingerprint of the token.
 
+The Claude desktop app can't connect to an address, only start a program, so Gus comes with one that passes its messages on: `python3 -m radar.mcp --url <cockpit>/mcp`. **Settings → Claude** shows the lines to add to the app's config file (Settings → Developer → Edit Config in the app), with the token in them when you've just made one. The app needs a copy of Gus on the same computer to start the program from.
+
 There are 19 tools and they mirror the cockpit: `list_`, `get_`, `create_` and `update_` for roles, companies, events, people and moves, plus `get_run`, `create_run` and `get_profile`. Claude can only read until you turn on **Let Claude make changes**. It can never see or change your settings or keys, rewrite your profile, or make a move: only the weekly planner does that.
 
 ## Quick start
@@ -171,7 +173,7 @@ Everything is in `radar/`, one module per job. The fields of every object in `da
 | Module | What it does |
 |---|---|
 | `service`, `server`, `cockpit.html` | The always-on service: the cockpit, its API and the daily full run |
-| `mcp` | The same cockpit as tools for Claude, at `/mcp`: the naming rules, the 19 tools, and who may call them |
+| `mcp` | The same cockpit as tools for Claude, at `/mcp`: the naming rules, the 19 tools, and who may call them. Run as a program, the bridge the Claude desktop app starts |
 | `cockpit.css`, `css` | The cockpit's look, written for [Tailwind](https://tailwindcss.com): colours and fonts are the tokens at the top of `cockpit.css`. `python3 -m radar.css` builds `static/cockpit.css` from it, and needs Tailwind's standalone program only on the machine you write code on |
 | `scan`, `boards`, `web`, `matching` | One scan: read every board (`boards`), politely (`web`), keep what matches your titles and places (`matching`) |
 | `sources`, `feeds`, `social`, `x`, `inbox`, `links`, `resolve` | Everything else that brings roles and signals in, and finds a company's job board |

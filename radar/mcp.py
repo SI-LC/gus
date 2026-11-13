@@ -2,6 +2,11 @@
 
     claude mcp add --transport http gus http://127.0.0.1:8484/mcp
 
+The Claude desktop app can't connect to an address, only start a program and talk to it. Run as a program, this file is
+that bridge: it passes each message on to /mcp and hands back the answer, and adds nothing of its own.
+
+    python3 -m radar.mcp --url http://127.0.0.1:8484/mcp
+
 It mirrors the cockpit: anything the cockpit shows or changes has a tool, and nothing else does. Every write goes
 through the function the cockpit's own button calls.
 
@@ -22,14 +27,18 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
+import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 from radar import accounts as A, events as E, server, service, settings
 from radar.jobs import same_company
-from radar.paths import COMPANIES, DATA, JOBS, PROFILE
+from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_KINDS, PERSON_STAGES
 from radar.store import read
 
@@ -533,4 +542,62 @@ def status() -> dict:
             "writes": writes_on(),
             "last_used": next((c["at"] for c in calls if c["tool"] != "-"), None),
             "refused": sum(1 for c in calls if c["tool"] == "-"),
-            "recent": calls[:8]}
+            "recent": calls[:8],
+            "folder": str(ROOT)}
+
+
+# ---- the bridge: for a Claude that can only start a program and talk to it ----
+
+LOCAL_URL = "http://127.0.0.1:8484/mcp"
+TOKEN_ENV = "GUS_MCP_TOKEN"
+BRIDGE_TIMEOUT = 120  # adding a company checks its jobs board, which is the slowest thing a tool does
+
+
+def forward(url: str, token: str, msg: dict) -> dict | None:
+    """Gus's reply to one message, or None when there is none to give. A failure comes back as a reply too, in words Claude
+    can pass on, because the desktop app shows nothing else."""
+    head = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "gus-bridge"}
+    if token:
+        head["Authorization"] = f"Bearer {token}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, data=json.dumps(msg).encode(), headers=head), timeout=BRIDGE_TIMEOUT) as r:
+            raw = r.read()
+        return json.loads(raw) if raw.strip() else None
+    except urllib.error.HTTPError as e:
+        try:
+            why = json.loads(e.read()).get("error") or ""
+        except (ValueError, AttributeError, OSError):
+            why = ""
+        why = f"Gus refused this: {why or f'HTTP {e.code}'}"
+    except (OSError, ValueError) as e:
+        why = f"Gus isn't answering at {url}. Is it running, and can this device reach it? ({type(e).__name__})"
+    print(why, file=sys.stderr)
+    return {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32000, "message": why}} if "id" in msg else None
+
+
+def bridge(url: str, token: str = "", lines=None, out=None) -> None:
+    """One JSON message a line in, one a line out, until the app closes the pipe. Nothing but replies goes to `out`."""
+    lines, out = lines or sys.stdin, out or sys.stdout
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            msg = json.loads(line)
+            if not isinstance(msg, dict):
+                raise ValueError
+        except ValueError:
+            reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Not a JSON message"}}
+        else:
+            reply = forward(url, token, msg)
+        if reply is not None:
+            out.write(json.dumps(reply, ensure_ascii=False) + "\n")
+            out.flush()
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="Connect the Claude desktop app to Gus. See Settings, Claude, in the cockpit.")
+    ap.add_argument("--url", default=LOCAL_URL, help="where Gus is, ending in /mcp")
+    ap.add_argument("--token", default=os.environ.get(TOKEN_ENV, ""), help=f"the token from Settings, Claude (or set {TOKEN_ENV}); not needed on the computer Gus runs on")
+    a = ap.parse_args()
+    bridge(a.url, a.token)
