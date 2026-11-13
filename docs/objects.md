@@ -23,7 +23,7 @@ copy furthest along and moving its events and moves across.
 | `company`, `title`, `url`, `location`, `description`, `posted` | From the board |
 | `stage` | `new` → `shortlisted` → `preparing` → `applied` → `interviewing` → `closed`, or `skipped` |
 | `history` | `[{stage, at}]`, appended on every stage change |
-| `score`, `why`, `flags` | Triage: 1–10 against the profile, null until scored; under 5 goes straight to `skipped` |
+| `score`, `why`, `flags` | Triage: 1–10 against the profile, null until scored; under 5 goes straight to `skipped`, except at a favourite company |
 | `score_before_salary` | When a stated salary lowered the score |
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |

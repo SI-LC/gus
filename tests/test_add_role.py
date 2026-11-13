@@ -138,6 +138,28 @@ class AddRole(unittest.TestCase):
         j = self.stored()[jid]
         self.assertEqual((j["score"], j["stage"]), (2, "new"))
 
+    def test_a_low_score_at_a_company_you_love_is_shown_to_you_not_skipped(self):
+        self.companies.write_text(json.dumps({"Acme": {"status": "watched", "tier": "A", "favourite": True},
+                                              "Gone": {"status": "watched", "favourite": True, "vetoed": True},
+                                              "Other": {"status": "watched", "tier": "B"}}))
+        role = lambda i, company: {"id": i, "company": company, "title": "Product Manager", "location": "London", "url": "", "stage": "new", "score": None}
+        self.jobs.write_text(json.dumps({"a": role("a", "Acme Ltd"), "g": role("g", "Gone"), "o": role("o", "Other")}))
+        patches = [(triage, "JOBS", self.jobs), (triage, "COMPANIES", self.companies), (triage, "notify", mock.Mock()),
+                   (triage, "load_config", lambda: {"notify_min_score": 8}),
+                   (E, "JOBS", self.jobs), (E, "EVENTS", self.dir / "events.json"), (E, "COMPANIES", self.companies),
+                   (E, "MOVES", self.dir / "moves.json"), (E, "SIGNALS", self.dir / "signals.json")]
+        for target, attr, value in patches:
+            p = mock.patch.object(target, attr, value)
+            p.start()
+            self.addCleanup(p.stop)
+        profile = self.dir / "profile.md"
+        profile.write_text("Made-up candidate")
+        reply = json.dumps([{"id": i, "score": 3, "why": "Wrong area"} for i in "ago"])
+        with mock.patch.object(triage.ai, "run", return_value=reply):
+            triage.score_batch(profile, list(self.stored().values()))
+        self.assertEqual({i: (j["score"], j["stage"]) for i, j in self.stored().items()},
+                         {"a": (3, "new"), "g": (3, "skipped"), "o": (3, "skipped")})
+
     def test_with_no_ad_to_link_to_it_passes_the_data_check_and_is_never_a_role_event(self):
         jid = self.add()["id"]
         store = self.stored()
