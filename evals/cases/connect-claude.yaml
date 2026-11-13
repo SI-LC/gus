@@ -1,11 +1,13 @@
 id: connect-claude
-requirement: Settings shows me how to connect Claude to Gus, makes a token I see once, and lets me decide whether Claude may change anything.
+requirement: Settings shows me how to connect Claude Code and the Claude desktop app to Gus, makes a token I see once, and lets me decide whether Claude may change anything.
 given: scanned
 check:
   - open Settings
   - click "Claude"
   - see "Connect Claude"
   - see "claude mcp add --transport http gus"
+  - see "For the Claude desktop app"
+  - see "radar.mcp"
   - see "No token yet"
   - see "Let Claude make changes"
   - see "Claude hasn't connected yet."
