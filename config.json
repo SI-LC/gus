@@ -23,6 +23,7 @@
 
   "scheduler_enabled": false,
   "run_time": "08:00",
+  "catch_up_missed_run": false,
   "watchlist_every_days": 3,
   "agent_max_searches": 60,
   "prune_after_days": 60,

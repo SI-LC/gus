@@ -17,7 +17,7 @@ bash deploy/scan.sh
 sha=$(git rev-parse --short HEAD)
 echo "On GitHub: $sha"
 
-ssh -o BatchMode=yes "$PI" bash -s "$sha" < deploy/update-pi.sh
+ssh -o BatchMode=yes "$PI" bash -s "$sha" < deploy/update.sh
 
 # The latest release is what's on the Pi. A redeploy of the same commit keeps its version.
 current=$(git tag --points-at HEAD --list 'v[0-9]*' | head -1)
