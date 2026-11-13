@@ -36,7 +36,8 @@ def rows() -> list[dict]:
 
 def _total(items) -> dict:
     return {"cost_usd": round(sum(r.get("cost_usd") or 0 for r in items), 4), "runs": len(items),
-            "searches": sum(r.get("searches") or 0 for r in items)}
+            "searches": sum(r.get("searches") or 0 for r in items),
+            "tokens": sum((r.get("input_tokens") or 0) + (r.get("output_tokens") or 0) for r in items)}
 
 
 def today_cost() -> float:

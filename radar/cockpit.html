@@ -30,6 +30,7 @@
     <button class="nav-toggle" id="navToggle" onclick="toggleNav()"></button>
   </nav>
   <div class="content">
+    <div class="search"><input type="search" id="q" aria-label="Search" placeholder="Search roles, companies and people" autocomplete="off" oninput="search(this.value)"></div>
     <div class="ticker" id="ticker" aria-live="polite"></div>
     <div class="banner" id="banner" role="status" hidden></div>
     <div class="progress" id="progress" role="status" hidden></div>
@@ -117,18 +118,28 @@ function routes(p) {
         <option value="">Not checked</option>${[[1, "1st"], [2, "2nd"], [3, "3rd+"]].map(([v, l]) => `<option value="${v}" ${p.degree === v ? "selected" : ""}>${l}</option>`).join("")}</select>
       <input type="text" id="via-${esc(p.id)}" placeholder="Mutual connection" value="${esc(p.via || "")}" aria-label="Mutual connection" onchange="setDegree(${jsq(p.id)})" class="flex-1 min-w-[140px] max-w-[240px]"></div></div>`;
 }
+const READ_MIN = 2;  // roughly how long it takes to read a job ad yourself: what "saved" in the status bar is counted from
+const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(".0", "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
 const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
-function roleExtras(j) {
+const openWho = new Set();  // the Pipeline cards whose people you've opened, so a redraw leaves them open
+function roleLinks(j) {
+  const l = (text, onclick) => `<button class="link" onclick="${onclick}">${text}</button>`;
+  return (j.folder
+    ? (/^https?:\/\//i.test(j.folder) ? `<a class="link" href="${link(j.folder)}" target="_blank" rel="noopener">Folder</a>` : l("Copy folder path", `copyPath(${jsq(j.folder)})`)) + l("Change", `setFolder(${jsq(j.id)}, ${jsq(j.folder)})`)
+    : l("Add folder", `setFolder(${jsq(j.id)}, '')`)) + l(j.source === "manual" ? "Details" : "Description", `roleDetails(${jsq(j.id)})`);
+}
+function rolePeople(j) {
   const sent = p => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
-  const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 4).map(p => {
-    const at = sent(p);
-    return at ? `<div class="sub contact">Messaged <b>${esc(p.name)}</b> ${ago(at)} <button class="mini" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button></div>`
-      : `<button class="mini" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, true)">Messaged ${esc(p.name)}</button>`;
-  }).join("");
-  return `<div class="extras">${j.folder
-    ? `${/^https?:\/\//i.test(j.folder) ? `<a href="${link(j.folder)}" target="_blank" rel="noopener"><button class="mini">Open folder</button></a>` : `<button class="mini" onclick="copyPath(${jsq(j.folder)})">Copy folder path</button>`}<button class="mini" onclick="setFolder(${jsq(j.id)}, ${jsq(j.folder)})">Change</button>`
-    : `<button class="mini" onclick="setFolder(${jsq(j.id)}, '')">Add folder</button>`}<button class="mini" onclick="roleDetails(${jsq(j.id)})">${j.source === "manual" ? "Details" : "Description"}</button>${who}</div>`;
+  const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 6), done = who.filter(sent).length;
+  if (!who.length) return "";
+  const row = p => { const at = sent(p);
+    return `<div class="who-row"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${at
+      ? `<span class="sub">${ago(at)}</span><select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>
+         <button class="link" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button>`
+      : `<button class="link" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, true)" aria-label="Messaged ${esc(p.name)}">Mark messaged</button>`}</div>`; };
+  return `<details class="who" ${openWho.has(j.id) ? "open" : ""} ontoggle="openWho[this.open ? 'add' : 'delete'](${jsq(j.id)})">
+    <summary>${who.length} ${who.length === 1 ? "person" : "people"}${done ? ` · ${done} messaged` : ""}</summary>${who.map(row).join("")}</details>`;
 }
 async function roleDetails(id) {  // the description isn't in the page's data, so it's fetched when asked for
   const r = await fetch("/api/job?id=" + encodeURIComponent(id), { cache: "no-store" }).then(r => r.json()).catch(() => null);
@@ -193,7 +204,8 @@ function costs() {
   return `<h1>Usage</h1>
     <p class="lede">What Gus's AI runs have used, by day and by task. On a Claude plan, the Claude part isn't money you pay.</p>
     <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
-      ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
+      ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}
+      ${stat(compact(u.ai.month.tokens || 0), "Tokens this month")}${stat(S.health.signals_waiting, "Signals queued")}${stat(S.health.last_agent_run ? ago(S.health.last_agent_run) : "never", "Last agent run")}</div>
     <div class="section">Last 14 days</div>
     <div class="spark">${u.days.map(d => `<div title="${d.date}: ${usd(d.ai)} Claude, ${usd(d.x)} X"><i style="height:${Math.round((d.ai + d.x) / max * 100)}%"></i></div>`).join("")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
@@ -496,27 +508,20 @@ const V = {
         return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
   },
   pipeline() {
-    const PS = S.labels.person_stages.filter(s => s !== "mapped");
-    const ppl = Object.values(S.people).filter(p => p.stage && p.stage !== "mapped");
-    const peopleBoard = PS.map(st => { const rows = ppl.filter(p => p.stage === st);
-      return `<div class="col"><h3>${st} <span>${rows.length}</span></h3>${rows.map(p => `<div class="card">
-        <div class="co">${esc(p.company)}</div><div class="title"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></div>
-        <div class="sub">${distBadge(p)} ${esc(p.role || "")}</div>
-        <select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Stage">${S.labels.person_stages.map(s => `<option ${s === st ? "selected" : ""}>${s}</option>`).join("")}</select></div>`).join("")}</div>`; }).join("");
-    const appBoard = PIPE.map(st => {
+    const inPipe = new Set(S.jobs.filter(j => PIPE.includes(j.stage)).map(j => j.company));
+    const loose = Object.values(S.people).filter(p => p.stage && p.stage !== "mapped" && !inPipe.has(p.company));  // talking, with no role on the board to sit under
+    const board = PIPE.map(st => {
       const rows = S.jobs.filter(j => j.stage === st).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
       return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>` + rows.map(j => {
         const since = (j.history || []).filter(h => h.stage === st).pop();
-        return `<div class="card"><div class="co">${esc(j.company)} · ${j.score ?? "–"}</div>
+        return `<div class="card"><div class="pc-top"><span class="co">${esc(j.company)} · ${j.score ?? "–"}</span>${since ? `<span class="sub" title="In this stage since">${ago(since.at)}</span>` : ""}</div>
           <div class="title">${roleTitle(j, j.url)}</div>
-          ${since ? `<div class="sub">since ${ago(since.at)}</div>` : ""}
-          ${j.ad_closed ? `<div class="sub"><span class="pill due">Ad closed</span></div>` : ""}
-          ${j.readvertised ? `<div class="sub"><span class="pill warm">Advertised again ${ago(j.readvertised)}</span></div>` : ""}
-          <select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
-          ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>
-          ${roleExtras(j)}</div>`;
+          ${j.ad_closed || j.readvertised ? `<div class="sub mt-1.5">${j.ad_closed ? `<span class="pill due">Ad closed</span> ` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
+          <div class="pc-foot"><select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
+            ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>${roleLinks(j)}</div>
+          ${rolePeople(j)}</div>`;
       }).join("") + `</div>`; }).join("");
-    return `<h1>Pipeline</h1><p class="lede">Every conversation and application, by stage. Move a card on as things happen.</p>
+    return `<h1>Pipeline</h1><p class="lede">Every application by stage, with the people you're talking to on its card. Move a card on as things happen.</p>
       ${meetingsBlock()}
       <details class="add-event keep m-0 mb-3"><summary class="sub">+ Add a role</summary>
         <div class="row mt-1.5"><input type="text" id="add-role-company" placeholder="Company" aria-label="Company" class="flex-1">
@@ -529,9 +534,32 @@ const V = {
         <textarea id="add-role-description" rows="6" placeholder="Paste the job description" aria-label="Job description" class="w-full mt-1.5"></textarea>
         <div class="row mt-1.5"><button class="primary" id="add-role-go" onclick="addRole()">Add role</button>
           <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details>
-      ${ppl.length || S.jobs.some(j => PIPE.includes(j.stage)) ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions justify-center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
-      <div class="section">Conversations</div><div class="board">${peopleBoard}</div>
-      <div class="section">Applications</div><div class="board">${appBoard}</div>`;
+      ${loose.length || inPipe.size ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions justify-center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
+      <div class="board">${board}</div>
+      ${loose.length ? `<div class="section">Talking, no role yet · ${loose.length}</div><table>${loose.map(p => `<tr>
+        <td><b><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></b> ${distBadge(p)}</td><td>${esc(p.company)}</td><td class="hide-sm sub">${esc(p.role || "")}</td>
+        <td><select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select></td></tr>`).join("")}</table>` : ""}`;
+  },
+  search() {
+    const q = $("q").value.trim(), terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return `<h1>Search</h1><div class="empty">Type a role, a company or a person in the box at the top.</div>`;
+    const has = (...parts) => { const t = parts.join(" ").toLowerCase(); return terms.every(w => t.includes(w)); };
+    const roles = S.jobs.filter(j => has(j.title, j.company, j.location, j.role_type)).sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    const cos = S.accounts.filter(a => has(a.name, a.product));
+    const ppl = Object.values(S.people).filter(p => has(p.name, p.role, p.company));
+    const stage = j => LABEL[j.stage] || j.stage[0].toUpperCase() + j.stage.slice(1);
+    const act = j => (j.stage === "new" ? `<button class="primary" onclick="setStage(${jsq(j.id)},'shortlisted')">Shortlist</button><button onclick="setStage(${jsq(j.id)},'skipped','Skipped')">Skip</button>`
+      : j.stage === "skipped" ? `<button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>`
+      : `<button onclick="location.hash='pipeline'">See in Pipeline</button>`) + `<button onclick="roleDetails(${jsq(j.id)})">Description</button>`;
+    const total = roles.length + cos.length + ppl.length, MAX = 25, more = n => n > MAX ? `<p class="sub">And ${n - MAX} more. Add a word to narrow it down.</p>` : "";
+    return `<h1>Search <span class="count">${total}</span></h1><p class="lede">${total ? "Everything Gus has" : "Nothing in Gus"} matching “${esc(q)}”.</p>` +
+      (roles.length ? `<div class="section">Roles · ${roles.length}</div>` + roles.slice(0, MAX).map(j => roleCard(j, act(j), ` <span class="pill">${esc(stage(j))}</span>`)).join("") + more(roles.length) : "") +
+      (cos.length ? `<div class="section">Companies · ${cos.length}</div>` + cos.slice(0, MAX).map(a => `<article class="card"><div class="title"><span class="tier t${esc(a.tier)}">${esc(a.tier)}</span> ${esc(a.name)}</div>
+        ${a.product ? `<div class="sub">${esc(a.product)}</div>` : ""}<div class="actions"><button onclick="openCompany(${jsq(a.name)})">Open company</button></div></article>`).join("") + more(cos.length) : "") +
+      (ppl.length ? `<div class="section">People · ${ppl.length}</div>` + ppl.slice(0, MAX).map(p => `<article class="card"><div class="co">${esc(p.company)}</div>
+        <div class="title"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> ${distBadge(p)}</div><div class="sub">${esc(p.role || "")}${p.stage ? ` · ${esc(p.stage)}` : ""}</div>
+        <div class="actions"><button onclick="openCompany(${jsq(p.company)})">Open company</button></div></article>`).join("") + more(ppl.length) : "") +
+      (total ? "" : `<div class="empty">No role, company or person matches. Try fewer words.</div>`);
   },
   roles() {
     const rows = newRoles();
@@ -539,8 +567,7 @@ const V = {
       ${getStarted()}
       ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView")}
       ${chipRow("Where", [...S.places.map(p => [p, esc(p)]), ["all", "All"]], roleWhere, "roleWhere")}
-      ${S.kinds.length ? chipRow("Type", [["all", "All"], ...S.kinds.map(k => [k, esc(k)])], roleKind, "roleKind") : ""}
-      <p class="hint" ${roleView === "new" ? "" : "hidden"}><kbd>J</kbd> <kbd>K</kbd> move · <kbd>S</kbd> shortlist · <kbd>X</kbd> skip · <kbd>O</kbd> open</p>` +
+      ${S.kinds.length ? chipRow("Type", [["all", "All"], ...S.kinds.map(k => [k, esc(k)])], roleKind, "roleKind") : ""}` +
       (rows.length ? (roleView === "new" ? inboxGroups(rows).map(g => {
         const card = ({ j, also }) => {
           const rest = also.map(v => v.id), all = jsa([j.id, ...rest]);
@@ -811,15 +838,23 @@ function drawTicker() {
   const h = S.health, busy = (S.running || [])[0];
   const lastRun = ((S.last_runs || {}).run || {}).at || h.last_scan, fresh = lastRun && Date.now() - new Date(lastRun) < 26 * 36e5;
   drawProgress();
-  const strong = S.jobs.filter(j => (j.score ?? 0) >= 8 && !["skipped", "closed"].includes(j.stage)).length;
+  const fresh_roles = S.jobs.filter(j => inView(j, "new")), strong = fresh_roles.filter(j => (j.score ?? 0) >= 8).length;
+  const contact = (S.moves || []).filter(m => m.week === S.week && m.status === "todo").length;
+  const live = S.jobs.filter(j => ["applied", "interviewing"].includes(j.stage)).length;
+  const now = new Date(), month = now.toLocaleString("en-GB", { month: "long" }), from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const read = S.jobs.filter(j => j.score != null && j.first_seen && new Date(j.first_seen) >= from).length;
+  const mins = read * READ_MIN, saved = mins < 60 ? mins + " min" : (mins / 60 < 10 ? (mins / 60).toFixed(1).replace(".0", "") : Math.round(mins / 60)) + "h";
   $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')"${busy === "run" ? " disabled" : ""}>${busy === "run" ? "Running…" : "Full run"}</button>
     <button class="scan-now" title="One scan: reads your job boards, feeds and email, scores new roles and maps people where there's fresh news. None of the research steps." onclick="startRun('scan')"${busy === "scan" ? " disabled" : ""}>${busy === "scan" ? "Checking…" : "Check roles"}</button>
     <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
-    <span><b>${S.jobs.length}</b> roles</span><span><b>${strong}</b> strong</span>
-    <span><b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
-    <span><b>${h.signals_waiting}</b> signals queued</span>
-    <a href="#health" class="no-underline"${S.ai.on_plan ? ` title="What this month's usage would cost at API prices. Your Claude plan covers the Claude part."` : ""}><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> ${S.ai.on_plan ? "API value" : "this month"}</a>
-    <span>Agent <b>${h.last_agent_run ? ago(h.last_agent_run) : "never"}</b></span>
+    <a href="#roles" class="no-underline" title="New roles waiting for you in Role Inbox${strong ? `, ${strong} of them scoring 8 or more` : ""}"><b>${fresh_roles.length}</b> to review${strong ? ` · <b>${strong}</b> strong` : ""}</a>
+    <a href="#week" class="no-underline" title="People to contact this week"><b>${contact}</b> to contact</a>
+    <a href="#pipeline" class="no-underline" title="Applications sent or at interview"><b>${live}</b> in play</a>
+    <span class="tick-sep">In ${month}</span>
+    <span title="Roles Gus read and scored for you this month"><b>${read.toLocaleString()}</b> role${read === 1 ? "" : "s"} read from <b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
+    <span title="A guess: reading ${read.toLocaleString()} job ad${read === 1 ? "" : "s"} yourself, at about ${READ_MIN} minutes each"><b>~${saved}</b> saved</span>
+    <a href="#health" class="no-underline" title="Everything the AI read and wrote for you this month"><b>${compact(S.usage.ai.month.tokens || 0)}</b> tokens burnt</a>
+    <a href="#health" class="no-underline"${S.ai.on_plan ? ` title="What this month's usage would cost at API prices. Your Claude plan covers the Claude part."` : ""}><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> ${S.ai.on_plan ? "API value" : "spent"}</a>
 `;
 }
 function navSlim() { try { return localStorage.getItem("radar-nav") !== "open"; } catch (e) { return true; } }
@@ -831,7 +866,7 @@ function drawNav() {
 }
 function toggleNav() { try { localStorage.setItem("radar-nav", navSlim() ? "open" : "slim"); } catch (e) {} drawNav(); }
 drawNav();
-let lastView = null, sel = 0;
+let lastView = null;
 function render(force) {
   const v = (location.hash || "#pipeline").slice(1).split("/")[0];
   document.querySelector(".app").classList.toggle("first", v === "welcome");
@@ -847,29 +882,9 @@ function render(force) {
   const y = window.scrollY;
   $("main").innerHTML = (V[v] || V.pipeline)();
   const full = location.hash;
-  if (full !== lastView) { window.scrollTo(0, 0); sel = 0; } else window.scrollTo(0, y);
+  if (full !== lastView) window.scrollTo(0, 0); else window.scrollTo(0, y);
   lastView = full;
-  if (v === "roles") highlight();
 }
-function highlight(scroll) {
-  const cards = [...document.querySelectorAll("article.role")];
-  cards.forEach((c, i) => c.classList.toggle("sel", i === sel));
-  if (scroll && cards[sel]) cards[sel].scrollIntoView({ block: "center", behavior: "smooth" });
-}
-document.addEventListener("keydown", e => {
-  if (location.hash !== "#roles" || e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(e.target.tagName)) return;
-  const cards = [...document.querySelectorAll("article.role")], card = cards[sel];
-  const k = e.key.toLowerCase();
-  if (k === "j") { sel = Math.min(sel + 1, cards.length - 1); highlight(true); }
-  else if (k === "k") { sel = Math.max(sel - 1, 0); highlight(true); }
-  else if (roleView !== "new") return;
-  else if (card && k === "s") setStage(card.dataset.id, "shortlisted");
-  else if (card && k === "x") setStage(card.dataset.id, "skipped", "Skipped");
-  else if (card && k === "o") window.open(card.querySelector(".title a").href, "_blank", "noopener");
-  else return;
-  e.preventDefault();
-});
-
 function copyText(k) {
   const t = $(k).textContent;
   const done = () => toast("Copied");
@@ -986,7 +1001,16 @@ async function vetoCo(name) {
   if (await post("/api/company/veto", { name })) { toast(`Removed ${name}`); load(); }
 }
 
-window.addEventListener("hashchange", () => render(true));
+let beforeSearch = "#pipeline";
+function search(q) {  // results take over the page as you type, and clearing the box puts you back where you were
+  clearTimeout(search.t);
+  search.t = setTimeout(() => {
+    if (location.hash === "#search") { if (q.trim()) render(true); else location.hash = beforeSearch; }
+    else if (q.trim()) { beforeSearch = location.hash || "#pipeline"; location.hash = "search"; }
+  }, 150);
+}
+function openCompany(name) { window._acctq = name; location.hash = "accounts"; }
+window.addEventListener("hashchange", () => { if (location.hash !== "#search") $("q").value = ""; render(true); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 setInterval(() => { if (!document.hidden) load(); }, 60000);
 load();
