@@ -70,10 +70,31 @@ There are 19 tools and they mirror the cockpit: `list_`, `get_`, `create_` and `
 
 ## Quick start
 
-Python 3.9+, standard library only. Scoring and the agents need [Claude Code](https://claude.com/claude-code) or an Anthropic API key. An OpenAI-compatible provider can score roles, but can't run the agents.
+On a Mac or Linux computer with Python 3.9+ and git:
 
 ```bash
-git clone https://github.com/<you>/gus && cd gus
+curl -fsSL https://raw.githubusercontent.com/SI-LC/gus/main/deploy/install.sh | bash
+```
+
+That puts the latest release in `~/Gus` (set `GUS_HOME` for somewhere else), starts it now and each time you log in, and opens the cockpit at http://127.0.0.1:8484. Your CV, contacts and everything Gus finds stay in that folder. It also gives you a `gus` command:
+
+| | |
+|---|---|
+| `gus open` | Open the cockpit |
+| `gus status`, `gus logs` | Is it running, and what has it been doing |
+| `gus stop`, `gus start` | Stop it, and start it again |
+| `gus update` | Move to the latest release. If the new one doesn't come up, Gus goes back to the one you had |
+| `gus connect` | How to connect Claude Code or the Claude desktop app |
+| `gus uninstall` | Stop Gus running here. Your search is left where it is |
+
+Scoring and the agents need [Claude Code](https://claude.com/claude-code) or an Anthropic API key. An OpenAI-compatible provider can score roles, but can't run the agents. Gus itself is standard-library Python: nothing else is installed.
+
+A computer that's asleep or off at the daily run time would miss it, so a new install has **Catch up a missed daily run** turned on under Settings → Schedule: Gus runs when it next starts.
+
+To work on the code instead, clone it and run it in the foreground:
+
+```bash
+git clone https://github.com/SI-LC/gus && cd gus
 git config core.hooksPath .githooks                 # the code-only commit guard
 python3 -m radar.service                            # the cockpit: http://127.0.0.1:8484
 ```
@@ -84,7 +105,7 @@ After that, under **Settings**, you can add keys, connect Gmail, set up [ntfy](h
 
 ## Run it on a Raspberry Pi
 
-Always on, and private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi with Tailscale and Claude Code installed and logged in.
+For a Gus that never sleeps and that you can open from your phone: always on, and private to your own devices through [Tailscale](https://tailscale.com). You'll need a 64-bit Pi with Tailscale and Claude Code installed and logged in.
 
 ```bash
 git clone https://github.com/<you>/gus && cd gus

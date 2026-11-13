@@ -222,23 +222,26 @@ def sources_due(now: datetime, cfg: dict, s: dict) -> bool:
     return bool(_sources_on(cfg) and cfg.get("sources_auto") and t and now.strftime("%H:%M") >= t and s.get("sources") != str(now.date()))
 
 
+def tick(first: bool, now: datetime = None) -> None:
+    """One look at the clock. `first` is the look made as Gus starts."""
+    cfg = load_config()
+    now = now or datetime.now()
+    s = _schedule_state()
+    if sources_due(now, cfg, s) and start("sources"):
+        s["sources"] = str(now.date())
+        _save_schedule_state(s)
+    if cfg.get("scheduler_enabled") and due(now, cfg, s):
+        # Started after today's time: a server that was restarted lets it go, a laptop that was off catches up
+        if (first and not cfg.get("catch_up_missed_run")) or start("run"):
+            s["run"] = str(now.date())
+            _save_schedule_state(s)
+
+
 def scheduler():
     first = True
     while True:
         try:
-            cfg = load_config()
-            now = datetime.now()
-            s = _schedule_state()
-            if sources_due(now, cfg, s) and start("sources"):
-                s["sources"] = str(now.date())
-                _save_schedule_state(s)
-            if cfg.get("scheduler_enabled"):
-                if first and due(now, cfg, s):  # started after today's time: don't fire straight away
-                    s["run"] = str(now.date())
-                    _save_schedule_state(s)
-                elif due(now, cfg, s) and start("run"):
-                    s["run"] = str(now.date())
-                    _save_schedule_state(s)
+            tick(first)
             first = False
         except Exception:
             traceback.print_exc()
