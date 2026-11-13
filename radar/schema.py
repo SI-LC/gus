@@ -29,6 +29,8 @@ TEXT_KINDS = ["posting", "summary"]
 PERSON_KINDS = ["product_leader", "hiring_manager", "peer_pm", "recruiter", "warm", "announcer"]
 PERSON_STAGES = ["mapped", "contacted", "replied", "conversation", "referred", "closed"]
 MOVE_STATUS = ["todo", "done", "skipped"]
+# why you skipped a role, as the cockpit offers it: what you say here is what scoring got wrong
+SKIP_REASONS = {"junior": "Too junior", "senior": "Too senior", "domain": "Wrong domain", "location": "Location", "pay": "Pay", "company": "Not this company"}
 OUTCOMES = ["no_reply", "replied", "conversation", "interview", "referral", "not_now"]
 SIGNAL_STATUS = ["new", "processed", "ignored"]
 
@@ -37,7 +39,7 @@ OBJECTS = {
     "jobs": ("jobs.json", r"^[a-z]+:", ["company", "title", "url", "stage"],
              {"company": STR, "title": STR, "url": STR, "location": STR, "description": STR, "score": INT, "why": STR,
               "flags": LIST, "history": LIST, "contacts": DICT, "note": STR, "folder": STR, "missed": INT, "also": DICT, "ref": STR, "pruned": STR},
-             {"stage": JOB_STAGES, "source": JOB_SOURCES, "text_kind": TEXT_KINDS}),
+             {"stage": JOB_STAGES, "source": JOB_SOURCES, "text_kind": TEXT_KINDS, "skip_reason": list(SKIP_REASONS)}),
     "companies": ("companies.json", r".", ["status"],
                   {"fit": NUM, "fit_why": STR, "source": STR, "signal": STR, "investors": LIST,
                    "product_leaders": LIST, "tier_locked": BOOL, "favourite": BOOL, "vetoed": BOOL, "reassess": BOOL,

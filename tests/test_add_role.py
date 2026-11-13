@@ -100,6 +100,20 @@ class AddRole(unittest.TestCase):
             self.assertIn("error", server.update_job({"id": jid, **bad}))
         self.assertEqual(self.stored()[jid]["title"], "Product Lead, Platform")
 
+    def test_a_skip_can_say_why_and_the_reason_goes_when_the_role_comes_back(self):
+        jid = self.add()["id"]
+        self.assertIn("error", server.update_job({"id": jid, "skip_reason": "domain"}))  # not skipped: nothing to explain
+        self.assertNotIn("skip_reason", self.stored()[jid])
+        self.assertIn("error", server.update_job({"id": jid, "stage": "skipped", "skip_reason": "boring"}))
+        self.assertEqual(self.stored()[jid]["stage"], "shortlisted")  # a bad reason changes nothing
+        self.assertEqual(server.update_job({"id": jid, "stage": "skipped", "skip_reason": "domain"})["job"]["skip_reason"], "domain")
+        self.assertEqual(server.update_job({"id": jid, "skip_reason": "pay"})["job"]["skip_reason"], "pay")
+        server.update_job({"id": jid, "skip_reason": ""})
+        self.assertNotIn("skip_reason", self.stored()[jid])
+        server.update_job({"id": jid, "skip_reason": "junior"})
+        server.update_job({"id": jid, "stage": "new"})
+        self.assertNotIn("skip_reason", self.stored()[jid])
+
     def test_a_role_from_a_board_keeps_what_its_ad_says(self):
         self.jobs.write_text(json.dumps({"gh:acme:9": {"id": "gh:acme:9", "company": "Acme", "title": "PM", "url": "https://boards.example/acme/9",
                                                        "stage": "new", "source": "board", "description": "The ad"}}))
