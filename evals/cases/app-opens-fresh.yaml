@@ -8,7 +8,7 @@ check:
   - open Companies
   - see "Companies"
   - open Pipeline
-  - see "Applications"
+  - see "Finished"
   - open Role Inbox
   - see "You're up to date"
   - open Usage
