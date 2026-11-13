@@ -202,7 +202,7 @@ function costs() {
   const u = S.usage, max = Math.max(0.01, ...u.days.map(d => d.ai + d.x));
   const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   return `<h1>Usage</h1>
-    <p class="lede">What Gus's AI runs have used, by day and by task. On a Claude plan, the Claude part isn't money you pay.</p>
+    <p class="lede">On a Claude plan, the Claude part isn't money you pay.</p>
     <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
       ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}
       ${stat(compact(u.ai.month.tokens || 0), "Tokens this month")}${stat(S.health.signals_waiting, "Signals queued")}${stat(S.health.last_agent_run ? ago(S.health.last_agent_run) : "never", "Last agent run")}</div>
@@ -245,6 +245,7 @@ function chipRow(label, options, value, name) {
     return `<a href="#roles" class="${v === value ? "on" : ""}" onclick="event.preventDefault();${name}=${jsq(v)};saveRoleFilters();render(true)">${l} <span class="sub">${n}</span></a>`;
   }).join("")}</div>`;
 }
+const sameText = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 const SOURCE_LABEL = { adzuna: "Adzuna", jsearch: "JSearch" };
 const limitLine = (s, r) => `<tr><td><b>${esc(s.label)}</b> ${esc(r.period)}${r.left <= 0 ? ' <span class="flag">At limit</span>' : ""}</td><td>${r.used} of ${r.limit} used</td><td>${r.left} left</td><td class="sub">Resets ${esc(r.resets)}${r.exact ? "" : " (estimate)"}</td></tr>`;
 const sourcesDue = list => (list || []).filter(s => s.on).map(s => ` ${s.label} next due: ${s.next_run || "now"}.`).join("");
@@ -315,11 +316,11 @@ function roleCard(j, actions, extra = "") {
     <div>
       <div class="co">${esc(j.company)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${esc((j.location || "").slice(0, 80))} · found ${ago(j.first_seen)}</div>
+      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}${extra}
-      <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button onclick="watchCompany(${jsq(j.id)})">Add company to watchlist</button>` : ""}</div>
-    </div></article>`;
+    </div>
+    <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button class="link" onclick="watchCompany(${jsq(j.id)})">Watch this company</button>` : ""}</div></article>`;
 }
 
 
@@ -455,7 +456,6 @@ const V = {
       .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
     const steps = [["Events", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
     return `<h1>To do <span class="count">${todo.length}</span></h1>
-      <p class="lede">Week ${Number(wk.split("-W")[1])}: the people worth contacting now, each with a reason and a draft. You edit it and press send.</p>
       <div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>
       ${meetingsBlock()}
       ${followUpsBlock()}
@@ -497,7 +497,6 @@ const V = {
         <td><a href="${link(g.url)}" target="_blank" rel="noopener">${esc(g.board)}</a> <span class="sub">· ${g.open_roles} open role${g.open_roles === 1 ? "" : "s"}</span></td>
         <td class="row"><button class="primary" onclick="boardGuess(${jsq(g.name)}, true)">It's theirs</button> <button onclick="boardGuess(${jsq(g.name)}, false)">Not them</button></td></tr>`).join("")}</table>` : "";
     return `<h1>Companies <span class="count">${S.accounts.length}</span></h1>
-      <p class="lede">The companies you're aiming for, by tier, with what's happened at each and who to talk to there.</p>
       <details class="add-event m-0 mb-3"><summary class="sub">+ Add a company</summary>
         <div class="row mt-1.5"><input type="text" id="add-co-name" placeholder="Company name" aria-label="Company name" class="flex-1">
           <input type="text" id="add-co-careers" placeholder="Careers page address (optional, but surer)" aria-label="Careers address" class="flex-[2]">
@@ -521,7 +520,7 @@ const V = {
             ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>${roleLinks(j)}</div>
           ${rolePeople(j)}</div>`;
       }).join("") + `</div>`; }).join("");
-    return `<h1>Pipeline</h1><p class="lede">Every application by stage, with the people you're talking to on its card. Move a card on as things happen.</p>
+    return `<h1>Pipeline</h1>
       ${meetingsBlock()}
       <details class="add-event keep m-0 mb-3"><summary class="sub">+ Add a role</summary>
         <div class="row mt-1.5"><input type="text" id="add-role-company" placeholder="Company" aria-label="Company" class="flex-1">
@@ -563,7 +562,7 @@ const V = {
   },
   roles() {
     const rows = newRoles();
-    return `<h1>Role Inbox <span class="count">${rows.length}</span></h1><p class="lede">New roles scored against your profile, best first. Shortlist the ones you'd apply for and skip the rest.</p>
+    return `<h1>Role Inbox <span class="count">${rows.length}</span></h1>
       ${getStarted()}
       ${chipRow("Show", [["new", "New"], ["closed", "Closed ads"], ["skipped", "Skipped"]], roleView, "roleView")}
       ${chipRow("Where", [...S.places.map(p => [p, esc(p)]), ["all", "All"]], roleWhere, "roleWhere")}
@@ -573,8 +572,8 @@ const V = {
           const rest = also.map(v => v.id), all = jsa([j.id, ...rest]);
           return roleCard(j, `
         <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside'))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
-        <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Company</button>
-        <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>`, alreadyHere(j) + alsoIn(also));
+        <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>
+        <button class="link" onclick="openCompany(${jsq(j.company)})">About ${esc(j.company)}</button>`, alreadyHere(j) + alsoIn(also));
         };
         const many = g.entries.length >= GROUP_FROM, open = openCo.has(g.key), hidden = g.entries.length - 1;
         const ids = jsa(g.entries.flatMap(e => [e.j.id, ...e.also.map(v => v.id)]));
@@ -592,7 +591,7 @@ const V = {
     const tab = (location.hash.split("/")[1] || "ai");
     const tabs = SETTINGS_TABS.map(([k, l]) => `<a href="#settings/${k}" class="${k === tab ? "on" : ""}">${l}</a>`).join("");
     const body = (SETTINGS_TABS.find(t => t[0] === tab) || SETTINGS_TABS[0])[2]();
-    return `<h1>Settings</h1><p class="lede">What Gus looks for, where, and how it runs. Changes save by themselves.</p>
+    return `<h1>Settings</h1>
       <div class="tabs" role="tablist">${tabs}</div>${body}`;
   },
   health() {
@@ -844,20 +843,17 @@ function drawTicker() {
   const now = new Date(), month = now.toLocaleString("en-GB", { month: "long" }), from = new Date(now.getFullYear(), now.getMonth(), 1);
   const read = S.jobs.filter(j => j.score != null && j.first_seen && new Date(j.first_seen) >= from).length;
   const mins = read * READ_MIN, saved = mins < 60 ? mins + " min" : (mins / 60 < 10 ? (mins / 60).toFixed(1).replace(".0", "") : Math.round(mins / 60)) + "h";
-  $("ticker").innerHTML = `<button class="scan-now run" title="Everything: checks for new roles and scores them, then finds companies, refreshes them and plans your moves. Takes a while and uses more AI.${esc(sourcesDue(h.sources))}" onclick="startRun('run')"${busy === "run" ? " disabled" : ""}>${busy === "run" ? "Running…" : "Full run"}</button>
-    <button class="scan-now" title="One scan: reads your job boards, feeds and email, scores new roles and maps people where there's fresh news. None of the research steps." onclick="startRun('scan')"${busy === "scan" ? " disabled" : ""}>${busy === "scan" ? "Checking…" : "Check roles"}</button>
-    <span class="${fresh ? "live" : "stale"}">Last run ${ago(lastRun)}</span>
-    <a href="#roles" class="no-underline" title="New roles waiting for you in Role Inbox${strong ? `, ${strong} of them scoring 8 or more` : ""}"><b>${fresh_roles.length}</b> to review${strong ? ` · <b>${strong}</b> strong` : ""}</a>
-    <a href="#week" class="no-underline" title="People to contact this week"><b>${contact}</b> to contact</a>
-    <a href="#pipeline" class="no-underline" title="Applications sent or at interview"><b>${live}</b> in play</a>
-    <span class="tick-sep">In ${month}</span>
-    <span title="Roles Gus read and scored for you this month"><b>${read.toLocaleString()}</b> role${read === 1 ? "" : "s"} read from <b>${h.boards}</b> board${h.boards === 1 ? "" : "s"}</span>
-    <span title="A guess: reading ${read.toLocaleString()} job ad${read === 1 ? "" : "s"} yourself, at about ${READ_MIN} minutes each"><b>~${saved}</b> saved</span>
-    <a href="#health" class="no-underline" title="Everything the AI read and wrote for you this month"><b>${compact(S.usage.ai.month.tokens || 0)}</b> tokens burnt</a>
-    <a href="#health" class="no-underline"${S.ai.on_plan ? ` title="What this month's usage would cost at API prices. Your Claude plan covers the Claude part."` : ""}><b>${usd(S.usage.ai.month.cost_usd + S.usage.x.month.cost_usd)}</b> ${S.ai.on_plan ? "API value" : "spent"}</a>
-`;
+  const need = (n, text, to, title) => `<a class="need${n ? "" : " zero"}" href="#${to}" title="${title}"><b>${n}</b><span>${text}</span></a>`;
+  $("ticker").innerHTML = need(fresh_roles.length, `to review${strong ? ` · ${strong} strong` : ""}`, "roles", `New roles waiting for you in Role Inbox${strong ? `, ${strong} of them scoring 8 or more` : ""}`) +
+    need(contact, "to contact", "week", "People to contact this week") + need(live, "in play", "pipeline", "Applications sent or at interview") +
+    `<span class="tick-rest"><span class="${fresh ? "live" : "stale"}">${lastRun ? "Checked " + ago(lastRun) : "Not checked yet"}</span>
+      <span title="Roles Gus read and scored for you in ${month}. Saved is a guess: about ${READ_MIN} minutes to read each ad yourself."><b>${read.toLocaleString()}</b> role${read === 1 ? "" : "s"} read from <b>${h.boards}</b> board${h.boards === 1 ? "" : "s"} in ${month} · <b>~${saved}</b> saved</span></span>
+    <span class="run-group"><button class="scan-now" title="Reads your job boards, feeds and email, and scores what's new.${esc(sourcesDue(h.sources))}" onclick="startRun('scan')"${busy ? " disabled" : ""}>${busy === "scan" ? "Checking…" : busy === "run" ? "Running…" : "Check roles"}</button>
+      <details class="run-more"><summary title="More" aria-label="More ways to run Gus">▾</summary><div class="run-menu">
+        <button onclick="startRun('run')"${busy ? " disabled" : ""}>Full run</button>
+        <p>Checks roles, then also finds new companies, refreshes the ones you watch and plans who to contact. Takes a while and uses more AI.</p></div></details></span>`;
 }
-function navSlim() { try { return localStorage.getItem("radar-nav") !== "open"; } catch (e) { return true; } }
+function navSlim() { try { return localStorage.getItem("radar-nav") === "slim"; } catch (e) { return false; } }
 function drawNav() {
   const slim = navSlim(), b = $("navToggle");
   document.querySelector(".app").classList.toggle("slim", slim);

@@ -1,5 +1,5 @@
 id: status-bar-counts
-requirement: The status bar leads with what's waiting for me, then what Gus did this month, and doesn't present plan usage as money spent.
+requirement: The status bar leads with what's waiting for me, then what Gus did this month, and keeps what the AI used on the Usage screen.
 given: scanned
 check:
   - status bar says "to review"
@@ -8,9 +8,11 @@ check:
   - status bar says "read from"
   - status bar says "board"
   - status bar says "saved"
-  - status bar says "tokens burnt"
-  - status bar says "API value"
+  - status bar says "Check roles"
+  - status bar doesn't say "tokens"
+  - status bar doesn't say "api value"
+  - status bar doesn't say "never"
   - status bar doesn't say "1 boards"
   - status bar doesn't say "this month"
   - status bar doesn't say "signals"
-judge: Can I tell at a glance what needs me and what Gus has done, and would I read the cost as what the usage is worth, not as a bill?
+judge: Can I tell at a glance what needs me and what Gus has done, without reading every number?
