@@ -9,9 +9,10 @@ import json
 import sys
 
 from radar import ai, doing, salary
+from radar.jobs import same_company
 from radar.notify import notify
 from radar.matching import load_config
-from radar.paths import JOBS, ROOT
+from radar.paths import COMPANIES, JOBS, ROOT
 from radar.store import locked, read
 
 PROMPT = (ROOT / "prompts" / "triage.md").read_text()
@@ -25,6 +26,11 @@ def usable(r, ids):
     return (isinstance(r, dict) and isinstance(r.get("id"), str) and r["id"] in ids
             and type(r.get("score")) is int and 1 <= r["score"] <= 10
             and isinstance(r.get("why"), str) and bool(r["why"].strip()))
+
+
+def favourites() -> set:
+    """The companies you marked as ones you love: a low score there is shown to you, never skipped for you."""
+    return {same_company(n) for n, c in read(COMPANIES, {}).items() if isinstance(c, dict) and c.get("favourite") and not c.get("vetoed")}
 
 
 class ScoringFailed(Exception):
@@ -55,7 +61,7 @@ def score_batch(profile_path, todo):
 
     cfg = load_config()
     threshold = cfg["notify_min_score"]
-    alerts = []
+    alerts, loved = [], favourites()
     with locked(JOBS) as store:  # re-read: the cockpit may have changed things meanwhile
         for r in results:
             j = store.get(r["id"])
@@ -67,7 +73,8 @@ def score_batch(profile_path, todo):
             j.update(score=score, why=r["why"], flags=flags + [note] if note else flags)
             if note:
                 j["score_before_salary"] = r["score"]
-            if score < 5 and j.get("stage") == "new" and j.get("source") != "manual":  # a role you added yourself is yours to skip
+            yours = j.get("source") == "manual" or same_company(j.get("company")) in loved  # one you added, or at a favourite: yours to skip
+            if score < 5 and j.get("stage") == "new" and not yours:
                 j["stage"] = "skipped"
             if score >= threshold:
                 alerts.append((f"{score}/10 · {j['company']}", j["title"], r["why"], j["url"]))
