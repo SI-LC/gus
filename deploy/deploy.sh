@@ -17,6 +17,7 @@ if [ -z "${GUS_DEPLOY_PULLED:-}" ]; then {
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main has commits that aren't on GitHub. Put them on a branch and open a pull request."; exit 1; }
   GUS_DEPLOY_PULLED=1 exec bash deploy/deploy.sh "$@"
 }; fi
+unset GUS_DEPLOY_PULLED  # the scan below runs this script's own tests: left set, they'd skip the checks above and fail
 
 bash deploy/scan.sh
 sha=$(git rev-parse --short HEAD)
