@@ -11,8 +11,8 @@ check:
   - see "Finished"
   - open Role Inbox
   - see "You're up to date"
-  - open Usage
-  - see "Usage"
+  - open Activity
+  - see "Activity"
   - open Settings
   - see "AI connection"
 judge: Would a new user know what to do first?
