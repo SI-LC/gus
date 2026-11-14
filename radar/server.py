@@ -22,7 +22,7 @@ from radar.companies import veto
 from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS
-from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES
+from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASONS
 from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked, read
@@ -112,7 +112,7 @@ def state():
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
-        "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES,
+        "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES, "skip_reasons": SKIP_REASONS,
                    "role_stages": JOB_STAGES},
         "health": {
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),
@@ -446,6 +446,11 @@ def update_job(body):
         j = store.get(body.get("id"))
         if not j:
             return {"error": "No such role"}
+        reason = body.get("skip_reason") or None
+        if reason and reason not in SKIP_REASONS:
+            return {"error": f"No such reason: {reason}. The reasons are {', '.join(SKIP_REASONS)}"}
+        if reason and (body.get("stage") if body.get("stage") in JOB_STAGES else j.get("stage")) != "skipped":
+            return {"error": "Only a role you skipped can have a reason for skipping it"}
         if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
             if j.get("source") != "manual":
                 return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
@@ -466,6 +471,13 @@ def update_job(body):
         if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
             j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
             j["stage"] = body["stage"]
+            if j["stage"] != "skipped":
+                j.pop("skip_reason", None)  # restored or taken up: the reason went with the skip
+        if "skip_reason" in body:
+            if reason:
+                j["skip_reason"] = reason
+            else:
+                j.pop("skip_reason", None)
         if "note" in body:
             j["note"] = str(body["note"])[:2000]
         if "folder" in body:
