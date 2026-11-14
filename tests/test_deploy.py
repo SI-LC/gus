@@ -108,6 +108,57 @@ class UpdatePi(unittest.TestCase):
         self.assertEqual((self.app / "radar" / "app.py").read_text(), "x = 99\n")
 
 
+class Deploy(UpdatePi):
+    """deploy/deploy.sh on your own machine, with the scan, ssh and gh faked: ssh keeps what it was sent."""
+
+    def setUp(self):
+        super().setUp()
+        for name, body in (("ssh", '#!/bin/sh\ncat >> "$HOME/sent"\n'), ("gh", '#!/bin/sh\necho "$*" >> "$HOME/released"\n')):
+            tool = self.home / "bin" / name
+            tool.write_text(body)
+            tool.chmod(0o755)
+        (self.home / "dev" / "deploy").mkdir()
+        (self.home / "dev" / "deploy" / "scan.sh").write_text("echo scanned\n")
+        (self.home / "dev" / "deploy" / "update.sh").write_text("# the update\n")
+        self.commit("deploy/deploy.sh", (ROOT / "deploy" / "deploy.sh").read_text())
+        self.git("pull", "-q", "origin", "main", cwd=self.app)  # the machine deploying, on main as it was
+
+    for _name in [n for n in dir(UpdatePi) if n.startswith("test_")]:
+        locals()[_name] = None
+
+    def run_deploy(self):
+        out = subprocess.run(["bash", "deploy/deploy.sh"], cwd=self.app, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+        return out.returncode, out.stdout + out.stderr
+
+    def test_it_sends_the_update_and_publishes_a_release(self):
+        code, out = self.run_deploy()
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.home / "sent").read_text(), "# the update\n")
+        self.assertIn("release create v0.1.0", (self.home / "released").read_text())
+
+    def test_a_merge_that_changes_the_deploy_itself_is_deployed_by_the_new_copy(self):
+        dev = self.home / "dev" / "deploy"
+        self.git("mv", "deploy/update.sh", "deploy/update-renamed.sh")
+        (dev / "update-renamed.sh").write_text("# the renamed update\n")
+        new = self.commit("deploy/deploy.sh", (ROOT / "deploy" / "deploy.sh").read_text().replace("< deploy/update.sh", "< deploy/update-renamed.sh"))
+        code, out = self.run_deploy()
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.home / "sent").read_text(), "# the renamed update\n")
+        self.assertIn(f"On GitHub: {new}", out)
+        self.assertEqual(out.count("scanned"), 1, "the scan runs once, after the pull")
+
+    def test_work_that_is_not_committed_or_not_on_main_stops_it(self):
+        (self.app / "radar" / "app.py").write_text("x = 99\n")
+        code, out = self.run_deploy()
+        self.assertEqual((code, (self.home / "sent").exists()), (1, False), out)
+        self.assertIn("Commit your changes first", out)
+        self.git("checkout", "-q", "--", ".", cwd=self.app)
+        self.git("checkout", "-q", "-b", "side", cwd=self.app)
+        code, out = self.run_deploy()
+        self.assertEqual((code, (self.home / "sent").exists()), (1, False), out)
+        self.assertIn("Deploy from main", out)
+
+
 class UpdateHere(UpdatePi):
     """`gus update` on your own computer: the same script, moving to the latest release, not to a commit."""
 
