@@ -6,12 +6,17 @@ cd "$(dirname "$0")/.."
 PI="${GUS_PI:-sipi}"
 bump="${1:-patch}"
 case "$bump" in patch|minor|major) ;; *) echo "Usage: bash deploy/deploy.sh [patch|minor|major]"; exit 1 ;; esac
-[ -z "$(git status --porcelain)" ] || { echo "Commit your changes first:"; git status --short; exit 1; }
-[ "$(git branch --show-current)" = main ] || { echo "Deploy from main."; exit 1; }
 
-git pull -q --ff-only origin main
-git fetch -q --tags origin
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main has commits that aren't on GitHub. Put them on a branch and open a pull request."; exit 1; }
+# Bring main up to date, then start again from the copy that arrived. Bash reads a script as it goes, so without this a
+# pull that changes this file leaves the old lines running against the new code. The braces make it read this far first.
+if [ -z "${GUS_DEPLOY_PULLED:-}" ]; then {
+  [ -z "$(git status --porcelain)" ] || { echo "Commit your changes first:"; git status --short; exit 1; }
+  [ "$(git branch --show-current)" = main ] || { echo "Deploy from main."; exit 1; }
+  git pull -q --ff-only origin main
+  git fetch -q --tags origin
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main has commits that aren't on GitHub. Put them on a branch and open a pull request."; exit 1; }
+  GUS_DEPLOY_PULLED=1 exec bash deploy/deploy.sh "$@"
+}; fi
 
 bash deploy/scan.sh
 sha=$(git rev-parse --short HEAD)
