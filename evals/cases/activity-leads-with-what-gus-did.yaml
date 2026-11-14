@@ -10,5 +10,5 @@ check:
   - see "All worked"
   - '"Job boards" appears before "Claude today"'
   - not see "never"
-  - not see "Board errors"
+  - not see "Job boards that didn't work"
 judge: Can I tell at a glance what Gus has done and whether anything is broken, without reading a grid of numbers?
