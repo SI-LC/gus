@@ -4,6 +4,7 @@ given: scanned
 check:
   - open Companies
   - see "Harborlight"
+  - click "Harborlight"
   - click "+ Add news"
   - type "https://example.com/harborlight-series-b" into "Link for Harborlight"
   - type "Raised a Series B" into "Summary for Harborlight"

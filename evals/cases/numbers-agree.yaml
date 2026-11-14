@@ -1,0 +1,12 @@
+id: numbers-agree
+requirement: The number of roles to review is the same in the status bar, the menu and Role Inbox, and nothing is counted before my data has loaded.
+given: scanned
+check:
+  - open Role Inbox
+  - pick "All"
+  - status bar says "to review"
+  - status bar doesn't say "undefined"
+  - status bar doesn't say "not checked yet"
+  - open Companies
+  - see "Tier A"
+judge: Do the counts in the status bar, the menu and the screen itself tell me the same thing?
