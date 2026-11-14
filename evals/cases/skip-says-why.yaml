@@ -5,6 +5,8 @@ check:
   - open Role Inbox
   - click "Skip"
   - message says "Why?"
+  - message says "Recruiter, company not named"
+  - message says "Applied here before"
   - click "Wrong domain" in the message
   - 'message says "Noted: wrong domain"'
   - pick "Skipped"
