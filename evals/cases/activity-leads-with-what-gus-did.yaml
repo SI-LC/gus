@@ -1,0 +1,14 @@
+id: activity-leads-with-what-gus-did
+requirement: Activity tells me first what Gus did for me this month and whether everything is working, and only then what the AI used.
+given: scanned
+check:
+  - open Activity
+  - see "read and scored in"
+  - see "of reading saved"
+  - see "Is everything working?"
+  - see "Job boards"
+  - see "All worked"
+  - '"Job boards" appears before "Claude today"'
+  - not see "never"
+  - not see "Board errors"
+judge: Can I tell at a glance what Gus has done and whether anything is broken, without reading a grid of numbers?

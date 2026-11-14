@@ -25,7 +25,7 @@
     <a href="#pipeline" data-v="pipeline" data-i="02" title="Pipeline"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v5h-4z"/></svg><span class="lb">Pipeline</span> <span class="n" id="n-pipeline"></span></a>
     <a href="#week" data-v="week" data-i="03" title="To do"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2"/></svg><span class="lb">To do</span> <span class="n" id="n-week"></span></a>
     <a href="#accounts" data-v="accounts" data-i="04" title="Companies"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V5h9v15M13 10h7v10M2 20h20M7 9h3M7 13h3"/></svg><span class="lb">Companies</span> <span class="n" id="n-accounts"></span></a>
-    <a href="#health" data-v="health" data-i="05" title="Usage"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg><span class="lb">Usage</span></a>
+    <a href="#health" data-v="health" data-i="05" title="Activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg><span class="lb">Activity</span></a>
     <a href="#settings" data-v="settings" data-i="06" title="Settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="lb">Settings</span></a>
     <button class="nav-toggle" id="navToggle" onclick="toggleNav()"></button>
   </nav>
@@ -259,16 +259,30 @@ function meetingsBlock() {
     <td><b>${esc(m.title || "Meeting")}</b>${m.account ? ` <span class="sub">· ${esc(m.account)}</span>` : ""}<div class="sub">${esc(m.why || "")}${m.organizer ? " · " + esc(m.organizer) : ""}</div></td>
     <td class="hide-sm sub">${/^https?:/i.test(m.location || "") ? `<a href="${link(m.location)}" target="_blank" rel="noopener">Join</a>` : esc(m.location || "")}</td></tr>`).join("")}</table>`;
 }
+function gusDid() {  // the roles Gus read and scored for you this month, and a guess at the reading that saved
+  const now = new Date(), from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const read = S.jobs.filter(j => j.score != null && j.first_seen && new Date(j.first_seen) >= from).length, mins = read * READ_MIN;
+  return { read, month: now.toLocaleString("en-GB", { month: "long" }),
+           saved: mins < 60 ? mins + " min" : (mins / 60 < 10 ? (mins / 60).toFixed(1).replace(".0", "") : Math.round(mins / 60)) + "h" };
+}
+function readChart() {  // roles read on each of the last 14 days, drawn to one scale with its numbers on the axis
+  const days = [...Array(14)].map((_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 13 + i); return d; });
+  const key = d => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(), n = {};
+  S.jobs.forEach(j => { if (j.score != null && j.first_seen) { const k = key(new Date(j.first_seen)); n[k] = (n[k] || 0) + 1; } });
+  const vals = days.map(d => n[key(d)] || 0), top = Math.max(4, Math.ceil(Math.max(...vals) / 4) * 4);
+  const W = 560, H = 124, L = 30, B = 98, T = 12, bw = (W - L) / 14, y = v => B - v / top * (B - T);
+  const fmt = d => d.toLocaleString("en-GB", { day: "numeric", month: "short" });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Roles read each day for the last 14 days, oldest first: ${vals.join(", ")}">
+    ${[0, top / 2, top].map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("")}
+    ${vals.map((v, i) => `<rect class="${i === 13 ? "now" : ""}" x="${(L + i * bw + 3).toFixed(1)}" y="${v ? y(v).toFixed(1) : B - 1}" width="${(bw - 6).toFixed(1)}" height="${v ? (B - y(v)).toFixed(1) : 1}"><title>${fmt(days[i])}: ${v} role${v === 1 ? "" : "s"}</title></rect>`).join("")}
+    <text x="${L + 3}" y="${H - 8}">${fmt(days[0])}</text><text x="${W - 3}" y="${H - 8}" text-anchor="end">Today</text></svg>`;
+}
 function costs() {
-  const u = S.usage, max = Math.max(0.01, ...u.days.map(d => d.ai + d.x));
-  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  return `<h1>Usage</h1>
-    <p class="lede">On a Claude plan, the Claude part isn't money you pay.</p>
-    <div class="stats">${stat(usd(u.ai.today.cost_usd), "Claude today")}${stat(usd(u.ai.week.cost_usd), "Claude 7 days")}${stat(usd(u.ai.month.cost_usd), "Claude this month")}
-      ${stat(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${stat(u.ai.month.runs, "Runs this month")}${stat(u.ai.month.searches, "Searches this month")}${stat(usd(u.x.month.cost_usd), "X this month (est.)")}
-      ${stat(compact(u.ai.month.tokens || 0), "Tokens this month")}${stat(S.health.signals_waiting, "Signals queued")}${stat(S.health.last_agent_run ? ago(S.health.last_agent_run) : "never", "Last agent run")}</div>
-    <div class="section">Last 14 days</div>
-    <div class="spark">${u.days.map(d => `<div title="${d.date}: ${usd(d.ai)} Claude, ${usd(d.x)} X"><i style="height:${Math.round((d.ai + d.x) / max * 100)}%"></i></div>`).join("")}</div>
+  const u = S.usage, fact = (v, l) => `<div><span>${l}</span><b>${v}</b></div>`;
+  return `<div class="section">What the AI used</div>
+    <div class="facts">${fact(usd(u.ai.today.cost_usd), "Claude today")}${fact(usd(u.ai.week.cost_usd), "Claude, 7 days")}${fact(usd(u.ai.month.cost_usd), "Claude this month")}
+      ${fact(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.ai.month.searches, "Searches this month")}
+      ${fact(compact(u.ai.month.tokens || 0), "Tokens this month")}${fact(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     <p class="sub mt-3">${u.first ? `Tracking since ${esc(u.first.slice(0, 10))}. ` : "Nothing recorded yet. "}Scheduled tasks in the desktop app aren't included, and the Claude app doesn't report how much of your Pro allowance is left.</p>`;
@@ -670,25 +684,30 @@ const V = {
       <div class="tabs" role="tablist">${tabs}</div>${body}`;
   },
   health() {
-    const h = S.health, errs = Object.entries(h.board_errors || {}), feedErrs = Object.entries(h.feed_errors || {});
-    return costs() + `<div class="section">Health</div>
-      <div class="stats">
-        <div class="stat"><div class="v">${ago(h.last_scan)}</div><div class="l">Last scan</div></div>
-        <div class="stat"><div class="v">${h.last_agent_run ? ago(h.last_agent_run) : "never"}</div><div class="l">Last agent run</div></div>
-        <div class="stat"><div class="v">${h.boards}</div><div class="l">Boards scanned</div></div>
-        <div class="stat"><div class="v">${S.jobs.length}</div><div class="l">Roles tracked</div></div>
-        <div class="stat"><div class="v">${h.signals_waiting}</div><div class="l">Signals waiting</div></div>
-        <div class="stat"><div class="v">${h.x && h.x.day ? (h.x.used || 0) : "off"}</div><div class="l">X posts today</div></div>
-        <div class="stat"><div class="v">${signedOut() ? "Sign-in expired" : S.ai.paused ? "Paused" : "Ready"}</div><div class="l">AI</div></div>
-        <div class="stat"><div class="v">${h.claude.last_used ? ago(h.claude.last_used) : "never"}</div><div class="l">Claude last connected${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}</div></div>
-      </div>
-      ${signedOut() ? `<div class="section">AI</div><p class="bad">Your Claude sign-in expired ${ago(S.ai.signed_out_since)}. Nothing that needs AI has worked since, and roles found since then have no score.</p>
+    const h = S.health, u = S.usage, errs = Object.entries(h.board_errors || {}), feedErrs = Object.entries(h.feed_errors || {});
+    const { read, saved, month } = gusDid(), worth = u.ai.month.cost_usd + u.x.month.cost_usd;
+    const big = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
+    const row = (kind, name, text) => `<div class="src"><span class="pill ${kind}">${name}</span><span class="sub">${text}</span></div>`;  // kind: done is working, warm wants a look, due is broken, none is off
+    const ai = signedOut() ? row("due", "AI", `Sign-in expired ${ago(S.ai.signed_out_since)}`) : S.ai.paused ? row("warm", "AI", "Paused: today's limit is reached") : row("done", "AI", "Ready");
+    return `<h1>Activity</h1>
+      <div class="big">${big(read.toLocaleString(), `role${read === 1 ? "" : "s"} read and scored in ${month}`)}${big("~" + saved, `of reading saved, at about ${READ_MIN} minutes a role`)}
+        ${big(usd(worth), S.ai.on_plan ? `API value in ${month}, covered by your Claude plan` : `spent on AI in ${month}`)}</div>
+      <div class="section">Roles read each day</div>
+      ${readChart()}
+      <div class="section">Is everything working?</div>
+      ${ai}
+      ${signedOut() ? `<p class="bad">Your Claude sign-in expired ${ago(S.ai.signed_out_since)}. Nothing that needs AI has worked since, and roles found since then have no score.</p>
       <div class="row"><button class="primary" onclick="signIn('health-login')">Sign in with Claude</button></div><div id="health-login"></div>` : ""}
+      ${row(errs.length ? "due" : "done", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} failed on the last check` : "All worked"} · checked ${ago(h.last_scan)}`)}
+      ${row(feedErrs.length ? "due" : "done", "News feeds", feedErrs.length ? `${feedErrs.length} failed on the last check` : "All worked on the last check")}
+      ${row(h.last_agent_run ? "done" : "", "Research runs", h.last_agent_run ? `Last ran ${ago(h.last_agent_run)}` : "Not run yet. A full run starts them")}
+      ${row(h.signals_waiting > 50 ? "warm" : h.signals_waiting ? "done" : "", "News to read", h.signals_waiting ? `${h.signals_waiting} item${h.signals_waiting === 1 ? "" : "s"} waiting for the next full run` : "Nothing waiting")}
+      ${row(h.x && h.x.day ? "done" : "", "X", h.x && h.x.day ? `${h.x.used || 0} posts read today` : `Off. <a href="#settings/sources">Turn it on in Settings</a>`)}
+      ${row(h.claude.token && h.claude.token.old ? "warm" : h.claude.last_used ? "done" : "", "Claude connection", `${h.claude.last_used ? "Last connected " + ago(h.claude.last_used) : "Not connected yet"}${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}`)}
+      ${errs.length ? `<div class="section">Board errors</div><table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : ""}
+      ${feedErrs.length ? `<div class="section">Feed errors</div><table>${feedErrs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : ""}
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
-      <div class="section">Board errors</div>
-      ${errs.length ? `<table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every job board worked on the last check.</div>`}
-      <div class="section">Feed errors</div>
-      ${feedErrs.length ? `<table>${feedErrs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : `<div class="sub">Every feed worked on its last check.</div>`}`;
+      ${costs()}`;
   },
 };
 
@@ -915,9 +934,7 @@ function drawTicker() {
   const fresh_roles = S.jobs.filter(j => inView(j, "new")), strong = fresh_roles.filter(j => (j.score ?? 0) >= 8).length;
   const contact = (S.moves || []).filter(m => m.week === S.week && m.status === "todo").length;
   const live = S.jobs.filter(j => ["applied", "interviewing"].includes(j.stage)).length;
-  const now = new Date(), month = now.toLocaleString("en-GB", { month: "long" }), from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const read = S.jobs.filter(j => j.score != null && j.first_seen && new Date(j.first_seen) >= from).length;
-  const mins = read * READ_MIN, saved = mins < 60 ? mins + " min" : (mins / 60 < 10 ? (mins / 60).toFixed(1).replace(".0", "") : Math.round(mins / 60)) + "h";
+  const { read, saved, month } = gusDid();
   const need = (n, text, to, title) => `<a class="need${n ? "" : " zero"}" href="#${to}" title="${title}"><b>${n}</b><span>${text}</span></a>`;
   $("ticker").innerHTML = need(fresh_roles.length, `to review${strong ? ` · ${strong} strong` : ""}`, "roles", `New roles waiting for you in Role Inbox${strong ? `, ${strong} of them scoring 8 or more` : ""}`) +
     need(contact, "to contact", "week", "People to contact this week") + need(live, "in play", "pipeline", "Applications sent or at interview") +
