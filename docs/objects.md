@@ -32,6 +32,7 @@ copy furthest along and moving its events and moves across.
 | `readvertised` | When a new ad appeared for a role you're pursuing (shortlisted to interviewing): the same company, title and place on the board its old ad was on, or after that ad closed. The new ad is recorded under `also`, not added as a new role |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
+| `skip_reason` | Why you skipped it: `junior`, `senior`, `domain`, `location`, `pay` or `company`. Asked for, never required, when you skip a role, and only ever on a role in `skipped`: restoring the role removes it. A role Gus skipped for its score has none |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
 
 A role that reached you directly, from a recruiter say, has no ad for a scan to find: add it from the Pipeline page
@@ -45,7 +46,7 @@ Its `title`, `location`, `url` and `description` can be corrected afterwards (PO
 on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as
 they were. A role from any other source keeps what its ad says.
 
-POST `/api/job` also sets any role's `stage`, `note` and `folder`. GET `/api/job?id=<id>` returns one role in full,
+POST `/api/job` also sets any role's `stage`, `note` and `folder`, and a skipped role's `skip_reason`. GET `/api/job?id=<id>` returns one role in full,
 `description` included, which `/api/state` leaves out.
 
 A role scoring 7+ that's still open is a `role_posted` event on its account (`role:<job id>` in `data/events.json`), written by

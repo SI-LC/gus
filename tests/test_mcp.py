@@ -177,6 +177,13 @@ class Tools(World):
         self.assertIn("error", mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "hired"}))
         self.assertIn("error", mcp.call("update_role", {"role_id": "gh:acme:2"}))
 
+    def test_a_skip_can_carry_the_users_reason(self):
+        self.writes()
+        self.assertIn("error", mcp.call("update_role", {"role_id": "gh:acme:2", "skip_reason": "pay"}))  # not skipped
+        mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "skip_reason": "pay"})
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["skip_reason"], "pay")
+        self.assertEqual(mcp.call("list_roles", {"stage": "skipped"})["roles"][0]["skip_reason"], "pay")
+
     def test_a_role_added_by_hand_joins_its_company(self):
         self.writes()
         out = mcp.call("create_role", {"company": "acme", "title": "Head of Product", "description": "From a recruiter"})
