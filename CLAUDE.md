@@ -75,6 +75,10 @@ update a case (`evals/README.md`).
 The cockpit's styles are `radar/cockpit.css`, built by Tailwind into `radar/static/cockpit.css`. After changing that file, or a
 class in `radar/cockpit.html`, run `python3 -m radar.css` and commit the built file: the tests fail if it's stale.
 
+Before changing a screen, open `docs/ui-kit.html`: it's the cockpit's design memory, drawn by the same stylesheet. Use only the
+parts on it, and add a new part there, with its rule, before using it. Review the screen with the `dont-make-me-think` skill, look at
+it in the browser at desktop and phone widths, and give its eval a `judge:` that asks whether it's obvious what to press next.
+
 Then deploy from `main` with `bash deploy/deploy.sh` (add `minor` or `major` for a bigger version bump): it runs the
 code scan, updates the Pi, checks it's working and publishes a numbered GitHub release, so the latest release is
 what's on the Pi. If the new commit doesn't work, the Pi goes back to the last commit by itself and no release is

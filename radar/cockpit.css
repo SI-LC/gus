@@ -93,16 +93,16 @@
   .run-group { display: flex; position: relative; }
   .run-group .scan-now { border-radius: var(--radius-btn) 0 0 var(--radius-btn); }
   .run-more summary { list-style: none; cursor: pointer; display: grid; place-items: center; width: 28px; height: 100%; min-height: 28px; font-size: 11px;
-                      background: var(--color-accent); color: var(--color-on-accent); border-left: 1px solid var(--color-ground); border-radius: 0 var(--radius-btn) var(--radius-btn) 0; }
+                      background: var(--color-surface); color: var(--color-ink); border: 1px solid var(--color-rule); border-left: 0; border-radius: 0 var(--radius-btn) var(--radius-btn) 0; }
   .run-more summary::-webkit-details-marker { display: none; }
-  .run-more[open] summary, .run-more summary:hover { background: var(--color-ink); color: var(--color-ground); }
+  .run-more[open] summary, .run-more summary:hover { background: var(--color-sunk); border-color: var(--color-ink); }
   .run-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; width: 280px; padding: 12px; background: var(--color-surface);
               border: 1px solid var(--color-rule); border-radius: var(--radius-btn); white-space: normal; }
   .run-menu button { width: 100%; } .run-menu p { margin: 8px 0 0; font: 13px/1.45 var(--font-sans); color: var(--color-muted); }
   .search { padding: 10px 32px 0; }
   .search input { width: 100%; max-width: 520px; }
-  .banner { padding: 10px 32px; background: var(--color-accent-soft); border-bottom: 1px solid var(--color-accent); color: var(--color-ink); }
-  .banner[hidden] { display: none; } .banner a { color: var(--color-accent); font-weight: 600; }
+  .banner { padding: 10px 32px 10px 29px; background: var(--color-surface); border-bottom: 1px solid var(--color-line); border-left: 3px solid var(--color-bad); color: var(--color-ink); }
+  .banner[hidden] { display: none; } .banner a { font-weight: 600; text-underline-offset: 3px; }
   /* A run in progress, then what it found: what it's doing now, the step, time so far, a moving bar */
   .progress { position: relative; overflow: hidden; padding: 12px 32px 14px; border-bottom: 1px solid var(--color-line); background: var(--color-accent-soft); font-size: 14px; color: var(--color-ink); }
   .progress[hidden] { display: none; } .progress.ok { background: var(--color-surface); } .progress.bad { border-left: 3px solid var(--color-bad); }
@@ -120,8 +120,9 @@
   .prog-bar.ind { width: 30%; animation: slide 1.6s ease-in-out infinite; }
   @keyframes slide { from { left: -30%; } to { left: 100%; } }
   @media (prefers-reduced-motion: reduce) { .prog-bar.ind { animation: none; width: 100%; opacity: .5; } .prog-mark.beat { animation: none; } }
-  .scan-now { min-height: 30px; padding: 3px 14px; font: 600 13px var(--font-sans); flex: none; background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); box-shadow: none; }
-  .scan-now:hover { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-ground); }
+  .scan-now { min-height: 30px; padding: 3px 14px; font: 600 13px var(--font-sans); flex: none; box-shadow: none; }
+  .scan-now.first { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+  .scan-now.first:hover { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-ground); }
   .live { color: var(--color-ink); } .live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px; background: var(--color-accent); animation: pulse 2s infinite; }
   .stale { color: var(--color-bad); } .stale::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 1px; background: var(--color-bad); }
   @keyframes pulse { 50% { opacity: .25; } }
@@ -148,7 +149,7 @@
   .getting-started ul { margin: 6px 0 0; padding: 0; }
 
   /* Text */
-  h1 .count { color: var(--color-accent); }
+  h1 .count { color: var(--color-muted); font-weight: 500; }
   .lede { color: var(--color-muted); margin: 0 0 24px; max-width: 62ch; }
   .sub { color: var(--color-muted); font-size: 13px; }
   .ok { color: var(--color-hi); } .bad { color: var(--color-bad); }
@@ -156,7 +157,7 @@
              display: flex; gap: 10px; align-items: center; }
   .section::after { content: ""; flex: 1; height: 1px; background: var(--color-line); }
   .group { margin-top: 36px; }
-  .group h2 { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; color: var(--color-accent); }
+  .group h2 { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; color: var(--color-muted); }
   .empty { text-align: center; color: var(--color-muted); padding: 64px 16px; border: 1px dashed var(--color-line); font: 13px var(--font-mono); }
 
   /* Cards, and a role: a row under a hairline, its score set large */
@@ -246,9 +247,8 @@
   .tier.tA { background: var(--color-ink); color: var(--color-ground); border-color: var(--color-ink); }
   .tier.tB { border-color: var(--color-ink); }
   .tier.tC { color: var(--color-muted); border-color: var(--color-line); }
-  .dist { display: inline-block; font: 600 11px var(--font-mono); padding: 1px 5px; border: 1px dashed var(--color-muted); color: var(--color-muted); vertical-align: 1px; white-space: nowrap; }
-  .dist.d1 { border-color: var(--color-hi); color: var(--color-hi); } .dist.d2 { border-color: var(--color-mid); color: var(--color-mid); }
-  .dist.sure { border-style: solid; }
+  .dist { display: inline-block; font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); vertical-align: 1px; white-space: nowrap; }
+  .dist.d1, .dist.d2 { color: var(--color-ink); } .dist:not(.sure)::after { content: "?"; }
   button.mini { min-height: 26px; padding: 3px 8px; font-size: 12px; }
   button.mini.star { border: 0; background: none; box-shadow: none; color: var(--color-muted); font-size: 22px; line-height: 1; padding: 0 6px; vertical-align: middle; cursor: pointer; }
   button.mini.star:hover { background: none; color: var(--color-ink); }
@@ -268,11 +268,14 @@
   .person-chip b { font-weight: 600; }
   button.link, a.link, a.btn-link { border: 0; background: none; box-shadow: none; padding: 0; min-height: 0; font: 500 13px var(--font-sans); color: var(--color-muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   button.link:hover, a.link:hover, a.btn-link:hover { background: none; color: var(--color-ink); }
+  button.danger, button.link.danger { color: var(--color-bad); } button.danger:hover { border-color: var(--color-bad); color: var(--color-bad); }
   a.btn-link { align-self: center; margin-left: 6px; }
   .routes { margin-top: 10px; border: 1px solid var(--color-line); border-radius: var(--radius-edge); background: var(--color-sunk); padding: 10px 12px; }
   .route { margin-top: 4px; } .route a { text-underline-offset: 2px; }
   .confirm { margin-top: 8px; } .confirm select, .confirm input { min-height: 30px; padding: 4px 8px; font-size: 13px; }
-  .add-event { margin-top: 8px; } .add-event summary { cursor: pointer; list-style: none; } .add-event summary::-webkit-details-marker { display: none; }
+  .add-event { margin-top: 8px; } .add-event summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; min-height: 30px; padding: 0 12px; font: 500 13px var(--font-sans); color: var(--color-ink);
+                       background: var(--color-surface); border: 1px solid var(--color-rule); border-radius: var(--radius-btn); }
+  .add-event summary:hover { border-color: var(--color-ink); } .add-event summary::-webkit-details-marker { display: none; }
   .add-event input[type=text], .add-event input[type=date], .add-event select { min-height: 30px; padding: 4px 8px; }
 
   /* The role's full ad */
@@ -333,7 +336,7 @@
     nav a { display: flex; flex: 1 0 auto; flex-direction: column; justify-content: center; gap: 2px; font-size: 11px; min-height: 52px; padding: 6px 4px; }
     nav a::before { display: none; }
     nav a.on { background: transparent; color: var(--color-accent); }
-    .ticker, .banner, .progress { padding: 10px 16px; }
+    .ticker, .progress { padding: 10px 16px; } .banner { padding: 10px 16px 10px 13px; }
     .toast { bottom: calc(72px + env(safe-area-inset-bottom)); }  /* above the menu along the bottom, which it would otherwise cover */
     main { padding: 24px 16px 110px; }
     h1 { font-size: 26px; } .app.first h1 { font-size: 40px; }

@@ -567,7 +567,7 @@ const V = {
             ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
-            <button onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
+            <button class="link danger" onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
         </div>
         ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · Near you: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
         ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
@@ -667,7 +667,7 @@ const V = {
         const ids = jsa(g.entries.flatMap(e => [e.j.id, ...e.also.map(v => v.id)]));
         return (many && !open ? card(g.entries[0]) : g.entries.map(card).join("")) + (many ? `<div class="more">
           <button onclick="toggleCo(${jsq(g.key)})">${open ? `Show only the best at ${esc(g.company)}` : `+${hidden} more at ${esc(g.company)}`}</button>
-          <button onclick="if(confirm('Skip all ${g.entries.length} roles at ' + ${jsq(g.company)} + '?'))setMany(${ids},'skipped','Skipped all at ' + ${jsq(g.company)})">Skip all ${g.entries.length}</button></div>` : "");
+          <button class="danger" onclick="if(confirm('Skip all ${g.entries.length} roles at ' + ${jsq(g.company)} + '?'))setMany(${ids},'skipped','Skipped all at ' + ${jsq(g.company)})">Skip all ${g.entries.length}</button></div>` : "");
       }).join("") : rows.map(j => roleCard(j, roleView === "skipped" ? `
         <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" + (j.skip_reason ? ": " + esc((S.labels.skip_reasons[j.skip_reason] || j.skip_reason).toLowerCase()) : "") : "Gus skipped this: it scored under 5"}</span>
         ${(j.history || []).some(h => h.stage === "skipped") && !j.skip_reason ? `<button onclick="askWhy([${jsq(j.id)}], 'Skipped')">Say why</button>` : ""}
@@ -756,7 +756,7 @@ const SETTINGS_TABS = [
     const sugg = SET.suggested.filter(s => !have.has(s.url.replace(/\/$/, "")));
     const row = f => `<tr><td><b>${esc(f.name)}</b><div class="sub break-all">${esc(f.url)}</div></td><td class="hide-sm"><span class="pill">${esc(f.kind)}</span></td>
       <td class="whitespace-nowrap"><input type="checkbox" class="switch" aria-label="${esc(f.name)} on" ${f.enabled ? "checked" : ""} onchange="toggleFeed(${jsq(f.name)}, this.checked)">
-      <button onclick="removeFeed(${jsq(f.name)})">Remove</button></td></tr>`;
+      <button class="danger" onclick="removeFeed(${jsq(f.name)})">Remove</button></td></tr>`;
     return `<section class="group"><h2>Add a newsletter or feed</h2>
       <p class="sub">Add what you read and Gus picks out jobs and company news. Paste a name, link or RSS feed.</p>
       <div class="row mt-3"><input type="text" id="feed-add" placeholder="lenny, oneusefulthing.org, medium.com/@name" class="flex-1 min-w-[220px]" onkeydown="if(event.key==='Enter')addFeed()">
@@ -810,10 +810,10 @@ const SETTINGS_TABS = [
     return `<section class="group"><h2>Connect Claude</h2>
       <p class="sub">Lets Claude Code or the Claude desktop app read your roles, companies, people and moves straight from Gus, with no terminal. It can't see or change your settings, keys or profile text beyond reading the profile.</p>
       ${local ? `<div class="field"><label>On this computer</label><div><code class="break-all">${esc(cmd())}</code></div><div class="help">Run this once in a terminal, for Claude Code. On the computer Gus runs on, no token is needed.</div>
-        <div class="mt-2"><code class="break-all" id="mcp-desktop">${esc(desktop())}</code></div><div class="help">For the Claude desktop app. ${desktopHelp}</div></div>` : ""}
+        <div class="col-start-2"><code class="break-all" id="mcp-desktop">${esc(desktop())}</code></div><div class="help">For the Claude desktop app. ${desktopHelp}</div></div>` : ""}
       <div class="field"><label>${local ? "From another device" : "Access token"}</label>
         <div class="row"><span class="sub" id="mcp-token-state">${t ? `Token ending ${esc(t.last4)}, made ${ago(t.created_at)}${t.login ? `, for ${esc(t.login)}` : ""}` : "No token yet"}</span>
-        <button onclick="mcpToken('create')">${t ? "Replace token" : "Create token"}</button>${t ? `<button onclick="mcpToken('remove')">Remove</button>` : ""}</div>
+        <button onclick="mcpToken('create')">${t ? "Replace token" : "Create token"}</button>${t ? `<button class="danger" onclick="mcpToken('remove')">Remove</button>` : ""}</div>
         ${fresh ? `<div class="mt-2"><code class="break-all" id="mcp-command">${esc(cmd(fresh))}</code></div><div class="help"><b>Copy this now: the token isn't shown again.</b> Run it on the device where you use Claude Code. Gus keeps only a fingerprint of the token.</div>
         <div class="mt-2"><code class="break-all" id="mcp-desktop-token">${esc(desktop(fresh))}</code></div><div class="help">For the Claude desktop app on that device. ${desktopHelp}${local ? "" : " It needs a copy of Gus on that device: put its folder where this says."}</div>` : ""}
         ${t && t.old ? `<div class="help bad">This token is ${t.age_days} days old. Replace it now and then.</div>` : ""}
@@ -940,7 +940,7 @@ function drawTicker() {
     need(contact, "to contact", "week", "People to contact this week") + need(live, "in play", "pipeline", "Applications sent or at interview") +
     `<span class="tick-rest"><span class="${fresh ? "live" : "stale"}">${lastRun ? "Checked " + ago(lastRun) : "Not checked yet"}</span>
       <span title="Roles Gus read and scored for you in ${month}. Saved is a guess: about ${READ_MIN} minutes to read each ad yourself."><b>${read.toLocaleString()}</b> role${read === 1 ? "" : "s"} read from <b>${h.boards}</b> board${h.boards === 1 ? "" : "s"} in ${month} · <b>~${saved}</b> saved</span></span>
-    <span class="run-group"><button class="scan-now" title="Reads your job boards, feeds and email, and scores what's new.${esc(sourcesDue(h.sources))}" onclick="startRun('scan')"${busy ? " disabled" : ""}>${busy === "scan" ? "Checking…" : busy === "run" ? "Running…" : "Check roles"}</button>
+    <span class="run-group"><button class="scan-now${lastRun ? "" : " first"}" title="Reads your job boards, feeds and email, and scores what's new.${esc(sourcesDue(h.sources))}" onclick="startRun('scan')"${busy ? " disabled" : ""}>${busy === "scan" ? "Checking…" : busy === "run" ? "Running…" : "Check roles"}</button>
       <details class="run-more"><summary title="More" aria-label="More ways to run Gus">▾</summary><div class="run-menu">
         <button onclick="startRun('run')"${busy ? " disabled" : ""}>Full run</button>
         <p>Checks roles, then also finds new companies, refreshes the ones you watch and plans who to contact. Takes a while and uses more AI.</p></div></details></span>`;
