@@ -122,6 +122,7 @@ function saveRoleFilters() { try { localStorage.setItem("gus-role-where", roleWh
 const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
   : j.stage === "new" && !j.ad_closed && (j.score == null || j.score >= 5 || (j.history || []).some(h => h.stage === "new"));
 const roleMatch = (j, view, w, kind) => inView(j, view) && (w === "all" || j.where === w) && (kind === "all" || j.role_type === kind);
+const toReview = () => S.jobs.filter(j => roleMatch(j, "new", roleWhere, roleKind));
 const newRoles = () => S.jobs.filter(j => roleMatch(j, roleView, roleWhere, roleKind))
   .sort((a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen));
 const peopleAt = name => Object.values(S.people).filter(p => p.company === name);
@@ -234,21 +235,25 @@ async function copyPath(path) {
   if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(path).then(done);
   const a = Object.assign(document.createElement("textarea"), { value: path }); document.body.append(a); a.select(); document.execCommand("copy"); a.remove(); done();
 }
+let openUp;  // the follow-up shown open: undefined until you choose, when it's the first
+function toggleUp(id) { openUp = openUp === id ? null : id; render(true); }
 function followUpsBlock() {
   const rows = S.follow_ups || [];
   if (!rows.length) return `<div class="empty">No application needs a follow-up right now.</div>`;
-  return rows.map(r => `<article class="card">
-    <div class="co">${esc(r.company)}</div>
-    <div class="title">${esc(r.title)}</div>
-    <div class="sub">Applied ${r.days == null ? "recently" : r.days === 0 ? "today" : r.days === 1 ? "yesterday" : r.days + " days ago"}</div>
-    ${r.contacts.length ? r.contacts.map(c => `<div class="follow">
+  const shown = openUp === undefined ? rows[0].id : openUp;
+  return rows.map(r => { const open = r.id === shown, n = r.contacts.length;
+    return `<article class="mv${open ? " open" : ""}">
+    <button class="mv-row" onclick="toggleUp(${jsq(r.id)})" aria-expanded="${open}"><span class="mv-who"><b>${esc(r.title)}</b> <span>${esc(r.company)}</span></span>
+      <span class="mv-because">Applied ${r.days == null ? "recently" : r.days === 0 ? "today" : r.days === 1 ? "yesterday" : r.days + " days ago"} · ${n ? `<b>${n} ${n === 1 ? "person" : "people"} to try</b>` : "no one found there yet"}</span>
+      <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
+    ${open ? `<div class="mv-body">${n ? r.contacts.map(c => `<div class="follow">
       <div><b><a href="${link(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a></b> ${S.people[c.id] ? distBadge(S.people[c.id]) : ""} <span class="sub">${esc(c.role || "")}</span></div>
       <div class="why-contact"><b>Why:</b> ${esc(c.reason)}.${c.confidence ? ` <span class="sub">${esc(c.confidence)} confidence</span>` : ""}</div>
       ${c.evidence ? `<div class="sub">${esc(c.evidence)}</div>` : ""}
-      <div class="actions"><a href="${link(c.url)}" target="_blank" rel="noopener"><button class="mini">Open profile</button></a>
-        <button class="mini" onclick="roleContact(${jsq(r.id)}, ${jsq(c.id)}, true)">Messaged</button></div></div>`).join("")
-    : `<p class="sub">Gus hasn't found anyone at ${esc(r.company)} yet.</p>`}
-  </article>`).join("");
+      <div class="actions"><a class="link" href="${link(c.url)}" target="_blank" rel="noopener">Open profile</a>
+        <button onclick="roleContact(${jsq(r.id)}, ${jsq(c.id)}, true)">Messaged</button></div></div>`).join("")
+    : `<p class="sub">Gus hasn't found anyone at ${esc(r.company)} yet. <button class="link" onclick="openCompany(${jsq(r.company)})">Open company</button></p>`}</div>` : ""}
+  </article>`; }).join("");
 }
 function meetingsBlock() {
   const ms = S.meetings || [];
@@ -270,12 +275,32 @@ function readChart() {  // roles read on each of the last 14 days, drawn to one 
   const key = d => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(), n = {};
   S.jobs.forEach(j => { if (j.score != null && j.first_seen) { const k = key(new Date(j.first_seen)); n[k] = (n[k] || 0) + 1; } });
   const vals = days.map(d => n[key(d)] || 0), top = Math.max(4, Math.ceil(Math.max(...vals) / 4) * 4);
-  const W = 560, H = 124, L = 30, B = 98, T = 12, bw = (W - L) / 14, y = v => B - v / top * (B - T);
+  const W = 560, H = 128, L = 40, B = 98, T = 14, bw = (W - L) / 14, y = v => B - v / top * (B - T);
   const fmt = d => d.toLocaleString("en-GB", { day: "numeric", month: "short" });
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Roles read each day for the last 14 days, oldest first: ${vals.join(", ")}">
     ${[0, top / 2, top].map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("")}
     ${vals.map((v, i) => `<rect class="${i === 13 ? "now" : ""}" x="${(L + i * bw + 3).toFixed(1)}" y="${v ? y(v).toFixed(1) : B - 1}" width="${(bw - 6).toFixed(1)}" height="${v ? (B - y(v)).toFixed(1) : 1}"><title>${fmt(days[i])}: ${v} role${v === 1 ? "" : "s"}</title></rect>`).join("")}
     <text x="${L + 3}" y="${H - 8}">${fmt(days[0])}</text><text x="${W - 3}" y="${H - 8}" text-anchor="end">Today</text></svg>`;
+}
+// What a failed board or feed means, in plain words, and what to do about it: the first that matches the error's text
+const WHY_FAILED = [
+  [/429|too many/i, "asked to slow down by the job site", "Nothing to do: Gus tries again on the next check."],
+  [/401|403|forbidden|denied/i, "refused by the site", "If it keeps happening, check the address on the company's card."],
+  [/404|not found|gone/i, "moved or gone", "Check the address on the company's card."],
+  [/robots/i, "with rules for robots that couldn't be read", "Nothing to do: Gus tries again on the next check."],
+  [/no jobs|sitemap/i, "with no jobs Gus can read", "Give the company its careers address, on its card."],
+  [/timed? ?out|timeout|temporar|unreachable|50\d|oserror|connection/i, "didn't answer", "Nothing to do: Gus tries again on the next check."],
+];
+function failures(errs, what) {  // the failures grouped by what happened, with every name, and the raw messages a click away
+  if (!errs.length) return "";
+  const groups = new Map();
+  for (const [name, e] of errs) {
+    const [, said, todo] = WHY_FAILED.find(([re]) => re.test(e)) || [null, "failed for another reason", "The message is under Show each message."];
+    (groups.get(said) || groups.set(said, { said, todo, names: [] }).get(said)).names.push(name);
+  }
+  return `<div class="section">${what} that didn't work · ${errs.length}</div>` + [...groups.values()].sort((a, b) => b.names.length - a.names.length).map(g =>
+    `<div class="src fail"><div><b>${g.names.length}</b> ${g.said}<div class="sub">${g.names.map(esc).join(", ")}</div></div><span class="sub">${g.todo}</span></div>`).join("") +
+    `<details class="add-event"><summary>Show each message</summary><table class="mt-2">${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub break-all">${esc(e)}</td></tr>`).join("")}</table></details>`;
 }
 function costs() {
   const u = S.usage, fact = (v, l) => `<div><span>${l}</span><b>${v}</b></div>`;
@@ -287,6 +312,9 @@ function costs() {
     ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     <p class="sub mt-3">${u.first ? `Tracking since ${esc(u.first.slice(0, 10))}. ` : "Nothing recorded yet. "}Scheduled tasks in the desktop app aren't included, and the Claude app doesn't report how much of your Pro allowance is left.</p>`;
 }
+let coTier = null;  // the tier Companies shows, one at a time as there can be hundreds: until you pick, the first that has any
+const openAcct = new Set();  // the companies you've opened, so a redraw leaves them open
+function toggleAcct(name) { openAcct.has(name) ? openAcct.delete(name) : openAcct.add(name); render(true); }
 let todoView = "week", openMove;  // openMove: undefined until you choose, when the first one is shown open
 function toggleMove(id) { openMove = openMove === id ? null : id; render(true); }
 function copyAndOpen(k, url) { copyText(k); if (url !== "#") window.open(url, "_blank", "noopener"); }
@@ -306,14 +334,14 @@ function moveCard(m, open) {
       <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
     ${open ? `<div class="mv-body move">
       ${p.id ? `<div class="sub">${distBadge(p)} ${sig.url ? `<a href="${link(sig.url)}" target="_blank" rel="noopener">Read the news</a>` : ""}</div>` : ""}
-      ${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
-      ${m.angle ? `<p class="why"><b>Angle.</b> ${esc(m.angle)}</p>` : ""}
-      ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}
       <div class="msg" id="${k}">${esc(m.draft)}</div>
       <div class="actions">
         <button class="primary" onclick="copyAndOpen('${k}', '${url}')">Copy draft and open profile</button>
         <button onclick="setMove(${id}, {status:'done'})">Sent</button>
         <button class="link" onclick="setMove(${id}, {status:'skipped'})">Skip</button></div>
+      <div class="mv-why">${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
+      ${m.angle ? `<p class="why"><b>Angle.</b> ${esc(m.angle)}</p>` : ""}
+      ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}</div>
       ${p.id ? `<details class="add-event keep"><summary class="sub">How you're connected</summary>${routes(p)}</details>` : ""}</div>` : ""}</article>`;
 }
 
@@ -555,27 +583,37 @@ const V = {
   accounts() {
     const tiers = ["A", "B", "C"];
     const q = (window._acctq || "").toLowerCase();
-    const list = S.accounts.filter(a => !q || (a.name + " " + (a.product || "")).toLowerCase().includes(q));
-    const card = a => {
-      const ppl = peopleAt(a.name), evs = eventsAt(a.name), near = ppl.map(p => dist(p).hops).filter(Boolean);
-      const warm = ppl.filter(p => dist(p).hops === 1).length, closest = near.length ? Math.min(...near) : null;
-      return `<article class="card acct">
+    const found = S.accounts.filter(a => !q || (a.name + " " + (a.product || "")).toLowerCase().includes(q));
+    const tier = coTier || tiers.find(t => found.some(a => a.tier === t)) || "all";
+    const list = q || tier === "all" ? found : found.filter(a => a.tier === tier);  // a search looks in every tier
+    const body = (a, ppl, evs) => {
+      const near = ppl.map(p => dist(p).hops).filter(Boolean), warm = ppl.filter(p => dist(p).hops === 1).length, closest = near.length ? Math.min(...near) : null;
+      return `<div class="mv-body">
         <div class="acct-head">
-          <div><span class="tier t${a.tier}">${a.tier}</span> <b class="acct-name">${esc(a.name)}</b>
-            <button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
+          <div><button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
             ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button class="link danger" onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
         </div>
-        ${a.product ? `<div class="sub">${esc(a.product)}${a.london ? " · Near you: " + esc(a.london) : ""}${a.last_contacted ? " · contacted " + ago(a.last_contacted) : ""}</div>` : ""}
+        ${a.london || a.last_contacted ? `<div class="sub">${[a.london ? "Near you: " + esc(a.london) : "", a.last_contacted ? "contacted " + ago(a.last_contacted) : ""].filter(Boolean).join(" · ")}</div>` : ""}
         ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
         ${evs.length ? `<div class="chips">${evs.slice(0, 6).map(e => sigChip(e, true)).join("")}${evs.length > 6 ? `<span class="sub">+${evs.length - 6} older</span>` : ""}</div>` : `<div class="sub mt-2">No news yet.</div>`}
         ${eventForm(a.name)}
         ${ppl.length ? `<div class="chips">${ppl.map(personChip).join("")}</div>` : `<div class="sub mt-1.5">No contacts found yet.</div>`}
-      </article>`;
+      </div>`;
     };
+    const row = a => {
+      const ppl = peopleAt(a.name), evs = eventsAt(a.name), top = evs[0], open = openAcct.has(a.name) || list.length === 1;
+      return `<article class="mv acct${open ? " open" : ""}">
+        <button class="mv-row" onclick="toggleAcct(${jsq(a.name)})" aria-expanded="${open}">
+          <span class="mv-who"><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b>${a.favourite ? " ★" : ""} <span>${esc(a.product || "")}</span></span>
+          <span class="mv-because">${top ? `<b>${esc(top.summary)}</b>${top.age_days != null ? ` · ${top.age_days === 0 ? "today" : top.age_days + "d ago"}` : ""}${evs.length > 1 ? ` · +${evs.length - 1} more` : ""}` : "No news yet"}${ppl.length ? ` · ${ppl.length} ${ppl.length === 1 ? "person" : "people"}` : ""}</span>
+          <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
+        ${open ? body(a, ppl, evs) : ""}</article>`;
+    };
+    const byNews = rows => rows.sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
     const guesses = S.board_guesses || [];
     const lookAt = guesses.length ? `<div class="section">Needs a look · ${guesses.length}</div>
       <p class="sub">Gus found these job boards by company name alone, so each could be another company's. Open the board, then say.</p>
@@ -583,14 +621,16 @@ const V = {
         <td><a href="${link(g.url)}" target="_blank" rel="noopener">${esc(g.board)}</a> <span class="sub">· ${g.open_roles} open role${g.open_roles === 1 ? "" : "s"}</span></td>
         <td class="row"><button class="primary" onclick="boardGuess(${jsq(g.name)}, true)">It's theirs</button> <button onclick="boardGuess(${jsq(g.name)}, false)">Not them</button></td></tr>`).join("")}</table>` : "";
     return `<h1>Companies <span class="count">${S.accounts.length}</span></h1>
-      <details class="add-event m-0 mb-3"><summary class="sub">+ Add a company</summary>
+      <div class="pipe-bar"><div class="tabs chips-row" role="group" aria-label="Tier">${[...tiers, "all"].map(t => `<a href="#accounts" class="${!q && t === tier ? "on" : ""}" onclick="event.preventDefault();window._acctq='';coTier='${t}';render(true)">${t === "all" ? "All" : "Tier " + t} <span class="sub">${t === "all" ? found.length : found.filter(a => a.tier === t).length}</span></a>`).join("")}</div>
+        <input type="text" placeholder="Find a company" aria-label="Find a company" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" class="acct-find">
+      <details class="add-event keep add-role"><summary class="sub">+ Add a company</summary>
         <div class="row mt-1.5"><input type="text" id="add-co-name" placeholder="Company name" aria-label="Company name" class="flex-1">
           <input type="text" id="add-co-careers" placeholder="Careers page address (optional, but surer)" aria-label="Careers address" class="flex-[2]">
           <button class="primary" id="add-co-go" onclick="addCompany()">Add</button></div>
-        <p class="sub m-0 mt-1.5">Gus looks for its public job board. Companies on Workday, SuccessFactors, Teamtailor or Gem need the careers address.</p></details>
-      <div class="row mb-2"><input type="text" placeholder="Filter companies" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" class="flex-1 max-w-[360px]"></div>` + lookAt +
-      tiers.map(t => { const rows = list.filter(a => a.tier === t).sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
-        return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
+        <p class="sub m-0 mt-1.5">Gus looks for its public job board. Companies on Workday, SuccessFactors, Teamtailor or Gem need the careers address.</p></details></div>` + lookAt +
+      (list.length ? (q || tier === "all" ? tiers.map(t => { const rows = byNews(list.filter(a => a.tier === t));
+          return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(row).join("")}` : ""; }).join("") : byNews(list).map(row).join(""))
+        : `<div class="empty">${q ? `No company matches “${esc(window._acctq)}”.` : `No companies in tier ${tier} yet.`}</div>`);
   },
   pipeline() {
     const mine = S.jobs.filter(j => PIPE.includes(j.stage)).sort((a, b) => PIPE.indexOf(a.stage) - PIPE.indexOf(b.stage) || (b.score ?? 0) - (a.score ?? 0));
@@ -698,14 +738,13 @@ const V = {
       ${ai}
       ${signedOut() ? `<p class="bad">Your Claude sign-in expired ${ago(S.ai.signed_out_since)}. Nothing that needs AI has worked since, and roles found since then have no score.</p>
       <div class="row"><button class="primary" onclick="signIn('health-login')">Sign in with Claude</button></div><div id="health-login"></div>` : ""}
-      ${row(errs.length ? "due" : "done", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} failed on the last check` : "All worked"} · checked ${ago(h.last_scan)}`)}
-      ${row(feedErrs.length ? "due" : "done", "News feeds", feedErrs.length ? `${feedErrs.length} failed on the last check` : "All worked on the last check")}
+      ${row(!errs.length ? "done" : errs.length > h.boards / 4 ? "due" : "warm", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} of ${h.boards} didn't work on the last check` : "All worked"} · checked ${ago(h.last_scan)}`)}
+      ${row(feedErrs.length ? "warm" : "done", "News feeds", feedErrs.length ? `${feedErrs.length} didn't work on the last check` : "All worked on the last check")}
       ${row(h.last_agent_run ? "done" : "", "Research runs", h.last_agent_run ? `Last ran ${ago(h.last_agent_run)}` : "Not run yet. A full run starts them")}
       ${row(h.signals_waiting > 50 ? "warm" : h.signals_waiting ? "done" : "", "News to read", h.signals_waiting ? `${h.signals_waiting} item${h.signals_waiting === 1 ? "" : "s"} waiting for the next full run` : "Nothing waiting")}
       ${row(h.x && h.x.day ? "done" : "", "X", h.x && h.x.day ? `${h.x.used || 0} posts read today` : `Off. <a href="#settings/sources">Turn it on in Settings</a>`)}
       ${row(h.claude.token && h.claude.token.old ? "warm" : h.claude.last_used ? "done" : "", "Claude connection", `${h.claude.last_used ? "Last connected " + ago(h.claude.last_used) : "Not connected yet"}${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}`)}
-      ${errs.length ? `<div class="section">Board errors</div><table>${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : ""}
-      ${feedErrs.length ? `<div class="section">Feed errors</div><table>${feedErrs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub">${esc(e)}</td></tr>`).join("")}</table>` : ""}
+      ${failures(errs, "Job boards")}${failures(feedErrs, "News feeds")}
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       ${costs()}`;
   },
@@ -928,15 +967,16 @@ function drawBanner() {
 }
 function drawTicker() {
   drawBanner();
+  if (!S.week) { $("ticker").innerHTML = `<span class="sub">Loading your roles…</span>`; return; }  // not loaded yet: say so, and count nothing
   const h = S.health, busy = (S.running || [])[0];
   const lastRun = ((S.last_runs || {}).run || {}).at || h.last_scan, fresh = lastRun && Date.now() - new Date(lastRun) < 26 * 36e5;
   drawProgress();
-  const fresh_roles = S.jobs.filter(j => inView(j, "new")), strong = fresh_roles.filter(j => (j.score ?? 0) >= 8).length;
+  const fresh_roles = toReview(), strong = fresh_roles.filter(j => (j.score ?? 0) >= 8).length;
   const contact = (S.moves || []).filter(m => m.week === S.week && m.status === "todo").length;
   const live = S.jobs.filter(j => ["applied", "interviewing"].includes(j.stage)).length;
   const { read, saved, month } = gusDid();
   const need = (n, text, to, title) => `<a class="need${n ? "" : " zero"}" href="#${to}" title="${title}"><b>${n}</b><span>${text}</span></a>`;
-  $("ticker").innerHTML = need(fresh_roles.length, `to review${strong ? ` · ${strong} strong` : ""}`, "roles", `New roles waiting for you in Role Inbox${strong ? `, ${strong} of them scoring 8 or more` : ""}`) +
+  $("ticker").innerHTML = need(fresh_roles.length, `to review${strong ? ` · ${strong} strong` : ""}`, "roles", `New roles waiting for you in Role Inbox${roleWhere === "all" ? "" : ", in " + esc(roleWhere)}${strong ? `, ${strong} of them scoring 8 or more` : ""}`) +
     need(contact, "to contact", "week", "People to contact this week") + need(live, "in play", "pipeline", "Applications sent or at interview") +
     `<span class="tick-rest"><span class="${fresh ? "live" : "stale"}">${lastRun ? "Checked " + ago(lastRun) : "Not checked yet"}</span>
       <span title="Roles Gus read and scored for you in ${month}. Saved is a guess: about ${READ_MIN} minutes to read each ad yourself."><b>${read.toLocaleString()}</b> role${read === 1 ? "" : "s"} read from <b>${h.boards}</b> board${h.boards === 1 ? "" : "s"} in ${month} · <b>~${saved}</b> saved</span></span>
@@ -965,8 +1005,8 @@ function render(force) {
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
   $("n-week").textContent = S.moves.filter(m => m.week === S.week && m.status === "todo").length || "";
   $("n-accounts").textContent = S.accounts.filter(a => a.tier === "A" && a.fresh).length || "";
-  $("n-pipeline").textContent = Object.values(S.people).filter(p => ["contacted", "replied", "conversation"].includes(p.stage)).length + S.jobs.filter(j => PIPE.slice(0, 4).includes(j.stage)).length || "";
-  $("n-roles").textContent = newRoles().length || "";
+  $("n-pipeline").textContent = S.jobs.filter(j => PIPE.includes(j.stage) && roleHint(j).flag).length || "";
+  $("n-roles").textContent = toReview().length || "";
   const y = window.scrollY;
   $("main").innerHTML = (V[v] || V.pipeline)();
   const full = location.hash;

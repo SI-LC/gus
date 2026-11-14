@@ -198,6 +198,9 @@
   .mv.done .mv-row { flex: 1 1 240px; width: auto; } .mv.done .mv-who b { color: var(--color-muted); }
   .mv-side { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } .mv-side select { min-height: 30px; padding: 3px 8px; font-size: 13px; }
   .mv-progress { margin-left: auto; align-self: center; font: 12px var(--font-mono); }
+  .mv-why { margin-top: 14px; } .mv-why .why { color: var(--color-muted); } .mv-body > .follow:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+  .mv-who .tier { margin-right: 4px; } .mv.acct .acct-head { margin-top: 2px; }
+  .acct-find { flex: 1 1 200px; max-width: 320px; min-height: 36px; margin-bottom: 8px; }
   .move .why b, .why-contact b, .routes-head b { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); margin-right: 4px; }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--font-sans); letter-spacing: -.02em; }
@@ -298,6 +301,7 @@
   .chart rect { fill: var(--color-muted); } .chart rect.now { fill: var(--color-ink); }
   .src { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 16px; padding: 9px 0; border-bottom: 1px solid var(--color-line); }
   .src .pill { margin: 0; font-size: 14px; color: var(--color-ink); } .src .sub { text-align: right; }
+  .src.fail { align-items: flex-start; } .src.fail > div { flex: 1 1 320px; min-width: 0; } .src.fail > div .sub { text-align: left; margin-top: 2px; }
   .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 20px; }
   .facts span { display: block; font-size: 13px; color: var(--color-muted); } .facts b { font: 600 18px var(--font-sans); font-variant-numeric: tabular-nums; }
 
@@ -342,6 +346,7 @@
     h1 { font-size: 26px; } .app.first h1 { font-size: 40px; }
     .mv.open { margin: 10px 0; padding: 0 12px 14px; }
     .big { grid-template-columns: 1fr; } .src .sub { text-align: left; }
+    .chart text { font-size: 17px; }  /* the drawing is scaled down to fit a phone, so its words are set larger to stay readable */
     .tick-rest { flex: 1 0 100%; justify-content: flex-start; order: 3; } .tick-rest span + span { display: none; } .run-group { margin-left: auto; }
     .search { padding: 10px 16px 0; }
     .role { grid-template-columns: 44px minmax(0, 1fr); gap: 14px; } .role > .actions { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; } .role > .actions .link, .role > .actions .btn-link, .role > .actions .sub { margin: 0 0 0 6px; } .score { font-size: 32px; }
