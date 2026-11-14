@@ -33,7 +33,7 @@ class UpdatePi(unittest.TestCase):
             tool = bin_dir / name
             tool.write_text(body)
             tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
-        clean = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "PYTHONDONTWRITE", "PYTHONPYCACHE"))}  # a Git hook sets GIT_* to the real repo
+        clean = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "PYTHONDONTWRITE", "PYTHONPYCACHE", "GUS_"))}  # a Git hook sets GIT_* to the real repo, and a deploy its own GUS_*
         self.env = {**clean, "HOME": str(self.home), "PATH": f"{bin_dir}:{os.environ['PATH']}",
                     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com", "GIT_CONFIG_GLOBAL": os.devnull}
@@ -118,7 +118,7 @@ class Deploy(UpdatePi):
             tool.write_text(body)
             tool.chmod(0o755)
         (self.home / "dev" / "deploy").mkdir()
-        (self.home / "dev" / "deploy" / "scan.sh").write_text("echo scanned\n")
+        (self.home / "dev" / "deploy" / "scan.sh").write_text('echo scanned\n[ -z "${GUS_DEPLOY_PULLED:-}" ] || echo "the scan can see the deploy\'s mark"\n')
         (self.home / "dev" / "deploy" / "update.sh").write_text("# the update\n")
         self.commit("deploy/deploy.sh", (ROOT / "deploy" / "deploy.sh").read_text())
         self.git("pull", "-q", "origin", "main", cwd=self.app)  # the machine deploying, on main as it was
@@ -135,6 +135,7 @@ class Deploy(UpdatePi):
         self.assertEqual(code, 0, out)
         self.assertEqual((self.home / "sent").read_text(), "# the update\n")
         self.assertIn("release create v0.1.0", (self.home / "released").read_text())
+        self.assertNotIn("the deploy's mark", out, "the scan runs these tests, which must start from a clean deploy")
 
     def test_a_merge_that_changes_the_deploy_itself_is_deployed_by_the_new_copy(self):
         dev = self.home / "dev" / "deploy"
