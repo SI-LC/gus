@@ -1,0 +1,14 @@
+id: todo-is-a-checklist
+requirement: To do opens on who to contact this week, with follow-ups on applications and what I've sent a tab away, not stacked above it.
+given: scanned
+check:
+  - open To do
+  - '"This week" is picked'
+  - see "No one to contact yet this week"
+  - not see "Conversations"
+  - pick "Follow-ups"
+  - see "No application needs a follow-up"
+  - pick "Done"
+  - see "Nothing sent yet this week"
+  - see "How outreach is going"
+judge: Can I tell at a glance who to contact next and why, without scrolling past numbers and forms?

@@ -183,7 +183,20 @@
   .role > .actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; margin-top: 0; }
   .role > .actions .link, .role > .actions .btn-link, .role > .actions .sub { margin: 6px 0 0; text-align: left; align-self: flex-start; overflow-wrap: anywhere; }
   .msg { background: var(--color-sunk); border: 1px solid var(--color-line); padding: 10px 14px; margin-top: 10px; white-space: pre-wrap; }
-  .move.done, .move.skipped { opacity: .7; }
+  /* To do: a person and the reason on one line, opened one at a time for the draft */
+  .mv { border-bottom: 1px solid var(--color-line); }
+  .mv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; width: 100%; min-height: 0; padding: 14px 0; text-align: left;
+            background: none; border: 0; border-radius: 0; box-shadow: none; font: inherit; }
+  button.mv-row:hover { background: none; } button.mv-row:hover .mv-who b { text-decoration: underline; text-underline-offset: 3px; }
+  .mv-who { font-size: 15px; } .mv-who b { font-weight: 600; } .mv-who span { color: var(--color-muted); font-size: 14px; }
+  .mv-because { grid-column: 1; font-size: 14px; color: var(--color-muted); overflow-wrap: anywhere; } .mv-because b { color: var(--color-ink); font-weight: 500; }
+  .mv-tog { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 500 13px var(--font-sans); color: var(--color-muted); }
+  .mv.open { margin: 10px -16px; padding: 0 16px 16px; background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-btn); }
+  .mv-body .actions { align-items: center; gap: 8px 12px; } .mv-body .add-event { margin-top: 14px; }
+  .mv.done { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0 12px; }
+  .mv.done .mv-row { flex: 1 1 240px; width: auto; } .mv.done .mv-who b { color: var(--color-muted); }
+  .mv-side { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } .mv-side select { min-height: 30px; padding: 3px 8px; font-size: 13px; }
+  .mv-progress { margin-left: auto; align-self: center; font: 12px var(--font-mono); }
   .move .why b, .why-contact b, .routes-head b { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); margin-right: 4px; }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--font-sans); letter-spacing: -.02em; }
@@ -315,6 +328,7 @@
     .toast { bottom: calc(72px + env(safe-area-inset-bottom)); }  /* above the menu along the bottom, which it would otherwise cover */
     main { padding: 24px 16px 110px; }
     h1 { font-size: 26px; } .app.first h1 { font-size: 40px; }
+    .mv.open { margin: 10px 0; padding: 0 12px 14px; }
     .tick-rest { flex: 1 0 100%; justify-content: flex-start; order: 3; } .tick-rest span + span { display: none; } .run-group { margin-left: auto; }
     .search { padding: 10px 16px 0; }
     .role { grid-template-columns: 44px minmax(0, 1fr); gap: 14px; } .role > .actions { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; } .role > .actions .link, .role > .actions .btn-link, .role > .actions .sub { margin: 0 0 0 6px; } .score { font-size: 32px; }

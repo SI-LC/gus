@@ -225,8 +225,8 @@ async function copyPath(path) {
 }
 function followUpsBlock() {
   const rows = S.follow_ups || [];
-  if (!rows.length) return "";
-  return `<div class="section">Follow up on applications · ${rows.length}</div>` + rows.map(r => `<article class="card">
+  if (!rows.length) return `<div class="empty">No application needs a follow-up right now.</div>`;
+  return rows.map(r => `<article class="card">
     <div class="co">${esc(r.company)}</div>
     <div class="title">${esc(r.title)}</div>
     <div class="sub">Applied ${r.days == null ? "recently" : r.days === 0 ? "today" : r.days === 1 ? "yesterday" : r.days + " days ago"}</div>
@@ -262,30 +262,34 @@ function costs() {
     ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     <p class="sub mt-3">${u.first ? `Tracking since ${esc(u.first.slice(0, 10))}. ` : "Nothing recorded yet. "}Scheduled tasks in the desktop app aren't included, and the Claude app doesn't report how much of your Pro allowance is left.</p>`;
 }
-function moveCard(m) {
-  const p = S.people[m.person_id] || { name: m.person_id }, a = S.accounts.find(x => x.name === m.account) || {};
+let todoView = "week", openMove;  // openMove: undefined until you choose, when the first one is shown open
+function toggleMove(id) { openMove = openMove === id ? null : id; render(true); }
+function copyAndOpen(k, url) { copyText(k); if (url !== "#") window.open(url, "_blank", "noopener"); }
+function moveCard(m, open) {
+  const p = S.people[m.person_id] || { name: m.person_id };
   const sig = m.signal || {}, age = sig.date ? Math.round((Date.now() - new Date(sig.date)) / DAY) : null;
-  const k = "mv" + m.id.replace(/[^a-z0-9]/gi, "");
-  const outcome = m.status === "done" ? `<div class="row mt-3"><span class="sub">Outcome</span>
-    <select onchange="setMove(${jsq(m.id)}, {outcome: this.value || null})" aria-label="Outcome">
-      <option value="">No reply yet</option>${S.labels.outcomes.filter(o => o !== "no_reply").map(o => `<option value="${o}" ${m.outcome === o ? "selected" : ""}>${o.replace("_", " ")}</option>`).join("")}
-    </select></div>` : "";
-  return `<article class="card move ${m.status}">
-    <div class="move-head"><div><span class="tier t${a.tier || "B"}">${a.tier || "?"}</span> <span class="co">${esc(m.account)}</span></div>
-      <span class="pill ${m.status === "done" ? "done" : ""}">${m.status === "todo" ? esc(m.channel || "linkedin") : m.status}</span></div>
-    <div class="title"><a href="${link(p.url || "#")}" target="_blank" rel="noopener">${esc(p.name)}</a> ${p.id ? distBadge(p) : ""} <span class="sub">${esc(p.role || "")}</span></div>
-    <div class="chips">${sigChip({ ...sig, fresh: age != null && age <= 30, age_days: age })}</div>
-    <p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>
-    <p class="why"><b>Angle.</b> ${esc(m.angle)}</p>
-    ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}
-    ${p.id ? routes(p) : ""}
-    <div class="msg" id="${k}">${esc(m.draft)}</div>
-    <div class="actions">
-      <button onclick="copyText('${k}')">Copy draft</button>
-      <a href="${link(p.url || "#")}" target="_blank" rel="noopener"><button>Open profile</button></a>
-      ${m.status === "todo" ? `<button class="primary" onclick="setMove(${jsq(m.id)}, {status:'done'})">Sent</button>
-        <button onclick="setMove(${jsq(m.id)}, {status:'skipped'})">Skip</button>` : `<button onclick="setMove(${jsq(m.id)}, {status:'todo', outcome:null})">Undo</button>`}
-    </div>${outcome}</article>`;
+  const k = "mv" + m.id.replace(/[^a-z0-9]/gi, ""), id = jsq(m.id), url = link(p.url || "#");
+  const who = `<span class="mv-who"><b>${esc(p.name)}</b> <span>${[p.role, m.account].filter(Boolean).map(esc).join(", ")}</span></span>`;
+  if (m.status !== "todo") return `<div class="mv done"><div class="mv-row">${who}
+      <span class="mv-because">${m.status === "skipped" ? "Skipped" : "Sent" + (m.done_at ? " " + ago(m.done_at) : "")}</span></div>
+    <div class="mv-side">${m.status === "done" ? `<select onchange="setMove(${id}, {outcome: this.value || null})" aria-label="Outcome with ${esc(p.name)}">
+        <option value="">No reply yet</option>${S.labels.outcomes.filter(o => o !== "no_reply").map(o => `<option value="${o}" ${m.outcome === o ? "selected" : ""}>${o.replace("_", " ")}</option>`).join("")}</select>` : ""}
+      <button class="link" onclick="setMove(${id}, {status:'todo', outcome:null})" aria-label="Undo ${esc(p.name)}">Undo</button></div></div>`;
+  return `<article class="mv${open ? " open" : ""}">
+    <button class="mv-row" onclick="toggleMove(${id})" aria-expanded="${!!open}">${who}
+      <span class="mv-because"><b>${esc(sig.summary || m.why_now || "")}</b>${age != null ? ` · ${age === 0 ? "today" : age + "d ago"}` : ""}</span>
+      <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
+    ${open ? `<div class="mv-body move">
+      ${p.id ? `<div class="sub">${distBadge(p)} ${sig.url ? `<a href="${link(sig.url)}" target="_blank" rel="noopener">Read the news</a>` : ""}</div>` : ""}
+      ${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
+      ${m.angle ? `<p class="why"><b>Angle.</b> ${esc(m.angle)}</p>` : ""}
+      ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}
+      <div class="msg" id="${k}">${esc(m.draft)}</div>
+      <div class="actions">
+        <button class="primary" onclick="copyAndOpen('${k}', '${url}')">Copy draft and open profile</button>
+        <button onclick="setMove(${id}, {status:'done'})">Sent</button>
+        <button class="link" onclick="setMove(${id}, {status:'skipped'})">Skip</button></div>
+      ${p.id ? `<details class="add-event keep"><summary class="sub">How you're connected</summary>${routes(p)}</details>` : ""}</div>` : ""}</article>`;
 }
 
 // A chip's number is what the list would show if you picked it, with the other filters left as they are.
@@ -501,21 +505,27 @@ const V = {
   week() {
     const f = S.funnel, wk = S.week;
     const mine = S.moves.filter(m => m.week === wk);
-    const todo = mine.filter(m => m.status === "todo"), done = mine.filter(m => m.status !== "todo");
+    const todo = mine.filter(m => m.status === "todo"), done = mine.filter(m => m.status !== "todo"), ups = (S.follow_ups || []).length;
     const planned = new Set(mine.map(m => m.account));
     const firing = S.accounts.filter(a => ["A", "B"].includes(a.tier) && a.fresh && !planned.has(a.name))
       .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
     const steps = [["Events", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
-    return `<h1>To do <span class="count">${todo.length}</span></h1>
-      <div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>
-      ${meetingsBlock()}
-      ${followUpsBlock()}
-      ${todo.length ? todo.map(moveCard).join("") : `<div class="empty">No one to contact yet this week.<div class="actions justify-center"><button class="primary" onclick="startRun('run')">Full run</button></div></div>`}
-      ${done.length ? `<div class="section">Done this week · ${done.length}</div>${done.map(moveCard).join("")}` : ""}
+    const shown = openMove === undefined ? (todo[0] || {}).id : openMove;
+    const tabs = [["week", "This week", todo.length], ["ups", "Follow-ups", ups], ["done", "Done", done.length]];
+    const body = todoView === "ups" ? followUpsBlock()
+      : todoView === "done" ? (done.length ? done.map(m => moveCard(m)).join("") : `<div class="empty">Nothing sent yet this week.</div>`) +
+        `<div class="section">How outreach is going</div><div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>`
+      : (todo.length ? todo.map(m => moveCard(m, m.id === shown)).join("")
+          : `<div class="empty">${mine.length ? "Everyone's contacted for this week." : "No one to contact yet this week."}<div class="actions justify-center"><button class="primary" onclick="startRun('run')">Full run</button></div></div>`) + `
       ${firing.length ? `<div class="section">Also firing · not planned</div><table>${firing.map(a => `<tr>
         <td><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b></td>
         <td>${a.events.filter(e => e.fresh).slice(0, 2).map(sigChip).join(" ")}</td>
         <td class="hide-sm sub">${peopleAt(a.name).length} people</td></tr>`).join("")}</table>` : ""}`;
+    return `<h1>To do <span class="count">${todo.length}</span></h1>
+      ${meetingsBlock()}
+      <div class="pipe-bar"><div class="tabs chips-row" role="group" aria-label="Show">${tabs.map(([v, l, n]) => `<a href="#week" class="${v === todoView ? "on" : ""}" onclick="event.preventDefault();todoView='${v}';render(true)">${l} <span class="sub">${n}</span></a>`).join("")}</div>
+        ${mine.length ? `<span class="sub mv-progress">Week ${Number(wk.split("-W")[1])} · ${done.length} of ${mine.length} done</span>` : ""}</div>
+      ${body}`;
   },
   accounts() {
     const tiers = ["A", "B", "C"];
