@@ -53,7 +53,7 @@ const DAY = 864e5;
 let PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];  // the role stages on the board, refreshed from the server
 const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied", interviewing: "Interviewing", closed: "Finished" };
 
-function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.remove("ask"); el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
 async function refreshState() {
   const r = await fetch("/api/state", { cache: "no-store" });
@@ -81,7 +81,22 @@ async function post(path, body) {
 async function setStage(id, stage, msg) {
   const d = await post("/api/job", { id, stage });
   if (!d) return;
-  Object.assign(S.jobs.find(j => j.id === id), d.job); toast(msg || "Moved to " + (LABEL[stage] || stage)); render();
+  Object.assign(S.jobs.find(j => j.id === id), d.job);
+  if (stage === "skipped") askWhy([id], msg || "Skipped"); else toast(msg || "Moved to " + (LABEL[stage] || stage));
+  render();
+}
+function askWhy(ids, msg) {  // a skip is already done: saying why is one more tap if you want it, and nothing if you don't
+  const el = $("toast");
+  el.innerHTML = `<span>${esc(msg)}. Why?</span>` + Object.entries(S.labels.skip_reasons || {}).map(([k, l]) => `<button onclick="skipWhy(${jsa(ids)}, ${jsq(k)})">${esc(l)}</button>`).join("");
+  el.classList.add("on", "ask"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on", "ask"), 9000);
+}
+async function skipWhy(ids, reason) {
+  for (const id of ids) {
+    const d = await post("/api/job", { id, skip_reason: reason });
+    if (!d) return;
+    Object.assign(S.jobs.find(j => j.id === id), d.job);
+  }
+  toast("Noted: " + S.labels.skip_reasons[reason].toLowerCase()); render();
 }
 
 const savedFilter = key => { try { return localStorage.getItem(key); } catch (e) { return null; } };
@@ -301,13 +316,14 @@ function inboxGroups(rows) {  // best first. One entry per role, its other locat
 }
 let openCo = new Set();
 function toggleCo(key) { openCo.has(key) ? openCo.delete(key) : openCo.add(key); render(true); }
-async function setMany(ids, stage, msg) {  // one decision for several roles: every one is saved, then the page redrawn once
+async function setMany(ids, stage, msg, ask = stage === "skipped") {  // one decision for several roles: every one is saved, then the page redrawn once
   for (const id of ids) {
     const d = await post("/api/job", { id, stage });
     if (!d) break;
     Object.assign(S.jobs.find(j => j.id === id), d.job);
   }
-  toast(msg); render();
+  if (ask) askWhy(ids, msg); else toast(msg);
+  render();
 }
 function roleCard(j, actions, extra = "") {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
@@ -572,7 +588,7 @@ const V = {
         const card = ({ j, also }) => {
           const rest = also.map(v => v.id), all = jsa([j.id, ...rest]);
           return roleCard(j, `
-        <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside'))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
+        <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside',false))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
         <button onclick="location.hash='accounts';window._acctq=${jsq(j.company)}">Company</button>
         <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>`, alreadyHere(j) + alsoIn(also));
         };
@@ -582,7 +598,8 @@ const V = {
           <button onclick="toggleCo(${jsq(g.key)})">${open ? `Show only the best at ${esc(g.company)}` : `+${hidden} more at ${esc(g.company)}`}</button>
           <button onclick="if(confirm('Skip all ${g.entries.length} roles at ' + ${jsq(g.company)} + '?'))setMany(${ids},'skipped','Skipped all at ' + ${jsq(g.company)})">Skip all ${g.entries.length}</button></div>` : "");
       }).join("") : rows.map(j => roleCard(j, roleView === "skipped" ? `
-        <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" : "Gus skipped this: it scored under 5"}</span>
+        <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" + (j.skip_reason ? ": " + esc((S.labels.skip_reasons[j.skip_reason] || j.skip_reason).toLowerCase()) : "") : "Gus skipped this: it scored under 5"}</span>
+        ${(j.history || []).some(h => h.stage === "skipped") && !j.skip_reason ? `<button onclick="askWhy([${jsq(j.id)}], 'Skipped')">Say why</button>` : ""}
         <button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>` : `
         <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(j.stage) : ""}</span>`)).join(""))
       : `<div class="empty">${roleView === "new" ? "You're up to date. New roles appear here as Gus finds them." : roleView === "skipped" ? "Nothing skipped here." : "No closed ads here."}</div>`);

@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from radar import accounts as A, events as E, server, service, settings
 from radar.jobs import same_company
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT
-from radar.schema import JOB_STAGES, OUTCOMES, PERSON_KINDS, PERSON_STAGES
+from radar.schema import JOB_STAGES, OUTCOMES, PERSON_KINDS, PERSON_STAGES, SKIP_REASONS
 from radar.store import read
 
 PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"]
@@ -104,7 +104,7 @@ def limit_of(a, default, most=200) -> int:
 
 # ---- roles ----
 
-ROLE_ROW = ["company", "title", "location", "url", "score", "why", "flags", "stage", "source", "first_seen", "note", "folder"]
+ROLE_ROW = ["company", "title", "location", "url", "score", "why", "flags", "stage", "source", "first_seen", "note", "folder", "skip_reason"]
 
 
 def list_roles(a):
@@ -135,11 +135,11 @@ def create_role(a):
 
 
 def update_role(a):
-    if "stage" not in a and "note" not in a:
-        return {"error": "Give a stage, a note or both"}
+    if not any(k in a for k in ("stage", "note", "skip_reason")):
+        return {"error": "Give a stage, a note or a reason for skipping"}
     if "stage" in a and a["stage"] not in JOB_STAGES:
         return {"error": f"No such stage: {a['stage']}. The stages are {', '.join(JOB_STAGES)}"}
-    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note") if k in a}}))
+    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason") if k in a}}))
 
 
 # ---- companies ----
@@ -340,8 +340,9 @@ TOOLS = {
                      "url": _s("A link to the ad, if there is one."), "location": _s("Where the role is."),
                      "stage": _s("Where it starts.", enum=server.START_STAGES), "note": _s("The user's own note."),
                      "careers_url": _s("The company's careers page, which finds its board more surely.")}, ["company", "title"], create_role),
-    "update_role": ("Move a role to another stage, or set the user's note on it. \"Applied to <role>\" is stage \"applied\": the date is recorded.",
-                    {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note.")},
+    "update_role": ("Move a role to another stage, set the user's note on it, or record why the user skipped it. \"Applied to <role>\" is stage \"applied\": the date is recorded.",
+                    {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note."),
+                     "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role.", enum=list(SKIP_REASONS))},
                     ["role_id"], update_role),
     "list_companies": ("The companies the user targets, by tier, with how many fresh events each has.",
                        {"tier": _s("Only this tier.", enum=["A", "B", "C"]), "query": _s("Words to find in the name or product."), "limit": LIMIT},

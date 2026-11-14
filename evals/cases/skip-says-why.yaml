@@ -1,0 +1,16 @@
+id: skip-says-why
+requirement: When I skip a role I can say why in one tap, without being made to, and Gus remembers the reason.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Skip"
+  - message says "Why?"
+  - click "Wrong domain" in the message
+  - 'message says "Noted: wrong domain"'
+  - pick "Skipped"
+  - 'see "You skipped this: wrong domain"'
+  - reload
+  - open Role Inbox
+  - pick "Skipped"
+  - 'see "You skipped this: wrong domain"'
+judge: Does saying why feel like part of skipping, not a form I have to fill in?

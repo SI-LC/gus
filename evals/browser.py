@@ -17,7 +17,7 @@ from evals.world import World
 CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
 RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
-PLACES = {"status bar": "#ticker", "progress": "#progress"}
+PLACES = {"status bar": "#ticker", "progress": "#progress", "message": "#toast.on"}
 GIVENS = ("empty", "signed out", "scanned", "scanned, signed out")
 
 
@@ -45,7 +45,7 @@ def step(page, text):
         page.locator("#progress:not([hidden])").get_by_text(m[1]).first.wait_for(timeout=RUN_MS)
     elif text == "no progress":
         page.locator("#progress[hidden]").wait_for(state="attached", timeout=WAIT_MS)
-    elif m := re.fullmatch(r'click "(.+)" in the (status bar|progress)', text):
+    elif m := re.fullmatch(r'click "(.+)" in the (status bar|progress|message)', text):
         page.locator(PLACES[m[2]]).get_by_text(m[1], exact=True).first.click()
     elif m := re.fullmatch(r'click "(.+)"', text):
         page.locator("#main").get_by_text(m[1], exact=True).first.click()
