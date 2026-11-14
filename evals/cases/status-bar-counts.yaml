@@ -1,5 +1,5 @@
 id: status-bar-counts
-requirement: The status bar leads with what's waiting for me, then what Gus did this month, and keeps what the AI used on the Usage screen.
+requirement: The status bar leads with what's waiting for me, then what Gus did this month, and keeps what the AI used on the Activity screen.
 given: scanned
 check:
   - status bar says "to review"

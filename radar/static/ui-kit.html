@@ -25,7 +25,7 @@
   .kit-swatch span { display: block; color: var(--color-muted); font: 12px var(--font-sans); margin-top: 2px; }
   .kit-toast { position: static; transform: none; opacity: 1; display: inline-flex; }
   .kit-toast.ask { display: inline-flex; }
-  .kit-banner { padding-left: 16px; padding-right: 16px; border: 1px solid var(--color-accent); }
+  .kit-banner { padding-right: 16px; border-top: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
   .kit-board { grid-template-columns: repeat(2, minmax(180px, 260px)); }
   .kit-gap { margin-top: 12px; }
 </style>
@@ -38,7 +38,11 @@
   <div class="getting-started">
     <b>The rules</b>
     <ul>
-      <li>One primary button per screen or card: the thing you most likely want to do.</li>
+      <li>One primary button per screen or card: the thing you most likely want to do. A button that sits on every screen is never primary.</li>
+      <li>Lime means the likely next step, and nothing else: not a count, a heading, a filter or a label.</li>
+      <li>Only buttons look like buttons. A label is text with a dot, never a box.</li>
+      <li>Something you can't take back is red.</li>
+      <li>A screen explains itself: no paragraph of instructions under the title.</li>
       <li>A button says what happens ("Shortlist", "Skip"), never "OK" or "Submit".</li>
       <li>Colour never carries meaning alone: a dot or an edge always comes with words.</li>
       <li>Colours, fonts and corners come from the tokens below, never a new hex value.</li>
@@ -56,17 +60,17 @@
     <div class="kit-swatch"><i style="background:var(--color-rule)"></i><div>rule<span>Button and panel borders</span></div></div>
     <div class="kit-swatch"><i style="background:var(--color-ink)"></i><div>ink<span>Text</span></div></div>
     <div class="kit-swatch"><i style="background:var(--color-muted)"></i><div>muted<span>Secondary text</span></div></div>
-    <div class="kit-swatch"><i style="background:var(--color-accent)"></i><div>accent<span>Primary action, counts, "on"</span></div></div>
-    <div class="kit-swatch"><i style="background:var(--color-accent-soft)"></i><div>accent-soft<span>Banner, run in progress</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-accent)"></i><div>accent<span>The likely next step, and what's waiting in the menu</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-accent-soft)"></i><div>accent-soft<span>A run in progress</span></div></div>
     <div class="kit-swatch"><i style="background:var(--color-hi)"></i><div>hi<span>Good, done, strong score</span></div></div>
     <div class="kit-swatch"><i style="background:var(--color-mid)"></i><div>mid<span>Waiting for you, warm</span></div></div>
     <div class="kit-swatch"><i style="background:var(--color-lo)"></i><div>lo<span>Low score, nothing there</span></div></div>
-    <div class="kit-swatch"><i style="background:var(--color-bad)"></i><div>bad<span>Failed, overdue</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-bad)"></i><div>bad<span>Failed, overdue, can't be taken back</span></div></div>
   </div>
 
   <div class="section">Text</div>
   <h1>Screen title <span class="count">12</span></h1>
-  <p class="lede">.lede: one or two sentences under a title that say what the screen is for.</p>
+  <p class="lede">.lede: a line under a title, only where one is truly needed, such as the first-run screen. A screen that needs one to be understood isn't finished.</p>
   <div class="group kit-gap"><h2>Group heading</h2><p class="sub">.sub: help and secondary text.</p></div>
   <p><span class="ok">.ok: it worked</span> · <span class="bad">.bad: it failed</span> · <code>code</code></p>
   <p class="kit-use sub">The line above this block, with its label and rule, is <code>.section</code>.</p>
@@ -80,8 +84,11 @@
     <button class="link">About Northwind</button>
     <button class="mini star on" aria-label="Favourite">★</button>
     <button class="mini star" aria-label="Not a favourite">☆</button>
+    <button class="danger">Remove</button>
+    <button class="link danger">Remove</button>
+    <details class="add-event"><summary>+ Add news</summary></details>
   </div>
-  <p class="kit-use sub kit-gap">Primary for the main action, plain for the alternative, <code>.link</code> for something that only opens or explains. Group them in <code>.actions</code>.</p>
+  <p class="kit-use sub kit-gap">Primary for the main action, plain for the alternative, <code>.link</code> for something that only opens or explains, <code>.danger</code> for something you can't take back. A form that opens in place starts from an <code>.add-event</code> summary. Group buttons in <code>.actions</code>.</p>
 
   <div class="section">Small labels</div>
   <div class="row">
@@ -95,7 +102,7 @@
     <span class="tier tA">A</span><span class="tier tB">B</span><span class="tier tC">C</span>
     <span class="dist d1 sure">1st</span><span class="dist d2">2nd</span><span class="dist">3rd+</span>
   </div>
-  <p class="kit-use sub kit-gap"><code>.pill</code> for a fact, <code>.flag</code> for a caution, <code>.tier</code> for a company's tier, <code>.dist</code> for how close a person is (solid when confirmed).</p>
+  <p class="kit-use sub kit-gap"><code>.pill</code> for a fact, <code>.flag</code> for a caution, <code>.tier</code> for a company's tier, <code>.dist</code> for how close a person is (a question mark when it's a guess).</p>
 
   <div class="section">A role</div>
   <article class="card role">
@@ -150,6 +157,11 @@
   </div>
   <p class="kit-use sub kit-gap">The whole card is the button. An amber edge (<code>.next</code>) means it's waiting for you, and the words say what for.</p>
 
+  <div class="section">A person to contact</div>
+  <article class="mv"><button class="mv-row"><span class="mv-who"><b>Alex Example</b> <span>Head of Product, Northwind</span></span>
+    <span class="mv-because"><b>Northwind raised a Series C</b> · 2d ago</span><span class="mv-tog">Open</span></button></article>
+  <p class="kit-use sub kit-gap">One line: who, and the reason in bold. It opens for the draft, one at a time.</p>
+
   <div class="section">Filters and tabs</div>
   <div class="tabs chips-row" role="group" aria-label="Show">
     <a href="#" class="on">New <span class="sub">12</span></a><a href="#">Closed ads <span class="sub">3</span></a><a href="#">Skipped <span class="sub">40</span></a>
@@ -169,16 +181,26 @@
     <div class="stat"><div class="v">£0.42</div><div class="l">Spent today</div></div>
   </div>
 
+  <div class="big kit-gap"><div><b>30</b><span>roles read and scored in November</span></div><div><b>~1h</b><span>of reading saved</span></div><div><b>£4.20</b><span>API value, covered by your plan</span></div></div>
+  <div class="facts kit-gap"><div><span>Claude today</span><b>£0.12</b></div><div><span>Runs this month</span><b>41</b></div><div><span>Daily limit</span><b>£10</b></div></div>
+  <p class="kit-use sub kit-gap"><code>.big</code> leads a screen with the few numbers that matter. <code>.facts</code> holds supporting figures. <code>.stats</code> is a row of equal numbers, for a funnel. A <code>.chart</code> is drawn to one scale with its numbers on the axis.</p>
+
+  <div class="section">Is it working?</div>
+  <div class="src"><span class="pill done">Job boards · 8</span><span class="sub">All worked · checked 2 hours ago</span></div>
+  <div class="src"><span class="pill due">AI</span><span class="sub">Sign-in expired 2 hours ago</span></div>
+  <div class="src"><span class="pill">X</span><span class="sub">Off. <a href="#">Turn it on in Settings</a></span></div>
+  <p class="kit-use sub kit-gap">One <code>.src</code> line for each thing that has to work: a dot, its name, a plain status. A line that's off says what to do about it, and nothing says "never".</p>
+
   <div class="section">Table</div>
   <table><tr><th>Source</th><th>Last checked</th><th></th></tr>
-    <tr><td>Example newsletter</td><td>2 hours ago</td><td><button>Remove</button></td></tr></table>
+    <tr><td>Example newsletter</td><td>2 hours ago</td><td><button class="danger">Remove</button></td></tr></table>
 
   <div class="section">Empty state</div>
   <div class="empty">You're up to date. New roles appear here as Gus finds them.</div>
   <p class="kit-use sub kit-gap">Say what will appear here, or the one thing to do next. Never just "No data".</p>
 
   <div class="section">Messages</div>
-  <div class="banner kit-banner">.banner: something you need to know before carrying on. <a href="#">Fix it in Settings</a></div>
+  <div class="banner kit-banner">.banner: a problem you need to know about before carrying on, with its fix. <a href="#">Fix it in Settings</a></div>
   <p class="kit-gap"><span class="toast on kit-toast">Moved to To apply</span> &nbsp; <span class="toast on ask kit-toast"><span>Skipped. Why?</span><button>Too junior</button><button>Wrong place</button></span></p>
   <p class="kit-use sub kit-gap"><code>.toast</code> confirms what just happened, in the words of the button that did it. With <code>.ask</code> it offers a quick follow-up. A failure says what failed and what to do.</p>
 </main>

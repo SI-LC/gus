@@ -49,7 +49,7 @@ A small web app, and the place you work. Each page is one object from the list a
 - **Pipeline:** every conversation and application by stage, and the page the cockpit opens on
 - **To do:** this week's moves, each with the event behind it, your angle and a draft, plus the funnel from events to interviews
 - **Companies:** your accounts by tier, with what's happened at each and who to talk to there. Add a company, set its tier, mark the ones you love, add news Gus missed or dismiss news that isn't
-- **Usage:** what the AI runs have used, by day and by task, and under it Health: the last scan, job source limits, and any board or feed that failed
+- **Activity:** what Gus did for you this month, the roles it read each day, whether every source is working, and under that what the AI runs have used, by day and by task
 - **Settings:** AI provider, matching, schedule, job sources and their limits, newsletters, email, keys and your profile
 
 For a role you want to pursue, ask Claude Code to prep it: it saves the job description, drafts your answers and writes an interview brief. You still press submit.
