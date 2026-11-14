@@ -198,6 +198,9 @@
   .mv.done .mv-row { flex: 1 1 240px; width: auto; } .mv.done .mv-who b { color: var(--color-muted); }
   .mv-side { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } .mv-side select { min-height: 30px; padding: 3px 8px; font-size: 13px; }
   .mv-progress { margin-left: auto; align-self: center; font: 12px var(--font-mono); }
+  .mv-why { margin-top: 14px; } .mv-why .why { color: var(--color-muted); } .mv-body > .follow:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+  .mv-who .tier { margin-right: 4px; } .mv.acct .acct-head { margin-top: 2px; }
+  .acct-find { flex: 1 1 200px; max-width: 320px; min-height: 36px; margin-bottom: 8px; }
   .move .why b, .why-contact b, .routes-head b { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); margin-right: 4px; }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--font-sans); letter-spacing: -.02em; }
