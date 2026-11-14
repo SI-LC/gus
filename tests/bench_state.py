@@ -9,7 +9,6 @@ times /api/state the way a browser asks for it: the first load, then the 60-seco
 """
 from __future__ import annotations
 
-import gzip
 import json
 import random
 import shutil
