@@ -170,10 +170,13 @@ def plan(path) -> None:
     print(f"{kept} moves added for {wk}")
 
 
-def funnel(days=90) -> dict:
+def funnel(days=90, jobs=None, companies=None, stored=None) -> dict:
+    """jobs, companies and stored (events) are read from the data files unless the caller has them already."""
     since = today() - timedelta(days=days)
     moves = [m for m in read(MOVES, {}).values() if (parse_date(m.get("created")) or today()) >= since]
-    jobs, companies, stored = read(JOBS, {}), read(COMPANIES, {}), read(EVENTS, {})
+    jobs = read(JOBS, {}) if jobs is None else jobs
+    companies = read(COMPANIES, {}) if companies is None else companies
+    stored = read(EVENTS, {}) if stored is None else stored
     fresh = sum(1 for n, c in companies.items() if tier(c) in ("A", "B") for e in events(n, stored=stored) if e["fresh"])
     reached = {"replied", "conversation", "interview", "referral"}
     conv = {"conversation", "interview", "referral"}

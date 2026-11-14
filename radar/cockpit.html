@@ -56,11 +56,15 @@ const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.remove("ask"); el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
 let changes = 0;  // counts up as each change you make starts and ends
+let held = { tag: "", text: "" };  // the last answer from /api/state as it arrived, and the server's name for it
 async function fetchState() {  // a refresh that crossed a change of yours is out of date and would undo it on screen, so it's fetched again
   for (;;) {
-    const at = changes, r = await fetch("/api/state", { cache: "no-store" });
-    if (!r.ok) return { error: await r.text() };
-    const s = await r.json();
+    const at = changes, r = await fetch("/api/state", { cache: "no-store", headers: held.tag ? { "If-None-Match": held.tag } : {} });
+    if (r.status !== 304) {  // 304: nothing has changed since the answer held here, so Gus didn't send it again
+      if (!r.ok) return { error: await r.text() };
+      held = { tag: r.headers.get("ETag") || "", text: await r.text() };
+    }
+    const s = JSON.parse(held.text);  // a fresh copy each time, as the page changes S in place
     if (at === changes) return { s };
   }
 }

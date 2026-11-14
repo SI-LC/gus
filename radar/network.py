@@ -17,6 +17,7 @@ import json
 import re
 import sys
 from datetime import date
+from functools import lru_cache
 
 from radar.accounts import person_id, tier
 from radar.paths import COMPANIES, PEOPLE
@@ -28,6 +29,7 @@ NETWORK = DATA / "network.json"
 SUFFIX = re.compile(r"\b(ltd|limited|inc|llc|plc|gmbh|sas|bv|ag|co|corp|corporation|group|holdings|technologies|technology|labs|hq|uk)\b\.?", re.I)
 
 
+@lru_cache(maxsize=20000)  # the cockpit asks for every connection's company once per person mapped, on every load
 def norm(company: str) -> str:
     s = (company or "").lower().replace("&", "and")
     s = re.sub(r"\.(ai|io|com|co|dev|so|app)\b", "", s)
@@ -136,7 +138,17 @@ def distances(people: dict | None = None) -> dict:
     conns = read(NETWORK, {}).get("connections", [])
     companies = read(COMPANIES, {})
     mine = [x.strip() for x in (load().get("my_employers") or "").splitlines() if x.strip()]
-    return {pid: distance(paths_for(p, conns, companies.get(p.get("company"), {}), mine)) for pid, p in people.items()}
+    by_company, by_name = {}, {}  # where each connection works and what they're called, so each person only meets the few that matter
+    for i, c in enumerate(conns):
+        by_company.setdefault(norm(c.get("company")), []).append(i)
+        by_name.setdefault(c["name"].strip().lower(), []).append(i)
+    out = {}
+    for pid, p in people.items():
+        account = companies.get(p.get("company"), {})
+        keys = {norm(p.get("company"))} | {norm(c) for c in p.get("past_companies") or []} | {norm(i) for i in account.get("investors") or []}
+        near = {i for k in keys - {""} for i in by_company.get(k, [])} | set(by_name.get((p.get("name") or "").strip().lower(), []))
+        out[pid] = distance(paths_for(p, [conns[i] for i in sorted(near)], account, mine))  # in the file's order, as before
+    return out
 
 
 def summary() -> dict:
