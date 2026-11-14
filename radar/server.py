@@ -8,11 +8,16 @@ in a cookie). Use that whenever the cockpit is reachable from other devices.
 """
 from __future__ import annotations
 
+import gzip
+import hashlib
 import hmac
 import json
+import os
 import re
 import socket
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 from radar.companies import veto
 from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
-from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS
+from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS, WATCHLIST
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASONS
 from radar import firstrun, links, service, settings, sources, usage
 from radar.settings import secret
@@ -59,16 +64,17 @@ def last_agent_run():
 
 def state():
     watched = links.watched()
+    raw_jobs = read(JOBS, {})  # read once: with every description in it, it's the biggest file there is
     cfg = settings.load()
     places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
     jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location"), places), "role_type": role_type(j.get("title"), kinds),
              "co": role_key(j)[0], "tk": role_key(j)[1],  # the same employer, and the same title, however each ad spells them
-             "can_watch": bool(j.get("board")) and same_company(j.get("company")) not in watched} for j in read(JOBS, {}).values()]
+             "can_watch": bool(j.get("board")) and same_company(j.get("company")) not in watched} for j in raw_jobs.values()]
     signals = read(SIGNALS, {})
     beats = (DATA / "heartbeat.log").read_text().split() if (DATA / "heartbeat.log").exists() else []
     from radar import accounts as A, events as E
     from radar.network import distances, summary as net_summary
-    companies, people, moves, raw_jobs = read(COMPANIES, {}), read(A.PEOPLE, {}), read(A.MOVES, {}), read(JOBS, {})
+    companies, people, moves = read(COMPANIES, {}), read(A.PEOPLE, {}), read(A.MOVES, {})
     stored_events = read(A.EVENTS, {})
     dist = distances(people)
     accts = []
@@ -103,7 +109,7 @@ def state():
         "people": {pid: dict(p, id=pid, distance=dist[pid]) for pid, p in people.items()},
         "moves": shown,
         "week": A.week_id(),
-        "funnel": A.funnel(),
+        "funnel": A.funnel(jobs=raw_jobs, companies=companies, stored=stored_events),
         "network": net_summary(),
         "running": list(service.status()["running"]),
         "follow_ups": follow_ups(raw_jobs, people, moves),
@@ -127,6 +133,48 @@ def state():
             "claude": mcp_status(),
         },
     }
+
+
+COMPRESS_FROM = 1024  # bytes: under this, gzip saves nothing worth the work
+BUILT = {"key": None, "at": 0.0, "body": b"", "zipped": b"", "tag": ""}
+BUILT_FOR = 300  # seconds a built answer may be reused, whatever the files say: the limit on anything the key below doesn't know about
+_building = threading.Lock()
+
+
+def state_key():
+    """Everything /api/state is built from, cheaply: each data and settings file as it is on disk, the day, and what's running.
+
+    A file saved through radar.store is a new file (written beside the old one, then swapped in), so its number changes
+    even when its size and time don't. Anything state() reads that isn't under data/ or listed here has to be added."""
+    def stamp(path):
+        try:
+            st = os.stat(path)
+            return (str(path), st.st_ino, st.st_mtime_ns, st.st_size)
+        except OSError:
+            return (str(path), None)
+    try:
+        files = sorted(stamp(e.path) for e in os.scandir(DATA))  # data/runs is one of them: it changes when a run is added
+    except OSError:
+        files = []
+    files += [stamp(p) for p in (settings.DEFAULTS, settings.USER, settings.SECRETS, WATCHLIST, PROFILE, firstrun.EXAMPLE)]
+    with service._lock:
+        jobs = json.dumps([service.running, service.last, service.progress], sort_keys=True, default=str)
+    return (tuple(files), str(datetime.now().date()), now()[:10], jobs, bool(firstrun.RUN["saved"]),
+            tuple(os.environ.get(v) for v in settings.ENV.values()))
+
+
+def state_answer():
+    """/api/state ready to send: (bytes, the same gzipped, a tag naming this exact answer).
+
+    Built again only when something it's made from has changed. The tag is a hash of the answer itself, so a page that
+    already holds this answer is told so (304) instead of being sent it again."""
+    with _building:  # two requests at once (a refresh crossing a click) build it once
+        key = state_key()
+        if key != BUILT["key"] or time.monotonic() - BUILT["at"] > BUILT_FOR or service.running:
+            body = json.dumps(state(), ensure_ascii=False).encode()
+            BUILT.update(key=key, at=time.monotonic(), body=body, zipped=gzip.compress(body, 6),
+                         tag='"' + hashlib.sha256(body).hexdigest()[:32] + '"')
+        return BUILT["body"], BUILT["zipped"], BUILT["tag"]
 
 
 def settings_payload():
@@ -507,10 +555,25 @@ class Handler(BaseHTTPRequestHandler):
         self.token_in_url = bool(q) and hmac.compare_digest(q.encode(), token.encode())
         return self.token_in_url or (c is not None and hmac.compare_digest(c.value.encode(), token.encode()))
 
-    def send(self, code, body, ctype="application/json"):
+    def gzip_ok(self):
+        return self.command == "GET" and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+
+    def send(self, code, body, ctype="application/json", zipped=None, tag=None):
+        """zipped is the body already gzipped, when the caller keeps one; tag names this exact answer (an ETag)."""
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+        text = not ctype.startswith("image/png")  # a PNG is compressed already
+        packed = text and self.gzip_ok() and len(data) >= COMPRESS_FROM
+        if packed:
+            data = zipped or gzip.compress(data, 6)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        if packed:
+            self.send_header("Content-Encoding", "gzip")
+        if text:
+            self.send_header("Vary", "Accept-Encoding")
+        if tag:
+            self.send_header("ETag", tag)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -536,7 +599,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/state":
-            return self.send(200, state())
+            body, zipped, tag = state_answer()
+            if tag in (self.headers.get("If-None-Match") or ""):  # the page has this answer already
+                return self.send(304, b"", tag=tag)
+            return self.send(200, body, zipped=zipped, tag=tag)
         if path == "/api/job":
             return self.send(200, get_job(parse_qs(urlparse(self.path).query).get("id", [""])[0]))
         if path == "/api/settings":

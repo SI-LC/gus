@@ -1,0 +1,20 @@
+id: refresh-keeps-up
+requirement: The cockpit keeps itself up to date without fetching everything again. A refresh with nothing new leaves the screen as it was, and a refresh after a change shows the change.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Senior Product Manager"
+  - the page is refreshing slowly
+  - the refresh arrives
+  - see "Senior Product Manager"
+  - status bar says "to review"
+  - click "Shortlist"
+  - message says "Moved to To apply"
+  - the page is refreshing slowly
+  - the refresh arrives
+  - see "here is on your shortlist"
+  - open Pipeline
+  - see "Senior Product Manager"
+  - reload
+  - see "Senior Product Manager"
+judge: Does the page ever show me something older than what Gus knows?
