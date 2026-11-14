@@ -4,7 +4,7 @@ given: scanned, signed out
 check:
   - banner says "Your Claude sign-in expired"
   - banner says "Sign in with Claude"
-  - open Usage
+  - open Activity
   - see "Sign-in expired"
   - click "Sign in with Claude"
   - see "Open Claude's sign-in page"
@@ -13,6 +13,6 @@ check:
   - see "Signed in to Claude"
   - no banner
   - open Pipeline
-  - open Usage
+  - open Activity
   - not see "Sign-in expired"
 judge: Would I know within a day that scoring had stopped, and could I fix it from my phone?
