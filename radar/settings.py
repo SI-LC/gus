@@ -188,7 +188,7 @@ SECRET_KEYS = {
     "gmail_app_password": ("Gmail app password", "A 16-letter password from your Google account, not your normal one."),
     "x_bearer_token": ("X API bearer token", "From developer.x.com."),
     "ntfy_topic": ("ntfy topic", "A long random name. Anyone who knows it can read your notifications."),
-    "cockpit_token": ("Cockpit access token", "Required before opening the cockpit to other devices. Add ?t=<token> to the URL once."),
+    "cockpit_token": ("Browser access token", "Needed before other devices can open the cockpit in a browser. Add ?t=<token> to the URL once. Claude Code has its own token, under Claude."),
     "companies_house_key": ("Companies House API key", "Free, from the Companies House developer hub. Spots new UK branches."),
     "adzuna_app_id": ("Adzuna app ID", "From developer.adzuna.com, under your account."),
     "adzuna_app_key": ("Adzuna app key", "From developer.adzuna.com, under your account."),

@@ -850,13 +850,13 @@ const SETTINGS_TABS = [
       <p class="sub">Lets Claude Code or the Claude desktop app read your roles, companies, people and moves straight from Gus, with no terminal. It can't see or change your settings, keys or profile text beyond reading the profile.</p>
       ${local ? `<div class="field"><label>On this computer</label><div><code class="break-all">${esc(cmd())}</code></div><div class="help">Run this once in a terminal, for Claude Code. On the computer Gus runs on, no token is needed.</div>
         <div class="col-start-2"><code class="break-all" id="mcp-desktop">${esc(desktop())}</code></div><div class="help">For the Claude desktop app. ${desktopHelp}</div></div>` : ""}
-      <div class="field"><label>${local ? "From another device" : "Access token"}</label>
+      <div class="field"><label>Claude Code token</label>
         <div class="row"><span class="sub" id="mcp-token-state">${t ? `Token ending ${esc(t.last4)}, made ${ago(t.created_at)}${t.login ? `, for ${esc(t.login)}` : ""}` : "No token yet"}</span>
         <button onclick="mcpToken('create')">${t ? "Replace token" : "Create token"}</button>${t ? `<button class="danger" onclick="mcpToken('remove')">Remove</button>` : ""}</div>
         ${fresh ? `<div class="mt-2"><code class="break-all" id="mcp-command">${esc(cmd(fresh))}</code></div><div class="help"><b>Copy this now: the token isn't shown again.</b> Run it on the device where you use Claude Code. Gus keeps only a fingerprint of the token.</div>
         <div class="mt-2"><code class="break-all" id="mcp-desktop-token">${esc(desktop(fresh))}</code></div><div class="help">For the Claude desktop app on that device. ${desktopHelp}${local ? "" : " It needs a copy of Gus on that device: put its folder where this says."}</div>` : ""}
         ${t && t.old ? `<div class="help bad">This token is ${t.age_days} days old. Replace it now and then.</div>` : ""}
-        <div class="help">Needed from any device but this one. ${t && t.login ? "It only works for the Tailscale login it was made with. " : ""}Replacing it stops the old one at once.</div></div>
+        <div class="help">Needed from any device but this one. Not the same as the browser access token under Keys: this one opens Gus's tools (an MCP server at /mcp) and nothing else. ${t && t.login ? "It only works for the Tailscale login it was made with. " : ""}Replacing it stops the old one at once.</div></div>
       ${fieldsOf("Claude")}
       <div class="field"><label>Recent use</label><div>${c.recent.length ? `<table>${c.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${r.tool === "-" ? `<span class="bad">Refused</span>` : esc(r.tool)}</td><td class="sub">${esc(r.why || r.target || "")}</td><td class="sub">${esc(r.who || "")}</td></tr>`).join("")}</table>` : `<span class="sub">Claude hasn't connected yet.</span>`}</div></div></section>`;
   }],
