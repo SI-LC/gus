@@ -1,0 +1,14 @@
+id: screens-explain-themselves
+requirement: On any screen I can tell where I am and what to do next from the screen itself, without a paragraph of instructions.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Role Inbox"
+  - see "Shortlist"
+  - not see "Shortlist the ones you'd apply for"
+  - open Pipeline
+  - see "Finished"
+  - not see "Move a card on as things happen"
+  - open Companies
+  - not see "The companies you're aiming for"
+judge: Without reading any explanation, can I tell which screen this is, what else there is in the menu, which things are buttons, and which one to press next?
