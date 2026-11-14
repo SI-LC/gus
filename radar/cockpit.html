@@ -275,7 +275,7 @@ function readChart() {  // roles read on each of the last 14 days, drawn to one 
   const key = d => d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(), n = {};
   S.jobs.forEach(j => { if (j.score != null && j.first_seen) { const k = key(new Date(j.first_seen)); n[k] = (n[k] || 0) + 1; } });
   const vals = days.map(d => n[key(d)] || 0), top = Math.max(4, Math.ceil(Math.max(...vals) / 4) * 4);
-  const W = 560, H = 124, L = 30, B = 98, T = 12, bw = (W - L) / 14, y = v => B - v / top * (B - T);
+  const W = 560, H = 128, L = 40, B = 98, T = 14, bw = (W - L) / 14, y = v => B - v / top * (B - T);
   const fmt = d => d.toLocaleString("en-GB", { day: "numeric", month: "short" });
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Roles read each day for the last 14 days, oldest first: ${vals.join(", ")}">
     ${[0, top / 2, top].map(v => `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("")}
