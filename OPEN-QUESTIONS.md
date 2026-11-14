@@ -1,6 +1,8 @@
 # Open questions
 
-Decisions and follow-ups to pick up later. Code only: nothing personal belongs here.
+Decisions still to make, and what's known about each job source. Code only: nothing personal belongs here.
+
+Things to check, build or secure are [issues](https://github.com/SI-LC/gus/issues), not listed here.
 
 ## Decide first
 
@@ -18,41 +20,6 @@ Decisions and follow-ups to pick up later. Code only: nothing personal belongs h
   merge, or show in Health.
 - **How much should a company's name count?** If brand is a real reason to apply, list preferred companies in the profile and have `prompts/triage.md` weigh them openly. If not, keep labels and scoring on fit alone. Comparing old labels with a relabelled set should help.
 - **Separate company fit score?** One score mixes company fit and role fit, so a good role type at a strong company can still score low, and thresholds at 7 and 8 hide it. Options: keep one score, or score company and role separately and let the candidate choose which matters for each role type. Decide after a few weeks of real decisions. Relates to the company name question above and to replacing the A/B/C tiers.
-
-## Check next
-
-- **First real full run.** Full run has only been tested with stand-ins. Press it and watch each step. Consider moving agent runs to a cheaper model first.
-- **Unread signals.** Discovery hasn't run on the Pi yet, so signals have built up.
-- **Screens not yet clicked through in a browser:** the Skipped and Closed ads filters, Restore, Check roles feedback, Open folder, and the phone layout.
-- **Messaged button.** One click was reported that didn't reach the Pi, and the cause wasn't found.
-- **Stale moves.** Moves planned before the signal date fix may rest on old roles. Review or skip them.
-- **Closed ads.** Confirm detection on real scans, then decide whether reposted roles should link to the original.
-
-## Security
-
-- Set a cockpit access token.
-- Create the Claude token on the Pi (Settings, Claude). Decide whether **Let Claude make changes** stays on.
-- The `apply-to-role` skill stays on the Mac, and applying is never an MCP tool. Once the token exists, the skill could read a role and set its stage through `get_role` and `update_role` instead of SSH: decide whether that's worth changing.
-- The Claude connection has no sign-in for claude.ai or the phone app: that needs OAuth and a public address, and is parked.
-- Turn off SSH password logins on the Pi.
-- Back up `data/` off the Pi: a nightly copy, with its status on the Health page. Today it exists only on the SD card.
-- The Pi's disk isn't encrypted, so keys and data are readable from the card.
-- Check the Claude account's extra usage setting before leaving the daily run on.
-
-## Build next
-
-- **Manual edits in the cockpit:** add a role from a link, edit a move's draft, add notes, correct a score, add a person or a signal.
-- **Role page** with the saved job description, and CV tailoring from it. Decide the output format.
-- **Drafts for follow-ups,** and the same reasoning shown for moves.
-- **Bring in the network:** connections can be imported (Settings → Network); still to do: fill past employers so routes work.
-- **Scoring calibration** from shortlist and skip decisions.
-- **"Applied AI" in title matching** may be too broad. Decide whether to narrow it.
-- **One role posted once per country.** Grafana Labs lists the same Staff PM role six times on one board, once per
-  country, and Elastic one Principal PM role four times by region, each copy scored on its own (5 to 7 for the same job).
-  `radar.jobs dedupe` leaves them alone on purpose: two ids on one board are two roles, which is right for n8n's two
-  identical Senior PM postings. Proposed rule: same board, same title, and location lists that differ but overlap are one
-  role; keep the copy whose location best matches the search setting, fold the rest under `also`, carry the highest score.
-  Identical locations stay separate. Eight of 76 live roles on 8 Nov 2026.
 
 ## Sources
 

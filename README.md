@@ -206,7 +206,7 @@ Everything is in `radar/`, one module per job. The fields of every object in `da
 
 ## Roadmap
 
-Open decisions and next steps are in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
+Open decisions are in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md), and next steps are [issues](https://github.com/SI-LC/gus/issues).
 
 ## License
 
