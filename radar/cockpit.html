@@ -20,7 +20,7 @@
 <body>
 <div class="app">
   <nav id="nav">
-    <div class="brand">g<span class="us">us</span><b>/</b><small>Your agent in the market</small></div>
+    <div class="brand">g<span class="us">us</span><b>/</b><small>Your job-search agent</small></div>
     <a href="#roles" data-v="roles" data-i="01" title="Role Inbox"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3zM3 13h6l1 2h4l1-2h6"/></svg><span class="lb">Role Inbox</span> <span class="n" id="n-roles"></span></a>
     <a href="#pipeline" data-v="pipeline" data-i="02" title="Pipeline"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v5h-4z"/></svg><span class="lb">Pipeline</span> <span class="n" id="n-pipeline"></span></a>
     <a href="#week" data-v="week" data-i="03" title="To do"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2"/></svg><span class="lb">To do</span> <span class="n" id="n-week"></span></a>
@@ -31,7 +31,7 @@
   </nav>
   <div class="content">
     <div class="search"><input type="search" id="q" aria-label="Search" placeholder="Search roles, companies and people" autocomplete="off" oninput="search(this.value)"></div>
-    <div class="ticker" id="ticker" aria-live="polite"></div>
+    <div class="ticker" id="ticker" aria-live="polite"><span class="sub">Loading your roles…</span></div>
     <div class="banner" id="banner" role="status" hidden></div>
     <div class="progress" id="progress" role="status" hidden></div>
     <main id="main"><div class="empty">Loading…</div></main>
