@@ -55,6 +55,11 @@ def step(page, text):
         page.locator("#main .chips-row a.on", has_text=m[1]).first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'type "(.+)" into "(.+)"', text):
         page.get_by_label(m[2], exact=True).fill(m[1])
+    elif text == "the page is refreshing slowly":  # a background refresh is under way and its answer arrives late, as on a busy Pi
+        page.evaluate("""() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o);
+          if (String(u).includes("/api/state")) await new Promise(ok => setTimeout(ok, 1500)); return r; }; window.refreshed = load(); }""")
+    elif text == "the refresh arrives":
+        page.evaluate("() => window.refreshed")
     elif text == "Gus stops answering":  # restarting, or the connection dropped: nothing sent from the page arrives
         page.route("**/api/**", lambda r: r.abort() if r.request.method == "POST" else r.fallback())
     elif m := re.fullmatch(r'message says "(.+)"', text):

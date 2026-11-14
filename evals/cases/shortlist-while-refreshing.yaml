@@ -1,0 +1,14 @@
+id: shortlist-while-refreshing
+requirement: When I shortlist a role while the page is refreshing itself, it leaves my inbox and doesn't come back.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Senior Product Manager"
+  - the page is refreshing slowly
+  - click "Shortlist"
+  - message says "Moved to To apply"
+  - the refresh arrives
+  - see "here is on your shortlist"
+  - open Pipeline
+  - see "Senior Product Manager"
+judge: Does a shortlist I make always stick, without me having to click again?

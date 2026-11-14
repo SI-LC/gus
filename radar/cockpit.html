@@ -55,14 +55,23 @@ const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.remove("ask"); el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
 
+let changes = 0;  // counts up as each change you make starts and ends
+async function fetchState() {  // a refresh that crossed a change of yours is out of date and would undo it on screen, so it's fetched again
+  for (;;) {
+    const at = changes, r = await fetch("/api/state", { cache: "no-store" });
+    if (!r.ok) return { error: await r.text() };
+    const s = await r.json();
+    if (at === changes) return { s };
+  }
+}
 async function refreshState() {
-  const r = await fetch("/api/state", { cache: "no-store" });
-  if (r.ok) { S = await r.json(); drawTicker(); }
+  const { s } = await fetchState();
+  if (s) { S = s; drawTicker(); }
 }
 async function load() {
-  const r = await fetch("/api/state", { cache: "no-store" });
-  if (!r.ok) { $("main").innerHTML = `<div class="empty">${esc(await r.text())}</div>`; return; }
-  S = await r.json(); checkRoleFilters();
+  const { s, error } = await fetchState();
+  if (!s) { $("main").innerHTML = `<div class="empty">${esc(error)}</div>`; return; }
+  S = s; checkRoleFilters();
   if (S.labels.role_stages) PIPE = S.labels.role_stages.filter(st => !["new", "skipped"].includes(st));
   if ((S.running || []).length) watchRun();
   if (S.setup.needed && location.hash !== "#welcome") location.hash = "#welcome";
@@ -71,10 +80,12 @@ async function load() {
 }
 async function post(path, body) {
   let d;
+  changes++;
   try {
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     d = await r.json();
   } catch (e) { toast("Not saved: Gus isn't answering. Try again in a moment"); return null; }  // restarting, or the connection dropped
+  finally { changes++; }
   if (d.error) { toast(d.error); return null; }
   return d;
 }
