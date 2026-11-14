@@ -72,6 +72,17 @@ class World:
         """The real scan script, as the daily run and the Check roles button run it."""
         return subprocess.run(["bash", "run.sh"], cwd=self.app, env=self.env, capture_output=True, text=True, timeout=180)
 
+    def copy(self) -> World:
+        """A second install in the state this one is in now, in its own folder, so one scan can start many checks."""
+        twin = object.__new__(World)
+        twin.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
+        twin.app, twin.home = twin.base / "app", twin.base / "home"
+        shutil.copytree(self.app, twin.app, symlinks=True)
+        shutil.copytree(self.home, twin.home, symlinks=True)
+        twin.env = {**self.env, "HOME": str(twin.home), "PATH": self.env["PATH"].replace(str(self.home), str(twin.home), 1)}
+        twin.server, twin.url = None, ""
+        return twin
+
     def crashes(self) -> dict:
         """run.sh carries on past a failed step, so a crash only shows up in its logs."""
         return {p.name: p.read_text()[-600:] for p in (self.app / "data").glob("*.log") if "Traceback" in p.read_text()}

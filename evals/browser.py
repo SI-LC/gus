@@ -66,12 +66,21 @@ def step(page, text):
         raise ValueError(f"Unknown step: {text}")
 
 
-def run_case(browser, case) -> str:
+def fresh_world(given, scanned) -> World:
+    """An install for the case to start from. The scan runs once for each kind of scanned install and each case gets
+    its own copy of the result, as a scan of the made-up boards always comes out the same."""
+    if not given.startswith("scanned"):
+        return World(new=True, signed_out="signed out" in given)
+    if given not in scanned:
+        scanned[given] = World(signed_out="signed out" in given)
+        scanned[given].scan()
+    return scanned[given].copy()
+
+
+def run_case(browser, case, scanned) -> str:
     """The reason it failed, or an empty string if it passed."""
-    world = World(new=case["given"] in ("empty", "signed out"), signed_out="signed out" in case["given"])
+    world = fresh_world(case["given"], scanned)
     try:
-        if case["given"].startswith("scanned"):
-            world.scan()
         world.start()
         page = browser.new_page()
         problems = []
@@ -97,16 +106,18 @@ def main():
     for c in cases:
         if not (c.get("id") and c.get("requirement") and c.get("given") in GIVENS and c.get("check")):
             sys.exit(f"Case {c.get('id')} needs an id, a requirement, given ({' or '.join(GIVENS)}) and a check")
-    failed = 0
+    failed, scanned = 0, {}
     with sync_playwright() as p:
         browser = p.chromium.launch()
         for case in cases:
-            reason = run_case(browser, case)
+            reason = run_case(browser, case, scanned)
             print(f"  {'✗' if reason else '✓'} {case['id']}: {case['requirement']}")
             if reason:
                 failed += 1
                 print(f"      {reason}")
         browser.close()
+    for world in scanned.values():
+        world.close()
     print(f"{len(cases) - failed} of {len(cases)} requirements passed")
     sys.exit(1 if failed else 0)
 
