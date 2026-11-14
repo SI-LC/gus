@@ -8,6 +8,7 @@ check:
   - type "Head of Product" into "Role title"
   - click "Add role"
   - see "Head of Product"
+  - click "Head of Product"
   - click "Details"
   - type "Head of Product, Platform" into "Edit title"
   - click "Save"

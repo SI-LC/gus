@@ -137,24 +137,59 @@ const READ_MIN = 2;  // roughly how long it takes to read a job ad yourself: wha
 const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(".0", "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
 const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
-const openWho = new Set();  // the Pipeline cards whose people you've opened, so a redraw leaves them open
-function roleLinks(j) {
-  const l = (text, onclick) => `<button class="link" onclick="${onclick}">${text}</button>`;
-  return (j.folder
-    ? (/^https?:\/\//i.test(j.folder) ? `<a class="link" href="${link(j.folder)}" target="_blank" rel="noopener">Folder</a>` : l("Copy folder path", `copyPath(${jsq(j.folder)})`)) + l("Change", `setFolder(${jsq(j.id)}, ${jsq(j.folder)})`)
-    : l("Add folder", `setFolder(${jsq(j.id)}, '')`)) + l(j.source === "manual" ? "Details" : "Description", `roleDetails(${jsq(j.id)})`);
+const sentAt = (j, p) => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
+const stageSince = j => ((j.history || []).filter(h => h.stage === j.stage).pop() || {}).at;
+const NEXT = { shortlisted: ["preparing", "Start preparing"], preparing: ["applied", "Mark applied"], applied: ["interviewing", "Got an interview"], interviewing: ["closed", "Mark finished"] };  // the one likely next step from each stage
+let pipeView = "board", openRoleId = null;
+try { pipeView = localStorage.getItem("radar-pipe-view") || "board"; } catch (e) {}
+function setPipeView(v) { pipeView = v; try { localStorage.setItem("radar-pipe-view", v); } catch (e) {} render(true); }
+function openRole(id) { openRoleId = id; render(true); const c = document.querySelector("#role-panel button"); if (c) c.focus(); }
+function closeRole() {
+  const id = openRoleId; openRoleId = null; render(true);
+  const c = id && document.querySelector(`[data-id="${CSS.escape(id)}"]`); if (c) c.focus();
 }
-function rolePeople(j) {
-  const sent = p => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
-  const who = peopleAt(j.company).sort((a, b) => !!sent(b) - !!sent(a)).slice(0, 6), done = who.filter(sent).length;
-  if (!who.length) return "";
-  const row = p => { const at = sent(p);
-    return `<div class="who-row"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${at
-      ? `<span class="sub">${ago(at)}</span><select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>
-         <button class="link" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button>`
-      : `<button class="link" onclick="roleContact(${jsq(j.id)}, ${jsq(p.id)}, true)" aria-label="Messaged ${esc(p.name)}">Mark messaged</button>`}</div>`; };
-  return `<details class="who" ${openWho.has(j.id) ? "open" : ""} ontoggle="openWho[this.open ? 'add' : 'delete'](${jsq(j.id)})">
-    <summary>${who.length} ${who.length === 1 ? "person" : "people"}${done ? ` · ${done} messaged` : ""}</summary>${who.map(row).join("")}</details>`;
+function roleHint(j) {  // the one thing worth knowing about a role on the board. flag: it's waiting for you
+  if (j.ad_closed && j.stage !== "closed") return { text: "Ad closed", kind: "due", flag: ["shortlisted", "preparing"].includes(j.stage) };
+  if (j.readvertised) return { text: "Advertised again " + ago(j.readvertised), kind: "warm", flag: true };
+  const mt = j.stage === "interviewing" && (S.meetings || []).find(m => m.account === j.company), d = mt && new Date(mt.start);
+  if (mt && !isNaN(d)) return { text: d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), kind: "warm", flag: true };
+  if ((S.follow_ups || []).some(r => r.id === j.id && r.contacts.length)) return { text: "Follow up", kind: "warm", flag: true };
+  const who = peopleAt(j.company), done = who.filter(p => sentAt(j, p)).length;
+  return { text: !who.length ? "" : done ? `${done} of ${who.length} messaged` : `${who.length} ${who.length === 1 ? "person" : "people"}`, kind: "" };
+}
+function roleChip(j) {
+  const h = roleHint(j), since = stageSince(j);
+  return `<button class="pc${h.flag ? " next" : ""}${j.id === openRoleId ? " on" : ""}" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">
+    <span class="pc-top"><span>${esc(j.company)}</span>${since ? `<span title="In this stage since">${ago(since).replace(" ago", "")}</span>` : ""}</span>
+    <span class="pc-title">${esc(j.title)}</span>
+    <span class="pc-bot"><span${h.kind ? ` class="pill ${h.kind}"` : ""}>${esc(h.text)}</span><b title="Fit score">${j.score ?? "–"}</b></span></button>`;
+}
+function rolePanel(j) {  // everything you do to one role, a click away from its card
+  const id = jsq(j.id), since = stageSince(j), nx = NEXT[j.stage], l = (text, onclick) => `<button class="link" onclick="${onclick}">${text}</button>`;
+  const fu = ((S.follow_ups || []).find(r => r.id === j.id) || {}).contacts || [];
+  const who = peopleAt(j.company).sort((a, b) => !!sentAt(j, b) - !!sentAt(j, a)).slice(0, 8);
+  const person = p => { const at = sentAt(j, p), why = (fu.find(c => c.id === p.id) || {}).reason;
+    return `<div class="pp"><div><a href="${link(p.url)}" target="_blank" rel="noopener"><b>${esc(p.name)}</b></a> ${distBadge(p)}
+        <div class="sub">${esc(p.role || "")}${at ? ` · messaged ${ago(at)}` : why ? ` · ${esc(why)}` : ""}</div></div>${at
+      ? `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>
+         <button class="link" onclick="roleContact(${id}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button>`
+      : `<button onclick="roleContact(${id}, ${jsq(p.id)}, true)" aria-label="Messaged ${esc(p.name)}">Messaged</button>`}</div>`; };
+  return `<div class="panel-back" onclick="closeRole()"></div>
+    <aside class="panel" id="role-panel" role="dialog" aria-label="${esc(j.title)} at ${esc(j.company)}">
+      <div class="panel-head"><span class="co">${esc(j.company)}</span><button class="link" onclick="closeRole()">Close</button></div>
+      <div class="title">${roleTitle(j, j.url)}</div>
+      <div class="sub">${[esc(j.location || ""), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`, j.score != null ? `Fit ${j.score} of 10` : ""].filter(Boolean).join(" · ")}</div>
+      ${j.ad_closed || j.readvertised ? `<div class="mt-2">${j.ad_closed ? `<span class="pill due">Ad closed</span>` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
+      ${j.why ? `<p class="why">${esc(j.why)}</p>` : ""}
+      <div class="actions">${nx ? `<button class="primary" onclick="setStage(${id}, '${nx[0]}')">${nx[1]}</button>` : ""}
+        <select onchange="if (this.value) setStage(${id}, this.value)" aria-label="Move to another stage"><option value="">Move to…</option>
+          ${[...PIPE, "skipped"].filter(st => st !== j.stage).map(st => `<option value="${st}">${LABEL[st] || "Skipped"}</option>`).join("")}</select></div>
+      <div class="actions"><button onclick="roleDetails(${id})">${j.source === "manual" ? "Details" : "Description"}</button>${j.folder
+        ? (/^https?:\/\//i.test(j.folder) ? `<a class="link" href="${link(j.folder)}" target="_blank" rel="noopener">Open folder</a>` : l("Copy folder path", `copyPath(${jsq(j.folder)})`)) + l("Change folder", `setFolder(${id}, ${jsq(j.folder)})`)
+        : l("Add folder", `setFolder(${id}, '')`)}</div>
+      <div class="section">People${who.length ? " · " + who.length : ""}</div>
+      ${who.length ? who.map(person).join("") : `<p class="sub">Gus hasn't found anyone at ${esc(j.company)} yet. ${l("Open company", `openCompany(${jsq(j.company)})`)}</p>`}
+    </aside>`;
 }
 async function roleDetails(id) {  // the description isn't in the page's data, so it's fetched when asked for
   const r = await fetch("/api/job?id=" + encodeURIComponent(id), { cache: "no-store" }).then(r => r.json()).catch(() => null);
@@ -523,22 +558,27 @@ const V = {
         return rows.length ? `<div class="section">Tier ${t} · ${rows.length}</div>${rows.map(card).join("")}` : ""; }).join("");
   },
   pipeline() {
-    const inPipe = new Set(S.jobs.filter(j => PIPE.includes(j.stage)).map(j => j.company));
-    const loose = Object.values(S.people).filter(p => p.stage && p.stage !== "mapped" && !inPipe.has(p.company));  // talking, with no role on the board to sit under
-    const board = PIPE.map(st => {
-      const rows = S.jobs.filter(j => j.stage === st).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-      return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>` + rows.map(j => {
-        const since = (j.history || []).filter(h => h.stage === st).pop();
-        return `<div class="card"><div class="pc-top"><span class="co">${esc(j.company)} · ${j.score ?? "–"}</span>${since ? `<span class="sub" title="In this stage since">${ago(since.at)}</span>` : ""}</div>
-          <div class="title">${roleTitle(j, j.url)}</div>
-          ${j.ad_closed || j.readvertised ? `<div class="sub mt-1.5">${j.ad_closed ? `<span class="pill due">Ad closed</span> ` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
-          <div class="pc-foot"><select onchange="setStage(${jsq(j.id)}, this.value)" aria-label="Stage">
-            ${[...PIPE, "skipped"].map(s => `<option value="${s}" ${s === st ? "selected" : ""}>${LABEL[s] || "Skipped"}</option>`).join("")}</select>${roleLinks(j)}</div>
-          ${rolePeople(j)}</div>`;
-      }).join("") + `</div>`; }).join("");
+    const mine = S.jobs.filter(j => PIPE.includes(j.stage)).sort((a, b) => PIPE.indexOf(a.stage) - PIPE.indexOf(b.stage) || (b.score ?? 0) - (a.score ?? 0));
+    const inPipe = new Set(mine.map(j => j.company));
+    const talking = Object.values(S.people).filter(p => p.stage && p.stage !== "mapped").sort((a, b) => S.labels.person_stages.indexOf(a.stage) - S.labels.person_stages.indexOf(b.stage));
+    const loose = talking.filter(p => !inPipe.has(p.company));  // talking, with no role on the board to sit under
+    const open = mine.find(j => j.id === openRoleId);
+    const views = [["board", "Board"], ["list", "List"], ["people", `People <span class="sub">${talking.length}</span>`]];
+    const personStage = p => `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>`;
+    const body = pipeView === "list" ? (mine.length ? `<table class="plist"><tr><th>Role</th><th>Stage</th><th>Fit</th><th class="hide-sm">Since</th><th>Next</th></tr>${mine.map(j => { const h = roleHint(j), since = stageSince(j);
+        return `<tr class="${j.stage === "closed" ? "dim" : ""}"><td><button class="link rowlink" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button><div class="sub">${esc(j.company)}</div></td>
+          <td>${LABEL[j.stage]}</td><td class="num">${j.score ?? "–"}</td><td class="hide-sm sub">${since ? ago(since) : ""}</td><td>${h.text ? `<span${h.kind ? ` class="pill ${h.kind}"` : ` class="sub"`}>${esc(h.text)}</span>` : ""}</td></tr>`; }).join("")}</table>` : "")
+      : pipeView === "people" ? (talking.length ? `<table class="plist"><tr><th>Person</th><th>Company</th><th class="hide-sm">Role</th><th>Where it stands</th></tr>${talking.map(p => { const j = mine.find(o => o.company === p.company);
+        return `<tr><td><b><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></b> ${distBadge(p)}<div class="sub">${esc(p.role || "")}</div></td><td>${esc(p.company)}</td>
+          <td class="hide-sm">${j ? `<button class="link" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button>` : `<span class="sub">No role yet</span>`}</td><td>${personStage(p)}</td></tr>`; }).join("")}</table>`
+        : `<div class="empty">No conversations yet. When someone you've messaged replies, move them on and they appear here.</div>`)
+      : `<div class="board">${PIPE.map(st => { const rows = mine.filter(j => j.stage === st);
+          return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>${rows.map(roleChip).join("")}</div>`; }).join("")}</div>
+        ${loose.length ? `<p class="sub mt-3">You're also talking to ${loose.length} ${loose.length === 1 ? "person" : "people"} at companies with no role here yet. <button class="link" onclick="setPipeView('people')">See People</button></p>` : ""}`;
     return `<h1>Pipeline</h1>
       ${meetingsBlock()}
-      <details class="add-event keep m-0 mb-3"><summary class="sub">+ Add a role</summary>
+      <div class="pipe-bar"><div class="tabs chips-row" role="group" aria-label="View">${views.map(([v, l]) => `<a href="#pipeline" class="${v === pipeView ? "on" : ""}" onclick="event.preventDefault();setPipeView('${v}')">${l}</a>`).join("")}</div>
+      <details class="add-event keep add-role"><summary>+ Add a role</summary>
         <div class="row mt-1.5"><input type="text" id="add-role-company" placeholder="Company" aria-label="Company" class="flex-1">
           <input type="text" id="add-role-title" placeholder="Role title" aria-label="Role title" class="flex-[2]">
           <input type="text" id="add-role-location" placeholder="Location" aria-label="Location" class="flex-1"></div>
@@ -548,12 +588,9 @@ const V = {
           <select id="add-role-stage" aria-label="Starting stage">${PIPE.filter(s => s !== "closed").map(s => `<option value="${s}">${LABEL[s]}</option>`).join("")}</select></div>
         <textarea id="add-role-description" rows="6" placeholder="Paste the job description" aria-label="Job description" class="w-full mt-1.5"></textarea>
         <div class="row mt-1.5"><button class="primary" id="add-role-go" onclick="addRole()">Add role</button>
-          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details>
+          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details></div>
       ${loose.length || inPipe.size ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions justify-center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
-      <div class="board">${board}</div>
-      ${loose.length ? `<div class="section">Talking, no role yet · ${loose.length}</div><table>${loose.map(p => `<tr>
-        <td><b><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></b> ${distBadge(p)}</td><td>${esc(p.company)}</td><td class="hide-sm sub">${esc(p.role || "")}</td>
-        <td><select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select></td></tr>`).join("")}</table>` : ""}`;
+      ${body}${open ? rolePanel(open) : ""}`;
   },
   search() {
     const q = $("q").value.trim(), terms = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -1023,7 +1060,8 @@ function search(q) {  // results take over the page as you type, and clearing th
   }, 150);
 }
 function openCompany(name) { window._acctq = name; location.hash = "accounts"; }
-window.addEventListener("hashchange", () => { if (location.hash !== "#search") $("q").value = ""; render(true); });
+window.addEventListener("hashchange", () => { if (location.hash !== "#search") $("q").value = ""; openRoleId = null; render(true); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && openRoleId && !document.querySelector("dialog[open]")) closeRole(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 setInterval(() => { if (!document.hidden) load(); }, 60000);
 load();
