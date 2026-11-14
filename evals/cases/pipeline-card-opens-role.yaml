@@ -1,0 +1,24 @@
+id: pipeline-card-opens-role
+requirement: A role on my pipeline is a small card; clicking it shows the one next step and everything else I can do to it, and I can see my pipeline as a board, a list or by person.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Shortlist"
+  - open Pipeline
+  - click "Senior Product Manager"
+  - see "Start preparing"
+  - see "Description"
+  - click "Start preparing"
+  - message says "Moved to In prep"
+  - see "Mark applied"
+  - click "Close"
+  - not see "Mark applied"
+  - pick "List"
+  - '"List" is picked'
+  - see "Senior Product Manager"
+  - reload
+  - '"List" is picked'
+  - pick "People"
+  - see "No conversations yet"
+  - pick "Board"
+judge: Without reading any explanation, can I tell what each card is, that it opens, and which button is the next step?
