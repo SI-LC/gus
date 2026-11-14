@@ -192,6 +192,28 @@ class Schedule(unittest.TestCase):
     def test_empty_time_means_button_only(self):
         self.assertFalse(due(at(4, 12), {"run_time": ""}, {}))
 
+    def look(self, first, cfg, state=None, hour=13):
+        """What one look at the clock starts, and the day it marks as run."""
+        from unittest import mock
+        from radar import service
+        started, state = [], dict(state or {})
+        with mock.patch.object(service, "load_config", return_value={"scheduler_enabled": True, **self.CFG, **cfg}), \
+             mock.patch.object(service, "_schedule_state", return_value=state), mock.patch.object(service, "_save_schedule_state"), \
+             mock.patch.object(service, "start", side_effect=lambda job: started.append(job) or True):
+            service.tick(first, at(4, hour))
+        return started, state.get("run")
+
+    def test_started_after_the_daily_time_it_waits_for_tomorrow(self):
+        self.assertEqual(self.look(True, {}), ([], "2026-11-04"))
+        self.assertEqual(self.look(False, {}), (["run"], "2026-11-04"), "already running when the time comes, it runs")
+
+    def test_a_computer_that_was_off_catches_up_when_asked_to(self):
+        cfg = {"catch_up_missed_run": True}
+        self.assertEqual(self.look(True, cfg), (["run"], "2026-11-04"))
+        self.assertEqual(self.look(True, cfg, {"run": "2026-11-04"}), ([], "2026-11-04"), "never twice in a day")
+        self.assertEqual(self.look(True, cfg, hour=7), ([], None), "nor before the daily time")
+        self.assertEqual(self.look(True, {**cfg, "scheduler_enabled": False}), ([], None))
+
 
 class FullRun(unittest.TestCase):
     def run_with(self, *, emails=0, moves=0, watchlist_due=True, fail=None, budget_at=None):

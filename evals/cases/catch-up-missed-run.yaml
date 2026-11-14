@@ -1,0 +1,10 @@
+id: catch-up-missed-run
+requirement: I can have Gus make up the daily run it missed while my computer was off.
+given: scanned
+check:
+  - open Settings
+  - click "Schedule"
+  - see "Run automatically each day"
+  - see "Catch up a missed daily run"
+  - see "it runs when it next starts"
+judge: Is it clear what happens to the daily run when the computer was off at the daily time?

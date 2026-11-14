@@ -55,6 +55,8 @@ SCHEMA = [
     ("scheduler_enabled", "Run automatically each day", "bool", "Schedule",
      "Starts the full run at your daily time. Off means it only runs from the button."),
     ("run_time", "Daily run time", "times", "Schedule", "When the full run starts each day, 24h, e.g. 08:00. Leave empty to run it only from the button."),
+    ("catch_up_missed_run", "Catch up a missed daily run", "bool", "Schedule",
+     "If Gus wasn't running at the daily time, because this computer was off, it runs when it next starts. Off means it waits for tomorrow."),
     ("watchlist_every_days", "Refresh accounts every (days)", "int:1-30", "Schedule", "The heaviest step of the run, so it's skipped until this many days have passed."),
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
     ("prune_after_days", "Tidy old records after (days)", "int:14-365", "Schedule",
