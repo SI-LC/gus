@@ -32,7 +32,8 @@ PAGE = ROOT / "radar" / "cockpit.html"
 MAX_BODY = 5_000_000
 STATIC = {"/icon.svg": ("icon.svg", "image/svg+xml"), "/icon-32.png": ("icon-32.png", "image/png"), "/icon-180.png": ("icon-180.png", "image/png"),
           "/icon-512.png": ("icon-512.png", "image/png"), "/apple-touch-icon.png": ("icon-180.png", "image/png"),
-          "/favicon.ico": ("icon-32.png", "image/png"), "/cockpit.css": ("cockpit.css", "text/css; charset=utf-8")}
+          "/favicon.ico": ("icon-32.png", "image/png"), "/cockpit.css": ("cockpit.css", "text/css; charset=utf-8"),
+          "/ui-kit.html": ("ui-kit.html", "text/html; charset=utf-8")}  # the cockpit's parts, for whoever builds a screen: made-up data only
 MANIFEST = json.dumps({"name": "Gus", "short_name": "Gus", "start_url": "/", "display": "standalone",
                        "background_color": "#08090a", "theme_color": "#08090a",
                        "icons": [{"src": "/icon-180.png", "sizes": "180x180", "type": "image/png"},
