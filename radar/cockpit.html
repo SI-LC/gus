@@ -288,7 +288,8 @@ function readChart() {  // roles read on each of the last 14 days, drawn to one 
 }
 // What a failed board or feed means, in plain words, and what to do about it: the first that matches the error's text
 const WHY_FAILED = [
-  [/429|too many/i, "asked to slow down by the job site", "Nothing to do: Gus tries again on the next check."],
+  [/429|too many|slow down/i, "asked to slow down by the job site", "Nothing to do: Gus tries again on the next check."],
+  [/expecting value|json|decode/i, "that sent back a page that wasn't a list of jobs", "Nothing to do: Gus tries again on the next check."],
   [/401|403|forbidden|denied/i, "refused by the site", "If it keeps happening, check the address on the company's card."],
   [/404|not found|gone/i, "moved or gone", "Check the address on the company's card."],
   [/robots/i, "with rules for robots that couldn't be read", "Nothing to do: Gus tries again on the next check."],
