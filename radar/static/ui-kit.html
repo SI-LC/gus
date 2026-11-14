@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gus UI kit</title>
+<!--
+  The cockpit's parts, in one place. Read this before building or changing a screen, and build with these parts.
+  It loads the same stylesheet as the cockpit, so it always shows the real look. Open it at /ui-kit.html.
+  A new part goes into radar/cockpit.css first, then here, then onto a screen. Made-up data only.
+  The few kit-* styles below lay out this page and are not for the cockpit.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700;800&display=swap">
+<script>try { const t = localStorage.getItem("radar-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="/cockpit.css">
+<style>
+  .kit-main { margin: 0 auto; }
+  .kit-use { margin: 0 0 12px; max-width: 68ch; }
+  .kit-use code { color: var(--color-muted); }
+  .kit-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .kit-swatch { border: 1px solid var(--color-line); background: var(--color-surface); }
+  .kit-swatch i { display: block; height: 44px; border-bottom: 1px solid var(--color-line); }
+  .kit-swatch div { padding: 8px 10px; font: 12px var(--font-mono); }
+  .kit-swatch span { display: block; color: var(--color-muted); font: 12px var(--font-sans); margin-top: 2px; }
+  .kit-toast { position: static; transform: none; opacity: 1; display: inline-flex; }
+  .kit-toast.ask { display: inline-flex; }
+  .kit-banner { padding-left: 16px; padding-right: 16px; border: 1px solid var(--color-accent); }
+  .kit-board { grid-template-columns: repeat(2, minmax(180px, 260px)); }
+  .kit-gap { margin-top: 12px; }
+</style>
+</head>
+<body>
+<main class="kit-main">
+  <h1>Gus UI kit</h1>
+  <p class="lede">Every cockpit screen is built from these parts. Use them as they are. If a screen needs something new, add it to <code>radar/cockpit.css</code> and to this page first.</p>
+
+  <div class="getting-started">
+    <b>The rules</b>
+    <ul>
+      <li>One primary button per screen or card: the thing you most likely want to do.</li>
+      <li>A button says what happens ("Shortlist", "Skip"), never "OK" or "Submit".</li>
+      <li>Colour never carries meaning alone: a dot or an edge always comes with words.</li>
+      <li>Colours, fonts and corners come from the tokens below, never a new hex value.</li>
+      <li>Every list has an empty state that says what will appear there.</li>
+    </ul>
+  </div>
+
+  <div class="section">Colours</div>
+  <p class="kit-use sub">Tokens in <code>@theme</code>, each with a light and a dark value. Use them as <code>var(--color-…)</code>.</p>
+  <div class="kit-swatches">
+    <div class="kit-swatch"><i style="background:var(--color-ground)"></i><div>ground<span>The page</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-surface)"></i><div>surface<span>Cards, inputs, buttons</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-sunk)"></i><div>sunk<span>Wells: board columns, messages</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-line)"></i><div>line<span>Hairlines and quiet borders</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-rule)"></i><div>rule<span>Button and panel borders</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-ink)"></i><div>ink<span>Text</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-muted)"></i><div>muted<span>Secondary text</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-accent)"></i><div>accent<span>Primary action, counts, "on"</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-accent-soft)"></i><div>accent-soft<span>Banner, run in progress</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-hi)"></i><div>hi<span>Good, done, strong score</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-mid)"></i><div>mid<span>Waiting for you, warm</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-lo)"></i><div>lo<span>Low score, nothing there</span></div></div>
+    <div class="kit-swatch"><i style="background:var(--color-bad)"></i><div>bad<span>Failed, overdue</span></div></div>
+  </div>
+
+  <div class="section">Text</div>
+  <h1>Screen title <span class="count">12</span></h1>
+  <p class="lede">.lede: one or two sentences under a title that say what the screen is for.</p>
+  <div class="group kit-gap"><h2>Group heading</h2><p class="sub">.sub: help and secondary text.</p></div>
+  <p><span class="ok">.ok: it worked</span> · <span class="bad">.bad: it failed</span> · <code>code</code></p>
+  <p class="kit-use sub">The line above this block, with its label and rule, is <code>.section</code>.</p>
+
+  <div class="section">Buttons</div>
+  <div class="row">
+    <button class="primary">Shortlist</button>
+    <button>Skip</button>
+    <button disabled>Checking…</button>
+    <button class="mini">Say why</button>
+    <button class="link">About Northwind</button>
+    <button class="mini star on" aria-label="Favourite">★</button>
+    <button class="mini star" aria-label="Not a favourite">☆</button>
+  </div>
+  <p class="kit-use sub kit-gap">Primary for the main action, plain for the alternative, <code>.link</code> for something that only opens or explains. Group them in <code>.actions</code>.</p>
+
+  <div class="section">Small labels</div>
+  <div class="row">
+    <span class="pill">London</span>
+    <span class="pill warm">Contract</span>
+    <span class="pill due">Follow up due</span>
+    <span class="pill done">Applied</span>
+    <span class="flag">Salary not stated</span>
+  </div>
+  <div class="row kit-gap">
+    <span class="tier tA">A</span><span class="tier tB">B</span><span class="tier tC">C</span>
+    <span class="dist d1 sure">1st</span><span class="dist d2">2nd</span><span class="dist">3rd+</span>
+  </div>
+  <p class="kit-use sub kit-gap"><code>.pill</code> for a fact, <code>.flag</code> for a caution, <code>.tier</code> for a company's tier, <code>.dist</code> for how close a person is (solid when confirmed).</p>
+
+  <div class="section">A role</div>
+  <article class="card role">
+    <div class="s-hi" title="Fit score"><div class="score">9</div><div class="bar"><i style="width:90%"></i></div></div>
+    <div>
+      <div class="co">Northwind</div>
+      <div class="title"><a href="#">Senior Product Manager, Payments</a></div>
+      <div class="sub"><span class="pill">London</span> <span class="pill warm">Contract</span> found 2 hours ago</div>
+      <p class="why">Owns a payments platform end to end, which matches your last two roles.</p>
+      <span class="flag">Salary not stated</span>
+      <div class="here"><b>Already in play:</b> you applied to another role here last month.</div>
+    </div>
+    <div class="actions">
+      <button class="primary">Shortlist</button>
+      <button>Skip</button>
+      <button class="link">About Northwind</button>
+    </div>
+  </article>
+  <article class="card role">
+    <div class="s-lo" title="Fit score"><div class="score">4</div><div class="bar"><i style="width:40%"></i></div></div>
+    <div>
+      <div class="co">Example Labs</div>
+      <div class="title"><a href="#">Product Manager, Growth</a></div>
+      <div class="sub"><span class="pill">Remote</span> found yesterday</div>
+      <p class="why"><span class="sub">Waiting for the next scan to score it.</span></p>
+    </div>
+    <div class="actions"><button>Restore</button></div>
+  </article>
+  <div class="more"><button>+3 more at Northwind</button><button>Skip all 4</button></div>
+  <p class="kit-use sub kit-gap">Score, then what it is and why, then its actions in one place on the right. <code>.s-hi</code> colours a strong score; <code>.more</code> sits under a company's best role.</p>
+
+  <div class="section">Card</div>
+  <article class="card">
+    <div class="acct-head"><div class="acct-name"><span class="tier tA">A</span> Northwind</div><button class="mini">Map people</button></div>
+    <p class="sub">A card holds one thing: a company, a person, a draft.</p>
+    <div class="chips">
+      <a class="sig fresh" href="#"><b>Funding</b> Raised a Series C <i>2d</i></a>
+      <a class="sig" href="#"><b>Hire</b> New VP Product <i>3w</i></a>
+      <a class="person-chip" href="#"><b>Alex Example</b> Head of Product <span class="dist d1 sure">1st</span></a>
+    </div>
+    <div class="msg">A drafted message sits in .msg, ready to copy.</div>
+    <div class="actions"><button class="primary">Copy draft</button><button>Not now</button></div>
+  </article>
+
+  <div class="section">Pipeline card</div>
+  <div class="board kit-board">
+    <div class="col"><h3>To apply <span>2</span></h3>
+      <button class="pc next"><span class="pc-top"><span>Northwind</span><span>3d</span></span><span class="pc-title">Senior Product Manager, Payments</span><span class="pc-bot"><span class="pill due">Apply this week</span><b>9</b></span></button>
+      <button class="pc"><span class="pc-top"><span>Example Labs</span><span>1d</span></span><span class="pc-title">Product Lead</span><span class="pc-bot"><span>Nothing to do yet</span><b>7</b></span></button>
+    </div>
+    <div class="col"><h3>Applied <span>0</span></h3></div>
+  </div>
+  <p class="kit-use sub kit-gap">The whole card is the button. An amber edge (<code>.next</code>) means it's waiting for you, and the words say what for.</p>
+
+  <div class="section">Filters and tabs</div>
+  <div class="tabs chips-row" role="group" aria-label="Show">
+    <a href="#" class="on">New <span class="sub">12</span></a><a href="#">Closed ads <span class="sub">3</span></a><a href="#">Skipped <span class="sub">40</span></a>
+  </div>
+  <div class="tabs" role="tablist"><a href="#" class="on">AI</a><a href="#">Matching</a><a href="#">Schedule</a></div>
+  <p class="kit-use sub kit-gap"><code>.tabs.chips-row</code> filters a list and shows each count. Plain <code>.tabs</code> switch sections of one screen.</p>
+
+  <div class="section">Form field</div>
+  <div class="field"><label for="kit-f1">Minimum score</label><div><input type="number" id="kit-f1" value="7"></div><div class="help">Roles under this score stay out of your inbox.</div></div>
+  <div class="field"><label for="kit-f2">Daily run</label><div class="row"><input type="checkbox" class="switch" id="kit-f2" checked> <span class="sub">On</span></div><div class="help">Label on the left, control on the right, help underneath in plain words.</div></div>
+  <div class="field"><label for="kit-f3">Where</label><div><select id="kit-f3"><option>London</option><option>Remote</option></select></div></div>
+
+  <div class="section">Numbers</div>
+  <div class="stats">
+    <div class="stat"><div class="v">12</div><div class="l">New roles</div></div>
+    <div class="stat"><div class="v">3</div><div class="l">Companies with a warm path</div></div>
+    <div class="stat"><div class="v">£0.42</div><div class="l">Spent today</div></div>
+  </div>
+
+  <div class="section">Table</div>
+  <table><tr><th>Source</th><th>Last checked</th><th></th></tr>
+    <tr><td>Example newsletter</td><td>2 hours ago</td><td><button>Remove</button></td></tr></table>
+
+  <div class="section">Empty state</div>
+  <div class="empty">You're up to date. New roles appear here as Gus finds them.</div>
+  <p class="kit-use sub kit-gap">Say what will appear here, or the one thing to do next. Never just "No data".</p>
+
+  <div class="section">Messages</div>
+  <div class="banner kit-banner">.banner: something you need to know before carrying on. <a href="#">Fix it in Settings</a></div>
+  <p class="kit-gap"><span class="toast on kit-toast">Moved to To apply</span> &nbsp; <span class="toast on ask kit-toast"><span>Skipped. Why?</span><button>Too junior</button><button>Wrong place</button></span></p>
+  <p class="kit-use sub kit-gap"><code>.toast</code> confirms what just happened, in the words of the button that did it. With <code>.ask</code> it offers a quick follow-up. A failure says what failed and what to do.</p>
+</main>
+</body>
+</html>

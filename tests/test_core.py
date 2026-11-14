@@ -158,6 +158,18 @@ class CockpitStyles(unittest.TestCase):
         self.assertIn("/cockpit.css", server.STATIC)
         self.assertIn("style-src 'self'", server.CSP)
 
+    def test_the_ui_kit_shows_only_parts_the_cockpit_has(self):
+        """radar/static/ui-kit.html is what a screen is built from, so a part renamed or removed in the stylesheet must
+        go from the kit too. Its own kit-* classes only lay out the kit."""
+        import re
+        from radar import css, server
+        kit = (server.ROOT / "radar" / "static" / "ui-kit.html").read_text()
+        source = css.SOURCE.read_text()
+        used = {c for found in re.findall(r'class="([^"]*)"', kit) for c in found.split() if not c.startswith("kit-")}
+        self.assertEqual([], sorted(c for c in used if not re.search(r"\." + re.escape(c) + r"\b", source)))
+        self.assertIn('<link rel="stylesheet" href="/cockpit.css">', kit)
+        self.assertIn("/ui-kit.html", server.STATIC)
+
     def test_a_change_to_the_pages_script_needs_no_rebuild(self):
         from unittest import mock
         from radar import css

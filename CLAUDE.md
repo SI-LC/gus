@@ -34,6 +34,33 @@ instead of SSH for anything they cover. They call the same code as the cockpit. 
 Claude" means the candidate hasn't turned on **Let Claude make changes** under Settings, Claude: say so, don't work round it
 over SSH. Commands with no tool (`radar.recall`, `radar.people`, `radar.evals`) still run where the data is.
 
+## How we build
+
+For a new feature or a change to how a screen works, follow these steps in order. A bug fix or a small tidy-up skips
+to step 3. Each step names a skill on the candidate's Mac; if it isn't there, do what the step says yourself.
+
+1. **Right problem?** `/ceo-review`: challenge the request before building it. The candidate picks the mode and accepts
+   or changes the brief.
+2. **Settle the decisions.** `/grill-me`: ask the candidate about decisions only, each with a recommended answer, and
+   look up facts yourself. Carry on once the candidate confirms.
+3. **Write the bar first.** Add or update a case in `evals/cases/` (`evals/README.md`) that says, in plain words, what
+   the candidate must be able to do. It should fail before the change.
+4. **Options, for a screen with more than one sensible shape.** `/best-of-n` with three candidates, scored against the
+   `dont-make-me-think` principles fixed beforehand. The candidate picks.
+5. **Build.** For anything on screen, read `radar/static/ui-kit.html` first (below).
+6. **Check.** `/qa` on the screens that changed, in the browser pane, then `python -m evals.browser` and the tests.
+7. **Ship** as under Deploying.
+
+The candidate decides at steps 1, 2 and 4. Don't skip ahead to code.
+
+## The cockpit's look
+
+`radar/static/ui-kit.html` shows every part the cockpit is built from, with made-up data: colours, buttons, labels, a
+role, cards, filters, form fields, empty states and messages. The cockpit serves it at `/ui-kit.html`, using the same
+stylesheet, so it always shows the real look. Read it before building or changing a screen, and build with those
+parts. When a screen needs a new part, add it to `radar/cockpit.css` first, then to the kit, then use it. Review any
+screen change with the `dont-make-me-think` skill.
+
 ## Deploying
 
 `main` is protected: nothing reaches it without a pull request that passes the `scan` check on GitHub, so never
