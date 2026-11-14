@@ -1,5 +1,5 @@
 id: connect-claude
-requirement: Settings shows me how to connect Claude Code and the Claude desktop app to Gus, makes a token I see once, and lets me decide whether Claude may change anything.
+requirement: Settings shows me how to connect Claude Code and the Claude desktop app to Gus, makes a token I see once, lets me decide whether Claude may change anything, and never lets me mistake Claude's token for the cockpit's browser login.
 given: scanned
 check:
   - open Settings
@@ -8,6 +8,8 @@ check:
   - see "claude mcp add --transport http gus"
   - see "For the Claude desktop app"
   - see "radar.mcp"
+  - see "Claude Code token"
+  - see "Not the same as the browser access token"
   - see "No token yet"
   - see "Let Claude make changes"
   - see "Claude hasn't connected yet."
@@ -20,4 +22,7 @@ check:
   - click "Claude"
   - see "Token ending"
   - not see "Copy this now"
+  - click "Keys"
+  - see "Browser access token"
+  - not see "Cockpit access token"
 judge: Is it clear what Claude can and can't do once connected, and that the token must be copied now?
