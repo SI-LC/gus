@@ -32,7 +32,7 @@ copy furthest along and moving its events and moves across.
 | `readvertised` | When a new ad appeared for a role you're pursuing (shortlisted to interviewing): the same company, title and place on the board its old ad was on, or after that ad closed. The new ad is recorded under `also`, not added as a new role |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
-| `skip_reason` | Why you skipped it: `junior`, `senior`, `domain`, `location`, `pay` or `company`. Asked for, never required, when you skip a role, and only ever on a role in `skipped`: restoring the role removes it. A role Gus skipped for its score has none |
+| `skip_reason` | Why you skipped it: `junior`, `senior`, `domain`, `location`, `pay`, `company`, `recruiter` (a recruiter's ad that doesn't name the employer) or `applied_before` (you've already applied to this company). Asked for, never required, when you skip a role, and only ever on a role in `skipped`: restoring the role removes it. A role Gus skipped for its score has none |
 | `contacts` | `{person_id: when}`: the mapped people you've messaged about this role |
 
 A role that reached you directly, from a recruiter say, has no ad for a scan to find: add it from the Pipeline page

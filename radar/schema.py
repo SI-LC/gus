@@ -30,7 +30,8 @@ PERSON_KINDS = ["product_leader", "hiring_manager", "peer_pm", "recruiter", "war
 PERSON_STAGES = ["mapped", "contacted", "replied", "conversation", "referred", "closed"]
 MOVE_STATUS = ["todo", "done", "skipped"]
 # why you skipped a role, as the cockpit offers it: what you say here is what scoring got wrong
-SKIP_REASONS = {"junior": "Too junior", "senior": "Too senior", "domain": "Wrong domain", "location": "Location", "pay": "Pay", "company": "Not this company"}
+SKIP_REASONS = {"junior": "Too junior", "senior": "Too senior", "domain": "Wrong domain", "location": "Location", "pay": "Pay", "company": "Not this company",
+                "recruiter": "Recruiter, company not named", "applied_before": "Applied here before"}
 OUTCOMES = ["no_reply", "replied", "conversation", "interview", "referral", "not_now"]
 SIGNAL_STATUS = ["new", "processed", "ignored"]
 
