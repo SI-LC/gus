@@ -1,0 +1,10 @@
+id: company-website
+requirement: Gus finds each company's own website, checked against its job board, and I can open it from the company's card and from its roles.
+given: scanned
+check:
+  - open Companies
+  - click "Harborlight"
+  - see "harborlight.com ↗"
+  - open Role Inbox
+  - see "Harborlight ↗"
+judge: Is it clear the name opens the company's own site, in a new tab, and not another screen in Gus?

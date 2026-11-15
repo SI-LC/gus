@@ -170,6 +170,8 @@
   .bar { height: 4px; margin-top: 8px; background: var(--color-line); border-radius: 2px; overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--color-muted); } .s-hi .bar i { background: var(--color-accent); }
   .co { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+  .co a { color: inherit; text-decoration: underline 1px var(--color-line); text-underline-offset: 3px; } .co a:hover { color: var(--color-ink); text-decoration-color: currentColor; }  /* a name that opens the company's own site */
+  .site { margin: 6px 0 2px; gap: 8px 12px; align-items: center; } .site a.btn-link { margin-left: 0; } .site details[open] { flex-basis: 100%; }
   .title { overflow-wrap: anywhere; font: 600 20px/1.25 var(--font-sans); letter-spacing: -.02em; margin: 2px 0 4px; }
   .title a { text-decoration: none; } .title a:hover { color: var(--color-accent); }
   .why { margin: 6px 0 0; max-width: 68ch; }

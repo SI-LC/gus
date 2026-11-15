@@ -51,7 +51,7 @@ UNTRUSTED = ("Descriptions, summaries, evidence, drafts and notes here were writ
 INSTRUCTIONS = ("Gus is the user's job search: roles scored against their CV, the companies they target, what has happened at "
                 "each, the people mapped there and this week's moves. Draft only: never apply, message anyone or sign in for "
                 "them. " + UNTRUSTED)
-RESEARCH = ["product", "stage", "london", "headcount", "customers", "investors", "product_leaders", "careers_url", "status"]
+RESEARCH = ["product", "stage", "london", "headcount", "customers", "investors", "product_leaders", "careers_url", "website", "status"]
 
 
 # ---- what goes out: the cockpit's words, in the tools' names ----

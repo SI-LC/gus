@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 
 BOARD = "https://boards-api.greenhouse.io/v1/boards/harborlight/jobs"
+HOME = "https://harborlight.com/"  # its own site, which links to its board: how Gus knows the site is really theirs
+HOME_PAGE = '<html><head><title>Harborlight</title></head><body><a href="https://job-boards.greenhouse.io/harborlight">Careers</a></body></html>'
 ROLES = [(1, "Senior Product Manager", "London"), (2, "Product Manager, Growth", "London"), (3, "Product Owner", "London"),
          (4, "Software Engineer", "London"), (5, "Product Manager", "San Francisco")]
 
@@ -16,6 +18,8 @@ def listing(n, title, place):
 
 
 def reply_for(url):
+    if url == HOME:
+        return HOME_PAGE
     if url == BOARD:
         return {"jobs": [listing(*r) for r in ROLES]}
     for r in ROLES:
@@ -33,7 +37,7 @@ def urlopen(request, *args, **kwargs):
     body = reply_for(url)
     if body is None:  # a 404 fails straight away, where a dropped connection would be retried
         raise urllib.error.HTTPError(url, 404, "Not in the smoke test's world", {}, None)
-    return Response(json.dumps(body).encode())
+    return Response(body.encode() if isinstance(body, str) else json.dumps(body).encode())
 
 
 real_connect = socket.socket.connect

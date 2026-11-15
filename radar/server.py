@@ -90,6 +90,7 @@ def state():
                       "added": c.get("added"), "previous_fit": c.get("previous_fit"), "favourite": bool(c.get("favourite")),
                       "events": ev[:6], "fresh": sum(e["fresh"] for e in ev),
                       "careers_url_broken": bool(c.get("careers_url_broken")),
+                      "website": c.get("website"), "website_broken": bool(c.get("website_broken")),
                       "last_contacted": str(touched) if touched else None})
     guesses = [{"name": n, **c["board_guess"]} for n, c in companies.items() if c.get("board_guess") and not c.get("vetoed")]
     shown = sorted(moves.values(), key=lambda m: m.get("created", ""), reverse=True)[:60]
@@ -106,6 +107,7 @@ def state():
         "events": sorted((E.decorate(dict(e, id=eid)) for eid, e in stored_events.items()),
                          key=lambda e: (not e["fresh"], -e["strength"], e["age_days"] if e["age_days"] is not None else 999)),
         "board_guesses": guesses,
+        "websites": {role_key({"company": n})[0]: c["website"] for n, c in companies.items() if c.get("website") and not c.get("vetoed")},
         "people": {pid: dict(p, id=pid, distance=dist[pid]) for pid, p in people.items()},
         "moves": shown,
         "week": A.week_id(),
@@ -381,7 +383,15 @@ def update_person(body):
 
 
 def update_account(body):
-    """Set an account's tier yourself, or mark it as one you love."""
+    """Set an account's tier yourself, mark it as one you love, or give it its website. A website you set, or clear, is yours:
+    Gus never replaces it."""
+    site = None
+    if "website" in body:
+        site = str(body.get("website") or "").strip()
+        if site and not re.match(r"https?://", site):
+            site = "https://" + site
+        if site and not re.fullmatch(r"https?://[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:/\S*)?", site, re.I):
+            return {"error": "That doesn't look like a web address, like acme.com"}
     with locked(COMPANIES) as companies:
         c = companies.get(body.get("name"))
         if not c:
@@ -390,6 +400,13 @@ def update_account(body):
             c["tier"], c["tier_locked"] = body["tier"], True
         if "favourite" in body:
             c["favourite"] = bool(body["favourite"])
+        if site is not None:
+            c.pop("website_broken", None)
+            c["website_locked"] = True
+            if site:
+                c["website"] = site
+            else:
+                c.pop("website", None)
     return {"ok": True}
 
 
@@ -411,9 +428,11 @@ def add_company(body):
 def watch_company(name, careers=None):
     """Make a company an account and watch its public job board, if it has one Gus can find. Returns (ats, slug, open roles) or None."""
     from radar import resolve
+    from radar import websites
     hit = resolve.resolve(name, careers)  # network, outside the lock
     if hit:
         resolve.add_board(name, hit[0], hit[1])
+    site = websites.find(name, {"board": f"{hit[0]}:{hit[1]}" if hit else None, "careers_url": careers})
     with locked(COMPANIES) as companies:
         c = companies.setdefault(name, {})
         c.setdefault("status", "watched")
@@ -423,6 +442,8 @@ def watch_company(name, careers=None):
             c["careers_url"] = careers
         if hit:
             c["board"] = f"{hit[0]}:{hit[1]}"
+        if site and not c.get("website_locked"):
+            c["website"], c["website_checked"] = site, now()[:10]
     return hit
 
 
