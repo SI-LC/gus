@@ -1,0 +1,11 @@
+id: job-site-role-found-on-board
+requirement: When a role a job site found is also on the company's own board, it shows as a board role, with the company's own link and no job site label.
+given: scanned after a job site
+check:
+  - open Role Inbox
+  - see "Product Manager, Growth"
+  - not see "Adzuna"
+  - reload
+  - see "Product Manager, Growth"
+  - not see "Adzuna"
+judge: Can I tell this is the company's own ad, and does its link go straight there?

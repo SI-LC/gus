@@ -132,6 +132,9 @@ class InTheScan(unittest.TestCase):
             store = json.loads(jobs.read_text())
             self.assertEqual(list(store), ["adzuna:1"])
             self.assertIn("gh:acme:9", store["adzuna:1"]["also"])
+            j = store["adzuna:1"]  # now the employer's own ad: a board role at the board's link, with the job site remembered
+            self.assertEqual((j["source"], j["found_via"], j["url"], j["source_url"], j["link_kind"]),
+                             ("board", "adzuna", "https://jobs.example/gh:acme:9", "https://jobs.example/adzuna:1", "company"))
 
     def test_an_absorbed_role_stays_live_while_its_board_lists_it(self):
         from radar.scan import mark_closed
@@ -144,6 +147,34 @@ class InTheScan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JobSiteThenBoard(unittest.TestCase):
+    def test_only_a_board_sighting_makes_a_job_site_role_a_board_role(self):
+        for source, seen_as, becomes in (("jsearch", "board", "board"), ("adzuna", "hn", "adzuna"), ("adzuna", "web", "adzuna"),
+                                         ("email", "board", "email"), ("hn", "board", "hn")):
+            j = role("x:1", source=source)
+            J.absorb(j, role("gh:acme:9", source=seen_as), NOW)
+            self.assertEqual(j["source"], becomes, (source, seen_as))
+            self.assertEqual("found_via" in j, becomes != source)
+
+    def test_a_merge_that_keeps_the_job_site_copy_still_makes_it_a_board_role(self):
+        store = {"adzuna:1": role("adzuna:1", source="adzuna", stage="shortlisted", score=8),
+                 "gh:acme:9": role("gh:acme:9", source="board", stage="new")}
+        keep, _ = J.merge(store, ["adzuna:1", "gh:acme:9"], NOW)
+        self.assertEqual((keep, store[keep]["source"], store[keep]["url"]), ("adzuna:1", "board", "https://jobs.example/gh:acme:9"))
+
+    def test_older_records_are_settled_and_settling_twice_changes_nothing(self):
+        store = {"adzuna:1": role("adzuna:1", source="adzuna", also={"gh:acme:9": {"url": "https://acme.example/9", "source": "board"}}),
+                 "jsearch:2": role("jsearch:2", source="jsearch", url="https://acme.example/2", link_kind="company",
+                                   source_url="https://jobsite.example/2", board={"ats": "ashby", "slug": "acme"}),
+                 "jsearch:3": role("jsearch:3", source="jsearch", link_kind="company", source_url="https://jobsite.example/3"),  # AI's page, no board
+                 "adzuna:4": role("adzuna:4", source="adzuna", also={"web:x": {"url": "https://a.example", "source": "web"}})}
+        self.assertEqual(J.settle_sources(store), ["adzuna:1", "jsearch:2"])
+        self.assertEqual((store["adzuna:1"]["url"], store["adzuna:1"]["source_url"]), ("https://acme.example/9", "https://jobs.example/adzuna:1"))
+        self.assertEqual((store["jsearch:2"]["url"], store["jsearch:2"]["source_url"]), ("https://acme.example/2", "https://jobsite.example/2"))
+        self.assertEqual([store[i]["source"] for i in ("jsearch:3", "adzuna:4")], ["jsearch", "adzuna"])
+        self.assertEqual(J.settle_sources(store), [])
 
 
 class AddedByAnAgent(unittest.TestCase):

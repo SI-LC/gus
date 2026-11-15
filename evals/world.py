@@ -28,6 +28,12 @@ COMPANIES = {"Lanternfield": {"status": "candidate", "added": "2026-11-01",
 SETTINGS = {"title_include": "product manager\nproduct owner", "location_include": "london\nremote (exactly)",
             "where_groups": "London: london\nRemote: remote, anywhere\nElsewhere: *",
             "role_kinds": "Forward deployed: forward deployed\nProduct: *"}
+# A role a job site found first, which the scan then finds on Harborlight's own board
+JOB_SITE_ROLE = {"adzuna:1002": {"id": "adzuna:1002", "company": "Harborlight", "title": "Product Manager, Growth", "location": "London",
+                                 "url": "https://www.adzuna.co.uk/jobs/details/1002", "posted": "2026-01-01", "source": "adzuna",
+                                 "text_kind": "summary", "description": "A made-up job site summary.", "stage": "new", "score": 6,
+                                 "why": "Made-up reason for Product Manager, Growth.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
+                                 "last_seen": "2026-01-01T09:00:00+00:00"}}
 BOOT = "from radar import service; service.main()"
 
 
@@ -38,7 +44,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self, new=False, signed_out=False):
+    def __init__(self, new=False, signed_out=False, job_site=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -55,6 +61,8 @@ class World:
             (self.app / "settings.json").write_text(json.dumps(SETTINGS))
             (self.app / "data").mkdir(exist_ok=True)
             (self.app / "data" / "companies.json").write_text(json.dumps(COMPANIES))
+            if job_site:
+                (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ROLE))
         tools = self.home / ".local" / "bin"
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):
