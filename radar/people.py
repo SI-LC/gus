@@ -115,7 +115,7 @@ def main():
             continue
         print(f"  {name}: {', '.join(added) or 'no one with evidence'}")
         if added:
-            notify(f"People mapped · {name}", "", ", ".join(added[:3]))
+            notify(f"Gus found {len(added)} {'person' if len(added) == 1 else 'people'} at {name}", "", ", ".join(added[:3]) + (f" and {len(added) - 3} more" if len(added) > 3 else ""))
 
 
 if __name__ == "__main__":

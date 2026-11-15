@@ -190,7 +190,7 @@ def warnings(name, cfg, st) -> list:
     low = next((r for r in rows if 0 < r["left"] < p["per_run"]), None)
     full = next((r for r in rows if r["left"] <= 0), None)
     if full:
-        out.append(f"{label} is at its {full['period']}ly limit and paused until {nice(full['resets'])}.")
+        out.append(f"{label} is at its {PERIODLY.get(full['period'], full['period'])} limit and paused until {nice(full['resets'])}.")
     elif low:
         out.append(f"Only {low['left']} {label} requests left until {nice(low['resets'])}, so the next run will stop early.")
     if s.get("cut"):
@@ -343,6 +343,9 @@ def collect(name, cfg, st, limit, age):
     return run
 
 
+PERIODLY = {"day": "daily", "week": "weekly", "month": "monthly"}
+
+
 def tell_limit(name, st, row) -> None:
     """One notification per limit reached, not one per run."""
     s = st.setdefault(name, {})
@@ -351,7 +354,7 @@ def tell_limit(name, st, row) -> None:
         from radar.notify import notify
         s["limit_notified"] = mark
         save_state(st)
-        notify(f"Gus: {LABEL[name]} limit reached", "", f"Paused until {row['resets']}, when the {row['period']}ly allowance resets.")
+        notify(f"{LABEL[name]}'s allowance is used up", "", f"Gus asks it again on {nice(row['resets'])}, when the {PERIODLY.get(row['period'], row['period'])} allowance resets.")
 
 
 def run_source(name, cfg, st):

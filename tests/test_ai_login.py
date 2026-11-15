@@ -39,13 +39,13 @@ class LoginExpiry(unittest.TestCase):
     def test_an_expired_login_is_recorded_and_pushed_once_a_day(self):
         with self.assertRaises(ai.LoginExpired) as caught:
             self.run_claude(claude(returncode=1, result=EXPIRED))
-        self.assertIn("Settings → AI", str(caught.exception))
+        self.assertIn("Settings, AI", str(caught.exception))
         self.assertNotIn("/login", str(caught.exception))
         self.assertTrue(self.flag.exists())
         self.assertEqual(self.notify.call_count, 1)
         title, _, message = self.notify.call_args.args[:3]
-        self.assertEqual(title, "Claude sign-in expired")
-        self.assertIn("Settings → AI", message)
+        self.assertEqual(title, "Your Claude sign-in has expired")
+        self.assertIn("Tap to sign in", message)
         self.assertEqual(self.notify.call_args.kwargs["click"], "https://gus.example/#settings/ai")
         with self.assertRaises(ai.LoginExpired):  # the next failed run the same day stays quiet
             self.run_claude(claude(returncode=1, result=EXPIRED))
@@ -80,7 +80,7 @@ class LoginExpiry(unittest.TestCase):
             s = ai.status()
         self.assertFalse(s["ok"])
         self.assertIn("expired", s["reply"])
-        self.assertIn("Settings → AI", s["reply"])
+        self.assertIn("Settings, AI", s["reply"])
 
     def test_signing_in_again_clears_it(self):
         self.flag.write_text(json.dumps({"since": "x", "notified": "2026-11-08"}))

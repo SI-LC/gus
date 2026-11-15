@@ -97,7 +97,7 @@ class Alert(unittest.TestCase):
         self.companies.write_text(json.dumps({"Acme": {"status": "watched", "tier": "A"}, "Tiny": {"status": "watched", "tier": "C"}}))
         self.today, self.pushed = str(date.today()), []
         self.patches = [mock.patch.multiple(E, EVENTS=self.events, COMPANIES=self.companies, JOBS=self.jobs),
-                        mock.patch("radar.notify.notify", lambda *a: self.pushed.append(a)),
+                        mock.patch("radar.notify.notify", lambda *a, **k: self.pushed.append(a + (k,))),
                         mock.patch("radar.settings.load", lambda: {"notify_news": True, "notify_min_score": 8})]
         for p in self.patches:
             p.start()
@@ -113,7 +113,8 @@ class Alert(unittest.TestCase):
                                            "d": self.ev("Acme", "leader_hire", added=str(date.today() - timedelta(days=10)))}))
         self.assertEqual(E.alert(), ["a"])
         self.assertEqual(len(self.pushed), 1)
-        self.assertIn("Posted about hiring · Acme", self.pushed[0][0])
+        self.assertEqual(self.pushed[0][0], "Acme posted about hiring")
+        self.assertEqual(self.pushed[0][-1], {"action": "Read the news"})
         self.assertEqual(json.loads(self.events.read_text())["a"]["notified"], self.today)
         self.assertEqual(E.alert(), [])  # not twice
 
@@ -134,4 +135,5 @@ class Alert(unittest.TestCase):
         self.events.write_text(json.dumps({f"e{i}": self.ev("Acme", "post_hiring") | {"url": f"https://x/{i}"} for i in range(8)}))
         self.assertEqual(len(E.alert()), 8)
         self.assertEqual(len(self.pushed), 6)
-        self.assertIn("3 more hiring signals", self.pushed[-1][0])
+        self.assertEqual(self.pushed[-1][0], "1 more company has hiring news")
+        self.assertIn("They're in Companies", self.pushed[-1][2])

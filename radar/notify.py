@@ -40,10 +40,10 @@ def quiet_now(spec=None) -> bool:
     return (a <= now < b) if a < b else (now >= a or now < b)
 
 
-def notify(title: str, subtitle: str, message: str, url: str = "", click: str = "") -> None:
-    """url is the role to open; click is where a tap on the push goes (the cockpit by default)."""
+def notify(title: str, subtitle: str, message: str, url: str = "", click: str = "", action: str = "Open the ad") -> None:
+    """url is what the push's button opens, and action names it; click is where a tap on the push goes (Gus by default)."""
     if quiet_now():
-        return _hold(title, subtitle, message, url, click)
+        return _hold(title, subtitle, message, url, click, action)
     topic = _topic()
     if topic:
         server = os.environ.get("NTFY_SERVER") or _cfg().get("notify_ntfy_server") or "https://ntfy.sh"
@@ -52,7 +52,7 @@ def notify(title: str, subtitle: str, message: str, url: str = "", click: str = 
         if click:
             headers["Click"] = click
         if url:
-            headers["Actions"] = f"view, Open role, {url}"
+            headers["Actions"] = f"view, {action}, {url}"
         try:
             req = urllib.request.Request(f"{server}/{topic}", data=message.encode("utf-8"), headers=headers)
             urllib.request.urlopen(req, timeout=15)
@@ -87,7 +87,8 @@ def release_held():
     held = read(HELD, [])
     HELD.unlink()
     if held:
-        notify(f"Gus: {len(held)} while you were away", "", "; ".join(f"{h[0]} {h[1]}".strip() for h in held)[:900])
+        notify(f"{len(held)} thing{'' if len(held) == 1 else 's'} came in overnight", "",
+               "; ".join(f"{h[0]}: {h[1]}" if h[1] else h[0] for h in held)[:900])
 
 
 if __name__ == "__main__":
