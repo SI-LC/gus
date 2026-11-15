@@ -14,7 +14,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from radar.paths import JOBS
-from radar.schema import CHANGE_ACTORS as ACTORS, CHANGE_FIELDS as FIELDS
+from radar.schema import CHANGE_ACTORS, CHANGE_FIELDS
+
+ACTORS, FIELDS = CHANGE_ACTORS, CHANGE_FIELDS  # who may make a change, and the fields the log watches
 
 
 
