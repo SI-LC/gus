@@ -1,0 +1,19 @@
+id: one-word-for-each-thing
+requirement: Each thing in Gus has one name wherever I meet it, the Full run is explained the same way everywhere, and no screen shows me Gus's internal words like accounts, moves, agent or watchlist.
+given: scanned
+check:
+  - open To do
+  - see "Pick people to contact"
+  - not see "moves"
+  - open Activity
+  - see "Not run yet. Full run starts it"
+  - not see "Research runs"
+  - open Settings
+  - see "Model for research"
+  - not see "agent runs"
+  - click "Schedule"
+  - see "then finds new companies, catches up on yours and picks who to contact"
+  - see "Catch up on your companies every (days)"
+  - not see "Full run does everything"
+  - not see "Refresh accounts"
+judge: Reading any screen, would I ever wonder whether two different words mean the same thing?

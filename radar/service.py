@@ -78,7 +78,7 @@ def _boards():
     if out["added"] or out["restored"]:
         _run_modules("scan")
     n, g, r = len(out["added"]), len(out["guesses"]), len(out["restored"])
-    return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {r} put back on the watchlist" if r else "") + (f", {g} to look at in Companies" if g else "")
+    return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {r} put back in your companies" if r else "") + (f", {g} to look at in Companies" if g else "")
 
 
 def _run_modules(*modules):
@@ -119,14 +119,14 @@ def steps():
     cfg, s = load_config(), _schedule_state()
     every = cfg.get("watchlist_every_days", 3)
     return [
-        ("Scan and score", _check_roles, lambda: None),
+        ("Check roles", _check_roles, lambda: None),
         ("Job sources", _sources, lambda: None if _sources_on(cfg) else "Turned off"),
         ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
-        ("Discover", _agent_step("discover"), lambda: None),
-        ("Find boards", _boards, lambda: None),
-        ("Refresh accounts", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
-        ("Score what's new", lambda: _run_modules("triage", "people"), lambda: None),
-        ("Plan moves", _agent_step("moves"), lambda: "Already planned this week" if _moves_this_week() else None),
+        ("Find new companies", _agent_step("discover"), lambda: None),
+        ("Find job boards", _boards, lambda: None),
+        ("Catch up on your companies", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
+        ("Find people", lambda: _run_modules("triage", "people"), lambda: None),
+        ("Pick who to contact", _agent_step("moves"), lambda: "Already planned this week" if _moves_this_week() else None),
     ]
 
 
@@ -157,7 +157,7 @@ def full_run():
             ok = False
             traceback.print_exc()
     s = _schedule_state()
-    if any(x["name"] == "Refresh accounts" and x["status"] == "done" for x in progress["steps"]):
+    if any(x["name"] == "Catch up on your companies" and x["status"] == "done" for x in progress["steps"]):
         s["watchlist"] = str(date.today())
         _save_schedule_state(s)
     after = _counts()

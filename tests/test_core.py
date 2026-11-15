@@ -257,12 +257,12 @@ class FullRun(unittest.TestCase):
     def test_skips_what_it_doesnt_need(self):
         _, _, calls, steps = self.run_with(moves=5, watchlist_due=False)
         self.assertEqual(calls, ["scan", "discover", "boards", "score"])
-        self.assertEqual(steps["Plan moves"], "skipped")
+        self.assertEqual(steps["Pick who to contact"], "skipped")
 
     def test_one_failure_doesnt_lose_the_rest(self):
         ok, _, calls, steps = self.run_with(fail="discover")
         self.assertFalse(ok)
-        self.assertEqual(steps["Discover"], "failed")
+        self.assertEqual(steps["Find new companies"], "failed")
         self.assertIn("moves", calls)
 
     def test_ai_limit_stops_ai_steps(self):
@@ -270,7 +270,7 @@ class FullRun(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("limit reached", summary)
         self.assertEqual(calls, ["scan"])
-        self.assertEqual(steps["Plan moves"], "skipped")
+        self.assertEqual(steps["Pick who to contact"], "skipped")
 
 
 class RunProgress(unittest.TestCase):

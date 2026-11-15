@@ -29,10 +29,10 @@ CLAUDE_MODELS = ["haiku", "sonnet", "opus"]
 # key, label, type, group, help. Types: text, lines, int:lo-hi, money, bool, select:<options>, times
 SCHEMA = [
     ("ai_provider", "How Gus connects to AI", "select:provider", "AI",
-     "A Claude plan or an Anthropic API key can do everything. An OpenAI-compatible API can score roles, but can't search the web for people or run the agent."),
+     "A Claude plan or an Anthropic API key can do everything. An OpenAI-compatible API can score roles, but can't search the web for people or do research."),
     ("model_scoring", "Model for scoring roles", "select:claude_model", "AI", "Runs on every new role. Sonnet is a good balance."),
-    ("model_people", "Model for finding people", "select:claude_model", "AI", "Uses web search, for roles above the people threshold."),
-    ("model_agent", "Model for agent runs", "select:claude_model", "AI", "Discovery and watchlist loops. The most judgement-heavy work."),
+    ("model_people", "Model for finding people", "select:claude_model", "AI", "Uses web search, for roles at or above Find people at score."),
+    ("model_agent", "Model for research", "select:claude_model", "AI", "Finding new companies and catching up on yours. The work that needs the most judgement."),
     ("model_quick", "Model for your first look", "select:claude_model", "AI", "Only for the first set of roles, where speed matters most."),
     ("openai_base_url", "OpenAI-compatible base URL", "text", "AI",
      "e.g. https://api.openai.com/v1, https://openrouter.ai/api/v1, or http://localhost:11434/v1 for Ollama."),
@@ -57,12 +57,12 @@ SCHEMA = [
     ("run_time", "Daily run time", "times", "Schedule", "When the full run starts each day, 24h, e.g. 08:00. Leave empty to run it only from the button."),
     ("catch_up_missed_run", "Catch up a missed daily run", "bool", "Schedule",
      "If Gus wasn't running at the daily time, because this computer was off, it runs when it next starts. Off means it waits for tomorrow."),
-    ("watchlist_every_days", "Refresh accounts every (days)", "int:1-30", "Schedule", "The heaviest step of the run, so it's skipped until this many days have passed."),
+    ("watchlist_every_days", "Catch up on your companies every (days)", "int:1-30", "Schedule", "The heaviest step of the run, so it's skipped until this many days have passed."),
     ("agent_max_searches", "Web searches per agent run", "int:10-200", "Schedule", "A budget, so runs don't use too much of your allowance."),
     ("prune_after_days", "Tidy old records after (days)", "int:14-365", "Schedule",
-     "A closed or skipped role you never touched loses its saved advert text after this long, and ignored signals and closed events move to data/archive/. Roles you prepared or applied for are never touched."),
+     "A closed or skipped role you never touched loses its saved advert text after this long, and old news is archived. Roles you prepared or applied for are never touched."),
 
-    ("source_hn", "HN Who is hiring", "bool", "Feeds", "Monthly thread, scanned with the job boards."),
+    ("source_hn", "Hacker News: Who is hiring?", "bool", "Feeds", "Monthly thread, scanned with the job boards."),
     ("hn_title_include", "HN: words to look for", "lines", "Feeds", "A post must mention one of these. Leave empty to use your titles to include."),
 
     ("source_adzuna", "Adzuna", "bool", "Job sources", "Job search across many sites, with short extracts of each ad. Needs the Adzuna keys (Keys tab)."),
@@ -121,7 +121,7 @@ SCHEMA = [
     ("feeds_extra", "Your feeds", "lines", "Feeds",
      "One per line: Name | https://feed.url | kind | minutes. kind is signals (keyword-filtered), newsletter, jobs (reads the full post) or community."),
 
-    ("source_gmail", "Read this Gmail account", "bool", "Email", "Checked on every scan. Read-only: nothing is sent, deleted or marked as read."),
+    ("source_gmail", "Read this Gmail account", "bool", "Email", "Checked every time Gus checks roles. Read-only: nothing is sent, deleted or marked as read."),
     ("gmail_address", "Gmail address", "text", "Email", "The account that receives your recruiter and LinkedIn emails."),
     ("inbox_days", "Look back (days)", "int:1-30", "Email", "How far back each check goes."),
     ("inbox_senders", "Senders to read", "lines", "Email", "Any part of an email address, one per line. Other emails stay unopened."),
@@ -134,10 +134,10 @@ SCHEMA = [
      "A push when an A or B company posts about hiring, hires a product leader or lists a strong role. Once per event."),
     ("notify_ntfy_server", "ntfy server", "text", "Notifications", "https://ntfy.sh, or your own server."),
     ("quiet_hours", "Quiet hours", "text", "Notifications", "e.g. 22:00-07:00. Notifications are held until it ends. Empty for none."),
-    ("cockpit_url", "Cockpit address", "text", "Notifications", "Where notifications link to, e.g. http://raspberrypi:8484 or your Tailscale name."),
+    ("cockpit_url", "Gus's address", "text", "Notifications", "Where notifications link to, e.g. http://raspberrypi:8484 or your Tailscale name."),
 
     ("mcp_allow_writes", "Let Claude make changes", "bool", "Claude",
-     "Off, Claude can only read your roles, companies, people and moves. On, it can also change stages, add roles, companies, people and news, update moves and start a run."),
+     "When off, Claude can only read your roles, companies, people and moves. When on, it can also change stages, add roles, companies, people and news, update moves and start a run."),
 ]
 
 PATTERN_ENDINGS = ("include", "exclude", "except")
@@ -188,7 +188,7 @@ SECRET_KEYS = {
     "gmail_app_password": ("Gmail app password", "A 16-letter password from your Google account, not your normal one."),
     "x_bearer_token": ("X API bearer token", "From developer.x.com."),
     "ntfy_topic": ("ntfy topic", "A long random name. Anyone who knows it can read your notifications."),
-    "cockpit_token": ("Browser access token", "Needed before other devices can open the cockpit in a browser. Add ?t=<token> to the URL once. Claude Code has its own token, under Claude."),
+    "cockpit_token": ("Browser access token", "Needed before other devices can open Gus in a browser. Add ?t=<token> to the URL once. Claude Code has its own token, under Claude."),
     "companies_house_key": ("Companies House API key", "Free, from the Companies House developer hub. Spots new UK branches."),
     "adzuna_app_id": ("Adzuna app ID", "From developer.adzuna.com, under your account."),
     "adzuna_app_key": ("Adzuna app key", "From developer.adzuna.com, under your account."),

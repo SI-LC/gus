@@ -51,6 +51,9 @@ const ago = iso => {
 };
 const DAY = 864e5;
 let PIPE = ["shortlisted", "preparing", "applied", "interviewing", "closed"];  // the role stages on the board, refreshed from the server
+const PERSON_LABEL = { mapped: "Not contacted", contacted: "Messaged", replied: "Replied", conversation: "Talking", referred: "Referred", closed: "Closed" };
+const OUTCOME_LABEL = { replied: "Replied", conversation: "Talking", interview: "Interview", referral: "Referral", not_now: "Not now" };
+const personLabel = st => PERSON_LABEL[st] || st;
 const LABEL = { shortlisted: "To apply", preparing: "In prep", applied: "Applied", interviewing: "Interviewing", closed: "Finished" };
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.remove("ask"); el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 1600 + t.length * 45); }
@@ -138,7 +141,7 @@ const dist = p => p.distance || { label: "3rd+", certain: false, paths: [] };
 const distBadge = p => { const d = dist(p);
   return `<span class="dist d${d.hops || 3} ${d.certain ? "sure" : ""}" title="${d.certain ? "Confirmed" : "Estimated from your connections, not confirmed"}">${esc(d.label)}</span>`; };
 const personChip = p => `<a class="person-chip" href="${link(p.url)}" target="_blank" rel="noopener" title="${esc(dist(p).paths.map(x => x.detail).join(" · ") || p.evidence || "")}">
-  ${distBadge(p)} <b>${esc(p.name)}</b> ${esc((p.role || p.kind || "").slice(0, 40))}${p.stage && p.stage !== "mapped" ? ` · ${esc(p.stage)}` : ""}</a>`;
+  ${distBadge(p)} <b>${esc(p.name)}</b> ${esc((p.role || p.kind || "").slice(0, 40))}${p.stage && p.stage !== "mapped" ? ` · ${esc(personLabel(p.stage))}` : ""}</a>`;
 function routes(p) {
   const d = dist(p), best = d.paths.slice(0, 3);
   return `<div class="routes"><div class="routes-head"><b>Distance</b> ${distBadge(p)}
@@ -152,7 +155,7 @@ function routes(p) {
 const READ_MIN = 2;  // roughly how long it takes to read a job ad yourself: what "saved" in the status bar is counted from
 const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(".0", "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
-const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Agent runs", links: "Finding job links" };
+const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Research", links: "Finding job links" };
 const sentAt = (j, p) => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
 const stageSince = j => ((j.history || []).filter(h => h.stage === j.stage).pop() || {}).at;
 const NEXT = { shortlisted: ["preparing", "Start preparing"], preparing: ["applied", "Mark applied"], applied: ["interviewing", "Got an interview"], interviewing: ["closed", "Mark finished"] };  // the one likely next step from each stage
@@ -187,7 +190,7 @@ function rolePanel(j) {  // everything you do to one role, a click away from its
   const person = p => { const at = sentAt(j, p), why = (fu.find(c => c.id === p.id) || {}).reason;
     return `<div class="pp"><div><a href="${link(p.url)}" target="_blank" rel="noopener"><b>${esc(p.name)}</b></a> ${distBadge(p)}
         <div class="sub">${esc(p.role || "")}${at ? ` · messaged ${ago(at)}` : why ? ` · ${esc(why)}` : ""}</div></div>${at
-      ? `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>
+      ? `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option value="${st}" ${st === p.stage ? "selected" : ""}>${personLabel(st)}</option>`).join("")}</select>
          <button class="link" onclick="roleContact(${id}, ${jsq(p.id)}, false)" aria-label="Undo messaged ${esc(p.name)}">Undo</button>`
       : `<button onclick="roleContact(${id}, ${jsq(p.id)}, true)" aria-label="Messaged ${esc(p.name)}">Messaged</button>`}</div>`; };
   return `<div class="panel-back" onclick="closeRole()"></div>
@@ -218,7 +221,7 @@ async function roleDetails(id) {  // the description isn't in the page's data, s
        <input type="text" id="role-edit-url" aria-label="Edit link" placeholder="Link to the ad (optional)" value="${esc(j.url || "")}" class="w-full mt-1.5">
        <textarea id="role-edit-description" aria-label="Edit description" placeholder="Paste the job description" rows="16" class="w-full mt-1.5">${esc(j.description || "")}</textarea>
        <div class="actions"><button class="primary" onclick="saveRole(${jsq(j.id)})">Save</button><button onclick="$('role-dlg').close()">Cancel</button>
-       <span class="sub">Changing the description has Gus score it again on the next scan.</span></div>`
+       <span class="sub">Change the description and Gus scores it again on the next check.</span></div>`
     : `<div class="title">${roleTitle(j, j.url)}</div><div class="sub">${esc(j.location || "")}</div>
        <div class="jd">${j.description ? esc(j.description) : `<span class="sub">${j.pruned ? "The description was cleared to save space once this role closed." : "No description saved."}</span>`}</div>
        <div class="actions"><button onclick="$('role-dlg').close()">Close</button></div>`);
@@ -292,7 +295,7 @@ const WHY_FAILED = [
   [/expecting value|json|decode/i, "that sent back a page that wasn't a list of jobs", "Nothing to do: Gus tries again on the next check."],
   [/401|403|forbidden|denied/i, "refused by the site", "If it keeps happening, check the address on the company's card."],
   [/404|not found|gone/i, "moved or gone", "Check the address on the company's card."],
-  [/robots/i, "with rules for robots that couldn't be read", "Nothing to do: Gus tries again on the next check."],
+  [/robots/i, "that Gus couldn't confirm it's allowed to read", "Nothing to do: Gus tries again on the next check."],
   [/no jobs|sitemap/i, "with no jobs Gus can read", "Give the company its careers address, on its card."],
   [/timed? ?out|timeout|temporar|unreachable|50\d|oserror|connection/i, "didn't answer", "Nothing to do: Gus tries again on the next check."],
 ];
@@ -310,7 +313,7 @@ function failures(errs, what) {  // the failures grouped by what happened, with 
 function costs() {
   const u = S.usage, fact = (v, l) => `<div><span>${l}</span><b>${v}</b></div>`;
   return `<div class="section">What the AI used</div>
-    <div class="facts">${fact(usd(u.ai.today.cost_usd), "Claude today")}${fact(usd(u.ai.week.cost_usd), "Claude, 7 days")}${fact(usd(u.ai.month.cost_usd), "Claude this month")}
+    <div class="facts">${fact(usd(u.ai.today.cost_usd), "Claude today")}${fact(usd(u.ai.week.cost_usd), "Claude this week")}${fact(usd(u.ai.month.cost_usd), "Claude this month")}
       ${fact(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.ai.month.searches, "Searches this month")}
       ${fact(compact(u.ai.month.tokens || 0), "Tokens this month")}${fact(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
@@ -331,7 +334,7 @@ function moveCard(m, open) {
   if (m.status !== "todo") return `<div class="mv done"><div class="mv-row">${who}
       <span class="mv-because">${m.status === "skipped" ? "Skipped" : "Sent" + (m.done_at ? " " + ago(m.done_at) : "")}</span></div>
     <div class="mv-side">${m.status === "done" ? `<select onchange="setMove(${id}, {outcome: this.value || null})" aria-label="Outcome with ${esc(p.name)}">
-        <option value="">No reply yet</option>${S.labels.outcomes.filter(o => o !== "no_reply").map(o => `<option value="${o}" ${m.outcome === o ? "selected" : ""}>${o.replace("_", " ")}</option>`).join("")}</select>` : ""}
+        <option value="">No reply yet</option>${S.labels.outcomes.filter(o => o !== "no_reply").map(o => `<option value="${o}" ${m.outcome === o ? "selected" : ""}>${OUTCOME_LABEL[o] || o}</option>`).join("")}</select>` : ""}
       <button class="link" onclick="setMove(${id}, {status:'todo', outcome:null})" aria-label="Undo ${esc(p.name)}">Undo</button></div></div>`;
   return `<article class="mv${open ? " open" : ""}">
     <button class="mv-row" onclick="toggleMove(${id})" aria-expanded="${!!open}">${who}
@@ -345,8 +348,8 @@ function moveCard(m, open) {
         <button onclick="setMove(${id}, {status:'done'})">Sent</button>
         <button class="link" onclick="setMove(${id}, {status:'skipped'})">Skip</button></div>
       <div class="mv-why">${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
-      ${m.angle ? `<p class="why"><b>Angle.</b> ${esc(m.angle)}</p>` : ""}
-      ${m.give_first ? `<p class="why"><b>Give first.</b> ${esc(m.give_first)}</p>` : ""}</div>
+      ${m.angle ? `<p class="why"><b>How to open.</b> ${esc(m.angle)}</p>` : ""}
+      ${m.give_first ? `<p class="why"><b>Something to offer.</b> ${esc(m.give_first)}</p>` : ""}</div>
       ${p.id ? `<details class="add-event keep"><summary class="sub">How you're connected</summary>${routes(p)}</details>` : ""}</div>` : ""}</article>`;
 }
 
@@ -378,7 +381,7 @@ const titleLink = j => SOURCE_LABEL[j.source] && j.link_kind !== "company" ? com
 const companySearch = j => "https://www.google.com/search?q=" + encodeURIComponent(`${j.company} ${j.title} careers`);
 async function watchCompany(id) {
   const d = await post("/api/watch", { id });
-  if (d) { toast(d.ok ? "Added to your watchlist" : "Already on your watchlist"); load(); }
+  if (d) { toast(d.ok ? "Added to your companies" : "Already in your companies"); load(); }
 }
 async function boardGuess(name, accept) {
   const d = await post("/api/company/board", { name, accept });
@@ -430,10 +433,10 @@ function roleCard(j, actions, extra = "") {
       <div class="co">${esc(j.company)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
-      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Waiting for the next scan to score it."}</span>`}</p>
+      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Gus scores it on the next check."}</span>`}</p>
       ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}${extra}
     </div>
-    <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button class="link" onclick="watchCompany(${jsq(j.id)})">Watch this company</button>` : ""}</div></article>`;
+    <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button class="link" onclick="watchCompany(${jsq(j.id)})">Add to your companies</button>` : ""}</div></article>`;
 }
 
 
@@ -567,15 +570,15 @@ const V = {
     const planned = new Set(mine.map(m => m.account));
     const firing = S.accounts.filter(a => ["A", "B"].includes(a.tier) && a.fresh && !planned.has(a.name))
       .sort((a, b) => a.tier.localeCompare(b.tier) || b.fresh - a.fresh).slice(0, 8);
-    const steps = [["Events", f.signals], ["Moves", f.moves], ["Done", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
+    const steps = [["News", f.signals], ["Planned", f.moves], ["Sent", f.done], ["Replies", f.replied], ["Conversations", f.conversations], ["Interviews", f.interviews]];
     const shown = openMove === undefined ? (todo[0] || {}).id : openMove;
     const tabs = [["week", "This week", todo.length], ["ups", "Follow-ups", ups], ["done", "Done", done.length]];
     const body = todoView === "ups" ? followUpsBlock()
       : todoView === "done" ? (done.length ? done.map(m => moveCard(m)).join("") : `<div class="empty">Nothing sent yet this week.</div>`) +
         `<div class="section">How outreach is going</div><div class="stats funnel">${steps.map(([l, v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("")}</div>`
       : (todo.length ? todo.map(m => moveCard(m, m.id === shown)).join("")
-          : `<div class="empty">${mine.length ? "Everyone's contacted for this week." : "No one to contact yet this week."}<div class="actions justify-center"><button class="primary" onclick="startRun('run')">Full run</button></div></div>`) + `
-      ${firing.length ? `<div class="section">Also firing · not planned</div><table>${firing.map(a => `<tr>
+          : `<div class="empty">${mine.length ? "You've contacted everyone planned for this week." : "No one to contact yet this week."}<div class="actions justify-center"><button class="primary" onclick="startRun('run')">Pick people to contact</button></div></div>`) + `
+      ${firing.length ? `<div class="section">Other news · no one planned</div><table>${firing.map(a => `<tr>
         <td><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b></td>
         <td>${a.events.filter(e => e.fresh).slice(0, 2).map(sigChip).join(" ")}</td>
         <td class="hide-sm sub">${peopleAt(a.name).length} people</td></tr>`).join("")}</table>` : ""}`;
@@ -597,7 +600,7 @@ const V = {
         <div class="acct-head">
           <div><button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
-            ${a.board_broken ? '<span class="pill due">board broken</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
+            ${a.board_broken ? '<span class="pill due">job board not working</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button class="link danger" onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
@@ -621,7 +624,7 @@ const V = {
     const byNews = rows => rows.sort((a, b) => b.fresh - a.fresh || (b.fit ?? 0) - (a.fit ?? 0));
     const guesses = S.board_guesses || [];
     const lookAt = guesses.length ? `<div class="section">Needs a look · ${guesses.length}</div>
-      <p class="sub">Gus found these job boards by company name alone, so each could be another company's. Open the board, then say.</p>
+      <p class="sub">Gus found these job boards by company name alone, so some may belong to another company. Open each one and say whether it's theirs.</p>
       <table>${guesses.map(g => `<tr><td><b>${esc(g.name)}</b></td>
         <td><a href="${link(g.url)}" target="_blank" rel="noopener">${esc(g.board)}</a> <span class="sub">· ${g.open_roles} open role${g.open_roles === 1 ? "" : "s"}</span></td>
         <td class="row"><button class="primary" onclick="boardGuess(${jsq(g.name)}, true)">It's theirs</button> <button onclick="boardGuess(${jsq(g.name)}, false)">Not them</button></td></tr>`).join("")}</table>` : "";
@@ -630,7 +633,7 @@ const V = {
         <input type="text" placeholder="Find a company" aria-label="Find a company" value="${esc(window._acctq || "")}" oninput="window._acctq=this.value;clearTimeout(window._aq);window._aq=setTimeout(()=>render(true),250)" class="acct-find">
       <details class="add-event keep add-role"><summary class="sub">+ Add a company</summary>
         <div class="row mt-1.5"><input type="text" id="add-co-name" placeholder="Company name" aria-label="Company name" class="flex-1">
-          <input type="text" id="add-co-careers" placeholder="Careers page address (optional, but surer)" aria-label="Careers address" class="flex-[2]">
+          <input type="text" id="add-co-careers" placeholder="Careers page address (optional, helps Gus find the right board)" aria-label="Careers address" class="flex-[2]">
           <button class="primary" id="add-co-go" onclick="addCompany()">Add</button></div>
         <p class="sub m-0 mt-1.5">Gus looks for its public job board. Companies on Workday, SuccessFactors, Teamtailor or Gem need the careers address.</p></details></div>` + lookAt +
       (list.length ? (q || tier === "all" ? tiers.map(t => { const rows = byNews(list.filter(a => a.tier === t));
@@ -644,7 +647,7 @@ const V = {
     const loose = talking.filter(p => !inPipe.has(p.company));  // talking, with no role on the board to sit under
     const open = mine.find(j => j.id === openRoleId);
     const views = [["board", "Board"], ["list", "List"], ["people", `People <span class="sub">${talking.length}</span>`]];
-    const personStage = p => `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option ${st === p.stage ? "selected" : ""}>${st}</option>`).join("")}</select>`;
+    const personStage = p => `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option value="${st}" ${st === p.stage ? "selected" : ""}>${personLabel(st)}</option>`).join("")}</select>`;
     const body = pipeView === "list" ? (mine.length ? `<table class="plist"><tr><th>Role</th><th>Stage</th><th>Fit</th><th class="hide-sm">Since</th><th>Next</th></tr>${mine.map(j => { const h = roleHint(j), since = stageSince(j);
         return `<tr class="${j.stage === "closed" ? "dim" : ""}"><td><button class="link rowlink" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button><div class="sub">${esc(j.company)}</div></td>
           <td>${LABEL[j.stage]}</td><td class="num">${j.score ?? "–"}</td><td class="hide-sm sub">${since ? ago(since) : ""}</td><td>${h.text ? `<span${h.kind ? ` class="pill ${h.kind}"` : ` class="sub"`}>${esc(h.text)}</span>` : ""}</td></tr>`; }).join("")}</table>` : "")
@@ -668,8 +671,8 @@ const V = {
           <select id="add-role-stage" aria-label="Starting stage">${PIPE.filter(s => s !== "closed").map(s => `<option value="${s}">${LABEL[s]}</option>`).join("")}</select></div>
         <textarea id="add-role-description" rows="6" placeholder="Paste the job description" aria-label="Job description" class="w-full mt-1.5"></textarea>
         <div class="row mt-1.5"><button class="primary" id="add-role-go" onclick="addRole()">Add role</button>
-          <span class="sub">For a role that reached you directly, from a recruiter say. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details></div>
-      ${loose.length || inPipe.size ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions justify-center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('run')">Full run</button>`}</div></div>`}
+          <span class="sub">For a role that came to you directly, such as one from a recruiter. Gus scores it, and never skips or closes it for you. A company new to Gus is added too, with its job board if it has a public one.</span></div></details></div>
+      ${loose.length || inPipe.size ? "" : `<div class="empty">Nothing in your pipeline yet. Shortlist a role and it appears here.<div class="actions justify-center">${newRoles().length ? `<button class="primary" onclick="location.hash='roles'">See new roles</button>` : `<button class="primary" onclick="startRun('scan')">Check roles</button>`}</div></div>`}
       ${body}${open ? rolePanel(open) : ""}`;
   },
   search() {
@@ -684,14 +687,14 @@ const V = {
       : j.stage === "skipped" ? `<button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>`
       : `<button onclick="location.hash='pipeline'">See in Pipeline</button>`) + `<button onclick="roleDetails(${jsq(j.id)})">Description</button>`;
     const total = roles.length + cos.length + ppl.length, MAX = 25, more = n => n > MAX ? `<p class="sub">And ${n - MAX} more. Add a word to narrow it down.</p>` : "";
-    return `<h1>Search <span class="count">${total}</span></h1><p class="lede">${total ? "Everything Gus has" : "Nothing in Gus"} matching “${esc(q)}”.</p>` +
+    return `<h1>Search <span class="count">${total}</span></h1>${total ? `<p class="lede">Everything Gus has matching “${esc(q)}”.</p>` : ""}` +
       (roles.length ? `<div class="section">Roles · ${roles.length}</div>` + roles.slice(0, MAX).map(j => roleCard(j, act(j), ` <span class="pill">${esc(stage(j))}</span>`)).join("") + more(roles.length) : "") +
       (cos.length ? `<div class="section">Companies · ${cos.length}</div>` + cos.slice(0, MAX).map(a => `<article class="card"><div class="title"><span class="tier t${esc(a.tier)}">${esc(a.tier)}</span> ${esc(a.name)}</div>
         ${a.product ? `<div class="sub">${esc(a.product)}</div>` : ""}<div class="actions"><button onclick="openCompany(${jsq(a.name)})">Open company</button></div></article>`).join("") + more(cos.length) : "") +
       (ppl.length ? `<div class="section">People · ${ppl.length}</div>` + ppl.slice(0, MAX).map(p => `<article class="card"><div class="co">${esc(p.company)}</div>
-        <div class="title"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> ${distBadge(p)}</div><div class="sub">${esc(p.role || "")}${p.stage ? ` · ${esc(p.stage)}` : ""}</div>
+        <div class="title"><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a> ${distBadge(p)}</div><div class="sub">${esc(p.role || "")}${p.stage ? ` · ${esc(personLabel(p.stage))}` : ""}</div>
         <div class="actions"><button onclick="openCompany(${jsq(p.company)})">Open company</button></div></article>`).join("") + more(ppl.length) : "") +
-      (total ? "" : `<div class="empty">No role, company or person matches. Try fewer words.</div>`);
+      (total ? "" : `<div class="empty">No role, company or person matches “${esc(q)}”. Try fewer words.</div>`);
   },
   roles() {
     const rows = newRoles();
@@ -717,7 +720,7 @@ const V = {
         <span class="sub">${(j.history || []).some(h => h.stage === "skipped") ? "You skipped this" + (j.skip_reason ? ": " + esc((S.labels.skip_reasons[j.skip_reason] || j.skip_reason).toLowerCase()) : "") : "Gus skipped this: it scored under 5"}</span>
         ${(j.history || []).some(h => h.stage === "skipped") && !j.skip_reason ? `<button onclick="askWhy([${jsq(j.id)}], 'Skipped')">Say why</button>` : ""}
         <button onclick="setStage(${jsq(j.id)},'new','Restored to New')">Restore</button>` : `
-        <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(j.stage) : ""}</span>`)).join(""))
+        <span class="sub">Ad closed ${ago(j.ad_closed)}${j.stage !== "new" ? " · " + esc(LABEL[j.stage] || j.stage) : ""}</span>`)).join(""))
       : `<div class="empty">${roleView === "new" ? "You're up to date. New roles appear here as Gus finds them." : roleView === "skipped" ? "Nothing skipped here." : "No closed ads here."}</div>`);
   },
   settings() {
@@ -745,8 +748,8 @@ const V = {
       <div class="row"><button class="primary" onclick="signIn('health-login')">Sign in with Claude</button></div><div id="health-login"></div>` : ""}
       ${row(!errs.length ? "done" : errs.length > h.boards / 4 ? "due" : "warm", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} of ${h.boards} didn't work on the last check` : "All worked"} · checked ${ago(h.last_scan)}`)}
       ${row(feedErrs.length ? "warm" : "done", "News feeds", feedErrs.length ? `${feedErrs.length} didn't work on the last check` : "All worked on the last check")}
-      ${row(h.last_agent_run ? "done" : "", "Research runs", h.last_agent_run ? `Last ran ${ago(h.last_agent_run)}` : "Not run yet. A full run starts them")}
-      ${row(h.signals_waiting > 50 ? "warm" : h.signals_waiting ? "done" : "", "News to read", h.signals_waiting ? `${h.signals_waiting} item${h.signals_waiting === 1 ? "" : "s"} waiting for the next full run` : "Nothing waiting")}
+      ${row(h.last_agent_run ? "done" : "", "Research", h.last_agent_run ? `Last ran ${ago(h.last_agent_run)}` : "Not run yet. Full run starts it")}
+      ${row(h.signals_waiting > 50 ? "warm" : h.signals_waiting ? "done" : "", "News to read", h.signals_waiting ? `${h.signals_waiting} item${h.signals_waiting === 1 ? "" : "s"}. The next Full run reads them` : "Nothing waiting")}
       ${row(h.x && h.x.day ? "done" : "", "X", h.x && h.x.day ? `${h.x.used || 0} posts read today` : `Off. <a href="#settings/sources">Turn it on in Settings</a>`)}
       ${row(h.claude.token && h.claude.token.old ? "warm" : h.claude.last_used ? "done" : "", "Claude connection", `${h.claude.last_used ? "Last connected " + ago(h.claude.last_used) : "Not connected yet"}${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}`)}
       ${failures(errs, "Job boards")}${failures(feedErrs, "News feeds")}
@@ -769,7 +772,7 @@ const SETTINGS_TABS = [
     const skip = SET.values.ai_provider === "openai_compatible" ? [] : ["openai_base_url", "openai_model"];
     const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude plan you're signed in to on the computer Gus runs on, so you don't need an API key. If it has expired, sign in again here."
       : SET.values.ai_provider === "anthropic_api" ? "Gus uses this key, not a Claude login."
-      : "Scoring only. Finding people and agent runs need a Claude provider.";
+      : "Scoring only. Finding people and research need Claude.";
     const key = AI_KEYS[SET.values.ai_provider];
     return `<section class="group"><h2>AI connection</h2>${fieldRow(SET.schema.find(f => f.key === "ai_provider"))}
       ${key ? secretField([key, SET.secret_keys[key]]) : ""}
@@ -784,7 +787,7 @@ const SETTINGS_TABS = [
       return `<div class="field"><label>${l}</label><div class="row"><button onclick="startRun('${j}')">${r.running[j] ? "Running…" : "Run now"}</button>
         <span class="sub">${x ? `${x.ok ? "Last run" : "Had a problem"} ${ago(x.at)}: ${esc(String(x.summary).slice(-120))}` : "Not run yet"}</span></div></div>`;
     }).join("");
-    return `<section class="group"><h2>The daily run</h2><p class="sub">Full run does everything. Check roles just finds and scores new roles.</p>${runs}</section>
+    return `<section class="group"><h2>The daily run</h2><p class="sub">Check roles finds and scores new roles. Full run does that too, then finds new companies, catches up on yours and picks who to contact.</p>${runs}</section>
       <section class="group"><h2>When it runs</h2>${fieldsOf("Schedule")}</section>`;
   }],
   ["sources", "Job sources", () => `<section class="group"><h2>Job sources</h2><p class="sub">Find roles beyond your company list. Add keys in the Keys tab.</p>${fieldsOf("Job sources")}</section>
@@ -812,14 +815,14 @@ const SETTINGS_TABS = [
   }],
   ["network", "Network", () => {
     const n = S.network || {};
-    return `<section class="group"><h2>Warm paths from LinkedIn</h2>
+    return `<section class="group"><h2>Who you know, from LinkedIn</h2>
       <p class="sub">See who you already know at your target companies.</p>
       <ol class="sub leading-[1.9] mx-0 my-3"><li>On LinkedIn: <b>Settings → Data privacy → Get a copy of your data</b>, tick <b>Connections</b>, request the archive.</li>
       <li>When LinkedIn emails you (usually within 10 minutes), download it and find <code>Connections.csv</code>.</li><li>Choose it below. Only names, profile links, companies, positions and dates are kept; emails are dropped. It stays on this machine.</li></ol>
       <div class="row"><input type="file" id="net-file" accept=".csv,text/csv"><button class="primary" onclick="importNetwork()">Import</button></div>
       <div id="net-msg" class="sub mt-2"></div>
       <div class="stats mt-5"><div class="stat"><div class="v">${n.connections || 0}</div><div class="l">Connections</div></div>
-      <div class="stat"><div class="v">${n.warm_people || 0}</div><div class="l">Warm people</div></div>
+      <div class="stat"><div class="v">${n.warm_people || 0}</div><div class="l">People you know</div></div>
       <div class="stat"><div class="v">${n.warm_accounts || 0}</div><div class="l">Companies with a warm path</div></div>
       <div class="stat"><div class="v">${n.imported ? ago(n.imported) : "never"}</div><div class="l">Imported</div></div></div>
       <p class="sub">Import again every month or two to stay up to date.</p></section>
@@ -865,7 +868,7 @@ const SETTINGS_TABS = [
       ${fieldsOf("Claude")}
       <div class="field"><label>Recent use</label><div>${c.recent.length ? `<table>${c.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${r.tool === "-" ? `<span class="bad">Refused</span>` : esc(r.tool)}</td><td class="sub">${esc(r.why || r.target || "")}</td><td class="sub">${esc(r.who || "")}</td></tr>`).join("")}</table>` : `<span class="sub">Claude hasn't connected yet.</span>`}</div></div></section>`;
   }],
-  ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never committed to git. Your AI connection is under AI.</p>` +
+  ["keys", "Keys", () => `<section class="group"><h2>Keys and tokens</h2><p class="sub">Stored on this machine only, in a file only you can read. Never shown back in full and never leaves this machine. Your AI connection is under AI.</p>` +
     Object.entries(SET.secret_keys).filter(([k]) => !Object.values(AI_KEYS).includes(k)).map(secretField).join("") + `</section>`],
   ["profile", "Profile", () => {
     setTimeout(async () => { const p = $("profile"); if (p && !p.value) p.value = (await (await fetch("/api/profile")).json()).text; }, 0);
@@ -968,7 +971,7 @@ function aiMessage() {
 function drawBanner() {
   const m = aiMessage(), el = $("banner"), n = unscored();
   el.hidden = !m;
-  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} role${n === 1 ? " is" : "s are"} waiting. ` : ""}<a href="#settings/ai">${signedOut() ? "Sign in with Claude" : "Change the limit"}</a>`;
+  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} role${n === 1 ? " is" : "s are"} waiting. ` : ""}<a href="#settings/ai">${signedOut() ? "Sign in with Claude" : S.ai.paused === "off" ? "Turn AI on" : "Change the limit"}</a>`;
 }
 function drawTicker() {
   drawBanner();
@@ -988,7 +991,7 @@ function drawTicker() {
     <span class="run-group"><button class="scan-now${lastRun ? "" : " first"}" title="Reads your job boards, feeds and email, and scores what's new.${esc(sourcesDue(h.sources))}" onclick="startRun('scan')"${busy ? " disabled" : ""}>${busy === "scan" ? "Checking…" : busy === "run" ? "Running…" : "Check roles"}</button>
       <details class="run-more"><summary title="More" aria-label="More ways to run Gus">▾</summary><div class="run-menu">
         <button onclick="startRun('run')"${busy ? " disabled" : ""}>Full run</button>
-        <p>Checks roles, then also finds new companies, refreshes the ones you watch and plans who to contact. Takes a while and uses more AI.</p></div></details></span>`;
+        <p>Everything Check roles does, plus finding new companies, catching up on news at yours, and picking who to contact this week. Takes longer and uses more of your daily AI limit.</p></div></details></span>`;
 }
 function navSlim() { try { return localStorage.getItem("radar-nav") === "slim"; } catch (e) { return false; } }
 function drawNav() {
@@ -1027,7 +1030,7 @@ function copyText(k) {
 async function setMove(id, change) {
   if (await post("/api/move", { id, ...change })) { toast(change.status === "done" ? "Logged. Set the outcome when you hear back" : "Saved"); load(); }
 }
-async function setPerson(id, stage) { if (await post("/api/person", { id, stage })) { toast("Moved to " + stage); load(); } }
+async function setPerson(id, stage) { if (await post("/api/person", { id, stage })) { toast("Moved to " + personLabel(stage)); load(); } }
 async function setDegree(id, value) {
   const p = S.people[id], sel = value === undefined ? (p.degree || "") : value, via = (document.getElementById("via-" + id) || {}).value || "";
   if (await post("/api/person", { id, degree: sel ? Number(sel) : null, via })) { toast(sel ? "Distance confirmed" : "Cleared"); load(); }
@@ -1036,7 +1039,7 @@ const STEP_MARK = { done: "✓", running: "●", failed: "✗", skipped: "–", 
 const JOB = {  // what each job is called while it runs, once it's done, and what it's doing
   scan: { now: "Checking roles", done: "Check roles", what: "Reading your job boards, feeds and email, then scoring anything new. Usually about 2 minutes.", link: ["#roles", "Open Role Inbox"] },
   sources: { now: "Checking job sources", done: "Job sources check", what: "Asking the job sources that are due for new roles, then scoring them. This can take a while.", link: ["#roles", "Open Role Inbox"] },
-  run: { now: "Full run", done: "Full run", what: "Checks for roles, then finds and refreshes companies and plans your moves.", link: ["#week", "See this week's moves"] },
+  run: { now: "Full run", done: "Full run", what: "Everything Check roles does, plus finding new companies, catching up on news at yours, and picking who to contact this week. Takes longer and uses more of your daily AI limit.", link: ["#week", "See who to contact"] },
 };
 const jobName = (j, k) => (JOB[j] || {})[k] || j;
 const elapsed = iso => {
@@ -1073,7 +1076,7 @@ function drawProgress() {
   const failed = (r.steps || []).filter(x => x.status === "failed"), [href, label] = (JOB[r.job] || {}).link || ["#roles", "Open Role Inbox"];
   el.className = "progress " + (r.ok ? "ok" : "bad");
   el.innerHTML = `<div class="prog-head"><span class="prog-mark" aria-hidden="true">${r.ok ? "✓" : "✗"}</span>
-      <b>${esc(jobName(r.job, "done"))} ${r.ok ? "finished" : "didn't finish cleanly"}</b><span class="sub">${ago(r.at)}</span>
+      <b>${esc(jobName(r.job, "done"))} ${r.ok ? "finished" : "ran into a problem"}</b><span class="sub">${ago(r.at)}</span>
       <span class="spacer"></span>${r.ok ? `<a href="${href}" onclick="dismissRun(${jsq(r.at)})">${label}</a>` : ""}
       <button onclick="dismissRun(${jsq(r.at)})" aria-label="Dismiss">Dismiss</button></div>
     <div class="prog-what">${esc(r.summary || "")}${failed.length ? `. Failed: ${esc(failed.map(x => x.name + (x.detail ? ` (${x.detail})` : "")).join("; "))}` : ""}</div>`;
@@ -1087,7 +1090,7 @@ function watchRun() {  // while anything runs, check every few seconds, whoever 
     if ((S.running || []).length) return;
     clearInterval(watching); watching = null;
     const r = lastFinished();
-    if (r) toast(`${jobName(r.job, "done")} ${r.ok ? "finished" : "didn't finish cleanly"}: ${r.summary}`.slice(0, 320));
+    if (r) toast(`${jobName(r.job, "done")} ${r.ok ? "finished" : "ran into a problem"}: ${r.summary}`.slice(0, 320));
   }, 4000);
 }
 async function startRun(job) {
@@ -1130,7 +1133,7 @@ async function dismissEvent(id) { if (await post("/api/event", { id, dismissed: 
 async function setTier(name, tier) { if (await post("/api/account", { name, tier })) { toast(`${name} is tier ${tier}`); load(); } }
 async function setFavourite(name, favourite) { if (await post("/api/account", { name, favourite })) { toast(favourite ? `${name} is a favourite` : "Removed from favourites"); load(); } }
 async function vetoCo(name) {
-  if (!confirm(`Stop watching ${name}? It won't be re-added.`)) return;
+  if (!confirm(`Remove ${name}? Gus stops checking it and won't suggest it again.`)) return;
   if (await post("/api/company/veto", { name })) { toast(`Removed ${name}`); load(); }
 }
 
