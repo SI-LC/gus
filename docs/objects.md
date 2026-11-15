@@ -25,7 +25,9 @@ copy furthest along and moving its events and moves across.
 | `history` | `[{stage, at}]`, appended on every stage change |
 | `score`, `why`, `flags` | Triage: 1–10 against the profile, null until scored; under 5 goes straight to `skipped`, except at a favourite company |
 | `score_before_salary` | When a stated salary lowered the score |
-| `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand) |
+| `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand). An `adzuna` or `jsearch` role that Gus then finds on the employer's own board (a scan absorbs the board's ad, or `radar.links` finds it there) becomes `board`, keeping its id |
+| `found_via` | Where a role that's now `board` was first found (`adzuna` or `jsearch`) |
+| `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page: the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
 | `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role |

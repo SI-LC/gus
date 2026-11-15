@@ -6,6 +6,7 @@ on the record Gus already has. `dedupe` merges what slipped through before.
 
     python3 -m radar.jobs dedupe            # show the duplicates, change nothing
     python3 -m radar.jobs dedupe --apply    # merge them
+    python3 -m radar.jobs settle            # job site roles since found on the employer's board become board roles (each scan does this too)
     python3 -m radar.jobs add '{"company": "Acme", "title": "Product Manager", "location": "London", "url": "https://acme.example/jobs/1"}'
                                             # how an agent adds a role it found on the web: checked, never written by hand
 """
@@ -124,6 +125,33 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
     return yours or by_key
 
 
+JOB_SITES = ("adzuna", "jsearch")  # sources that only ever give a job site's copy of an ad
+
+
+def to_board(job: dict, url: str | None = None) -> bool:
+    """A role a job site found, now found on the employer's own board, becomes a board role: the board's link, no job site
+    label. `found_via` keeps the job site and `source_url` its link; the id stays, so nothing pointing at the role breaks."""
+    if job.get("source") not in JOB_SITES:
+        return False
+    job["found_via"], job["source"], job["link_kind"] = job["source"], "board", "company"
+    if url and url != job.get("url"):
+        job.setdefault("source_url", job.get("url"))
+        job["url"] = url
+    return True
+
+
+def board_sighting(job: dict) -> str | None:
+    """The link of this role on the employer's own board, if Gus has found it there."""
+    if job.get("board") and job.get("link_kind") == "company":  # radar.links found it on the board and pointed the role there
+        return job.get("url")
+    return next((a.get("url") for a in (job.get("also") or {}).values() if a.get("source") == "board" and a.get("url")), None)
+
+
+def settle_sources(store: dict) -> list[str]:
+    """Roles a job site found and Gus has since found on the board, from before board sightings became board roles. Returns their ids."""
+    return [jid for jid, j in store.items() if j.get("source") in JOB_SITES and (url := board_sighting(j)) and to_board(j, url)]
+
+
 def absorb(existing: dict, role: dict, now: str) -> None:
     """A second sighting of a role Gus has: remembered on the record, which fills any gaps from it."""
     rid = role.get("id")
@@ -132,6 +160,8 @@ def absorb(existing: dict, role: dict, now: str) -> None:
         if existing.get("stage") in PURSUING and rid not in (existing.get("also") or {}) and (existing.get("ad_closed") or board_of(rid) in boards):
             existing["readvertised"] = now  # a new ad for the role you're pursuing, where its old one was or after that closed
         existing.setdefault("also", {})[rid] = {k: v for k, v in (("url", role.get("url")), ("source", role.get("source")), ("seen", now)) if v}
+        if role.get("source") == "board":
+            to_board(existing, role.get("url"))  # the employer's own ad: shown as theirs, at their link
     existing["last_seen"] = now
     for k in ("location", "posted", "salary_max", "ref"):
         if not existing.get(k) and role.get(k):
@@ -299,6 +329,11 @@ def main():
             sys.exit("add takes one JSON object, or a list of them")
         for what, detail in add(rows if isinstance(rows, list) else [rows]):
             print({"added": "added", "have": "already have it, as", "no": "not added:"}[what], detail)
+        return
+    if sys.argv[1:2] == ["settle"]:
+        with locked(JOBS) as store:
+            done = settle_sources(store)
+        print(f"{len(done)} roles a job site found are now board roles" + (f": {', '.join(done)}" if done else ""))
         return
     if len(sys.argv) < 2 or sys.argv[1] != "dedupe":
         print(__doc__)
