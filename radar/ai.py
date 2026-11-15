@@ -30,7 +30,7 @@ class LoginExpired(RuntimeError):
     """The Claude sign-in Gus uses has expired; nothing that needs AI works until you sign in again from the cockpit."""
 
 
-SIGN_IN = "Sign in again from Settings → AI in the cockpit."
+SIGN_IN = "Sign in again in Settings, AI."
 EXPIRED_FLAG = DATA / "login_expired"  # {"since": ..., "notified": date}: there while the last Claude run failed for want of a login
 _EXPIRED = re.compile(r"oauth|authenticat|logged in|log in|/login|session expired", re.I)
 
@@ -51,8 +51,8 @@ def _login_failed(detail: str) -> LoginExpired:
     today = str(date.today())
     if state.get("notified") != today:
         state["notified"] = today
-        notify("Claude sign-in expired", "", f"Gus can't score roles or run agents until you sign in again. {SIGN_IN}",
-               click=f"{cockpit_url().rstrip('/')}/#settings/ai" if cockpit_url() else "")
+        here = f"{cockpit_url().rstrip('/')}/#settings/ai" if cockpit_url() else ""
+        notify("Your Claude sign-in has expired", "", "New roles won't be scored until you sign in again. " + ("Tap to sign in." if here else SIGN_IN), click=here)
     EXPIRED_FLAG.parent.mkdir(parents=True, exist_ok=True)
     EXPIRED_FLAG.write_text(json.dumps(state))
     return LoginExpired(f"Claude sign-in has expired. {SIGN_IN} ({detail.strip()[:200]})")
@@ -75,7 +75,10 @@ def check_budget(cfg):
             flag.parent.mkdir(parents=True, exist_ok=True)
             flag.write_text(today)
             from radar.notify import notify
-            notify("Gus: AI paused", "", "AI runs are off (limit $0)." if not limit else f"AI runs are paused until tomorrow (limit ${limit:g}).")
+            if limit:
+                notify(f"Today's ${limit:g} AI limit is used up", "", "Scoring starts again tomorrow. Raise the limit in Settings, AI.")
+            else:
+                notify("AI is off", "", "New roles aren't being scored. Turn it on in Settings, AI.")
         raise BudgetReached("AI runs are off: the daily limit is $0" if not limit else f"Daily AI limit of ${limit:g} reached")
 
 

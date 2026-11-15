@@ -502,8 +502,8 @@ def allowed(headers) -> tuple[bool, str]:
         if len(_wrong) >= MAX_TRIES:
             _locked_until, _wrong[:] = t + LOCKED_FOR, []
             from radar.notify import notify
-            notify("Gus: Claude connection locked", f"{MAX_TRIES} wrong tokens in a minute",
-                   f"Nothing can connect for {LOCKED_FOR // 60} minutes. If this wasn't you, replace the token under Settings, Claude.")
+            notify(f"Someone tried {MAX_TRIES} wrong Claude Code tokens", "",
+                   f"Claude can't connect for {LOCKED_FOR // 60} minutes. If this wasn't you, replace the token in Settings, Claude.")
     return False, "Wrong or missing token."
 
 

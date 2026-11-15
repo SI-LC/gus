@@ -95,7 +95,9 @@ class Scoring(unittest.TestCase):
         self.notify.assert_not_called()
         self.scored(8)
         self.assertEqual(self.notify.call_count, 1)
-        self.assertEqual(self.notify.call_args[0][0], "8/10 · Acme")
+        title, subtitle, message = self.notify.call_args[0][:3]
+        self.assertEqual((title, subtitle), ("Acme", "Product Manager"))
+        self.assertTrue(message.startswith("Scores 8 of 10. "))
 
     def test_prompt_is_filled_in_and_limited(self):
         roles = [role(n) for n in range(20)]

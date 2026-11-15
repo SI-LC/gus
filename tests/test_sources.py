@@ -213,6 +213,10 @@ class Limits(unittest.TestCase):
             sources.tell_limit("adzuna", st, row)
             sources.tell_limit("adzuna", st, row)
         self.assertEqual(told.call_count, 1)
+        title, _, message = told.call_args[0]
+        self.assertEqual(title, "Adzuna's allowance is used up")
+        self.assertIn("daily allowance", message)
+        self.assertNotIn("dayly", message)
 
 
 class Reading(unittest.TestCase):

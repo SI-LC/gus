@@ -38,6 +38,7 @@ FIELDS = ["account", "type", "summary", "url", "date"]
 ALERT_TYPES = ["post_hiring", "leader_hire", "role_posted"]  # the news that most often means a role is coming
 ALERT_WINDOW_DAYS = 2  # only news recorded this recently is pushed, so a backlog never floods the phone
 ALERT_MAX = 5  # pushes per run; the rest go in one summary
+ALERT_SAYS = {"post_hiring": "{} posted about hiring", "leader_hire": "{} has a new product leader", "role_posted": "{} posted a role"}
 
 
 def today():
@@ -195,10 +196,11 @@ def alert(stored: dict | None = None, jobs: dict | None = None) -> list[str]:
             e["notified"] = str(today())
             sent.append(eid)
             if len(sent) <= ALERT_MAX:
-                notify(f"{LABEL.get(e['type'], e['type'])} · {e['account']}", "", (e.get("summary") or "")[:300], e.get("url") or "")
+                notify(ALERT_SAYS[e["type"]].format(e["account"]), "", (e.get("summary") or "")[:300], e.get("url") or "", action="Read the news")
         if len(sent) > ALERT_MAX:
             more = [events[i]["account"] for i in sent[ALERT_MAX:]]
-            notify(f"Gus: {len(more)} more hiring signals", "", ", ".join(dict.fromkeys(more))[:900])
+            names = list(dict.fromkeys(more))
+            notify(f"{len(names)} more compan{'y has' if len(names) == 1 else 'ies have'} hiring news", "", (", ".join(names) + ". They're in Companies.")[:900])
     return sent
 
 
