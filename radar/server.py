@@ -264,7 +264,7 @@ def role_contact(body):
     with locked(JOBS) as store:
         j = store.get(job_id)
         if not j:
-            return {"error": "No such role"}
+            return {"error": "Gus can't find that role any more. Reload the page."}
         contacts = j.setdefault("contacts", {})
         if sent:
             contacts.setdefault(pid, now())
@@ -294,7 +294,7 @@ def update_event(body):
     from radar import events as E
     if not body.get("id"):
         if body.get("account") not in read(COMPANIES, {}):
-            return {"error": "No such account"}
+            return {"error": "Gus can't find that company any more. Reload the page."}
         try:
             eid = E.add(str(body["account"]), str(body.get("type") or ""), str(body.get("summary") or ""),
                         str(body.get("url") or ""), str(body.get("date") or ""))
@@ -312,7 +312,7 @@ def update_event(body):
         if body.get("date"):
             d = E.parse_date(body["date"])
             if not d:
-                return {"error": "needs a real date (YYYY-MM-DD)"}
+                return {"error": "Needs a real date"}
             e["date"] = str(d)
         if "dismissed" in body:  # a dismissed event stops counting, like a role whose ad closed
             if e.get("type") == "role_posted" and e.get("job_id"):
@@ -385,7 +385,7 @@ def update_account(body):
     with locked(COMPANIES) as companies:
         c = companies.get(body.get("name"))
         if not c:
-            return {"error": "No such account"}
+            return {"error": "Gus can't find that company any more. Reload the page."}
         if body.get("tier") in ("A", "B", "C"):
             c["tier"], c["tier_locked"] = body["tier"], True
         if "favourite" in body:
@@ -487,14 +487,14 @@ DETAILS = {"title": 200, "location": 120}
 def get_job(jid):
     """One role with everything on it, its description included: /api/state leaves that out, as it's most of the file."""
     j = read(JOBS, {}).get(jid)
-    return {"ok": True, "job": j} if j else {"error": "No such role"}
+    return {"ok": True, "job": j} if j else {"error": "Gus can't find that role any more. Reload the page."}
 
 
 def update_job(body):
     with locked(JOBS) as store:
         j = store.get(body.get("id"))
         if not j:
-            return {"error": "No such role"}
+            return {"error": "Gus can't find that role any more. Reload the page."}
         reason = body.get("skip_reason") or None
         if reason and reason not in SKIP_REASONS:
             return {"error": f"No such reason: {reason}. The reasons are {', '.join(SKIP_REASONS)}"}
@@ -665,13 +665,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, role_contact(body))
         if path == "/api/company/veto":
             if body.get("name") not in read(COMPANIES, {}):
-                return self.send(200, {"error": "No such account"})
+                return self.send(200, {"error": "Gus can't find that company any more. Reload the page."})
             veto(str(body["name"]))
             return self.send(200, {"ok": True})
         if path == "/api/company/board":
             from radar.companies import accept_board, reject_board
             if body.get("name") not in read(COMPANIES, {}):
-                return self.send(200, {"error": "No such account"})
+                return self.send(200, {"error": "Gus can't find that company any more. Reload the page."})
             return self.send(200, {"ok": (accept_board if body.get("accept") else reject_board)(str(body["name"]))})
         try:
             if path == "/api/settings":
