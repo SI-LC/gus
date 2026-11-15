@@ -36,7 +36,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from radar import accounts as A, events as E, server, service, settings
+from radar import accounts as A, changes, events as E, server, service, settings
 from radar.jobs import same_company
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_KINDS, PERSON_STAGES, SKIP_REASONS
@@ -139,7 +139,26 @@ def update_role(a):
         return {"error": "Give a stage, a note or a reason for skipping"}
     if "stage" in a and a["stage"] not in JOB_STAGES:
         return {"error": f"No such stage: {a['stage']}. The stages are {', '.join(JOB_STAGES)}"}
-    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason") if k in a}}))
+    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason") if k in a}},
+                                    actor="claude", why=" ".join(str(a["reason"]).split())[:300]))
+
+
+def list_changes(a):
+    if a.get("since") and not changes.when(a["since"]):
+        return {"error": "since should be a day (2026-11-14) or a time (2026-11-14T09:00:00Z)"}
+    if a.get("until") and not changes.when(a["until"]):
+        return {"error": "until should be a day (2026-11-14) or a time (2026-11-14T09:00:00Z)"}
+    if a.get("who") and a["who"] not in changes.ACTORS:
+        return {"error": f"who should be {', '.join(changes.ACTORS)}, not {a['who']}"}
+    found = changes.find(a.get("since"), a.get("until"), a.get("who"), a.get("role_id"), JOBS)
+    n = limit_of(a, 200)
+    rows = [{"change_id": c.get("id"), "at": c.get("at"), "role_id": c.get("role"), "company": c.get("company"), "title": c.get("title"),
+             "field": c.get("field"), "old": c.get("old"), "new": c.get("new"), "who": c.get("actor"), "reason": c.get("reason")}
+            for c in changes.named(found[:n], read(JOBS, {}))]
+    out = {"changes": rows, "total": len(found), "about_this_text": UNTRUSTED}
+    if len(found) > n:
+        out["more"] = f"Showing the newest {n} of {len(found)}. Narrow it with since, until, who or role_id."
+    return out
 
 
 # ---- companies ----
@@ -342,8 +361,18 @@ TOOLS = {
                      "careers_url": _s("The company's careers page, which finds its board more surely.")}, ["company", "title"], create_role),
     "update_role": ("Move a role to another stage, set the user's note on it, or record why the user skipped it. \"Applied to <role>\" is stage \"applied\": the date is recorded.",
                     {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note."),
-                     "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role.", enum=list(SKIP_REASONS))},
-                    ["role_id"], update_role),
+                     "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role.", enum=list(SKIP_REASONS)),
+                     "reason": _s("Why you're making this change, in one short sentence, such as \"the ad has closed\". Required: the user sees it "
+                                  "in Activity, beside the change.")},
+                    ["role_id", "reason"], update_role),
+    "list_changes": ("What changed on the user's roles, newest first: each change to a stage, a reason for skipping, a note or a folder, with "
+                     "the value before and after, who made it (you: the user in the cockpit, claude, or triage, which skips roles scoring "
+                     "under 5) and why. \"What changed since yesterday?\" is this with no arguments: the last 24 hours. A replaced note's "
+                     "old text is in old.",
+                     {"since": _s("From this day or time (2026-11-14 or 2026-11-14T09:00:00Z). Left out, the last 24 hours."),
+                      "until": _s("Up to this day or time, not including it."), "who": _s("Only changes by this one.", enum=list(changes.ACTORS)),
+                      "role_id": _s("Only changes to this role, from list_roles."), "limit": {**LIMIT, "description": "The most to return. Left out, 200."}},
+                     [], list_changes),
     "list_companies": ("The companies the user targets, by tier, with how many fresh events each has.",
                        {"tier": _s("Only this tier.", enum=["A", "B", "C"]), "query": _s("Words to find in the name or product."), "limit": LIMIT},
                        [], list_companies),

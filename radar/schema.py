@@ -101,6 +101,32 @@ def check_record(name: str, key: str, rec, companies: dict, people: dict, events
     return errs
 
 
+CHANGE_FIELDS = ["stage", "skip_reason", "note", "folder"]
+CHANGE_ACTORS = ["you", "claude", "triage"]
+
+
+def check_changes(path: Path) -> list[str]:
+    """The change log, line by line: each a whole object with an id, a time, a role, a field and who made it."""
+    errs = []
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        try:
+            c = json.loads(line)
+        except ValueError:
+            errs.append(f"line {n}: not valid JSON")
+            continue
+        if not isinstance(c, dict):
+            errs.append(f"line {n}: not an object")
+            continue
+        errs += [f"line {n}: missing {f}" for f in ("id", "at", "role", "field", "actor") if not c.get(f)]
+        if c.get("field") and c["field"] not in CHANGE_FIELDS:
+            errs.append(f"line {n}: field={c['field']!r} isn't one of {CHANGE_FIELDS}")
+        if c.get("actor") and c["actor"] not in CHANGE_ACTORS:
+            errs.append(f"line {n}: actor={c['actor']!r} isn't one of {CHANGE_ACTORS}")
+        if c.get("actor") == "claude" and not c.get("reason"):
+            errs.append(f"line {n}: a change by Claude needs a reason")
+    return errs
+
+
 def check(data: Path = DATA) -> dict[str, list[str]]:
     """{object: [problems]} for every data file that exists. Empty means all good."""
     loaded = {}
@@ -125,6 +151,8 @@ def check(data: Path = DATA) -> dict[str, list[str]]:
             errs = [f"{k}: {e}" for k, r in recs.items() for e in check_record(name, k, r, companies, people, events)]
             if errs:
                 out[name] = errs
+    if (data / "changes.jsonl").exists() and (errs := check_changes(data / "changes.jsonl")):
+        out["changes"] = errs
     return out
 
 

@@ -1,0 +1,17 @@
+id: see-what-changed
+requirement: I can see what changed on my roles this week, who changed it and why, newest first.
+given: scanned
+check:
+  - Claude moves "Senior Product Manager" to applied, saying "you applied on Friday"
+  - Claude moves "Senior Product Manager" to skipped, saying "ad closed"
+  - open Activity
+  - see "What changed"
+  - see "Today"
+  - see "Claude moved"
+  - see "applied"
+  - see "skipped"
+  - see "ad closed"
+  - '"ad closed" appears before "you applied on Friday"'
+  - '"Job boards" appears before "Claude moved"'
+  - '"Claude moved" appears before "Claude today"'
+judge: Can I tell at a glance what changed today, who did it and why, without opening each role?

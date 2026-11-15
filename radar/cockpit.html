@@ -759,10 +759,74 @@ const V = {
       ${row(h.x && h.x.day ? "done" : "", "X", h.x && h.x.day ? `${h.x.used || 0} posts read today` : `Off. <a href="#settings/sources">Turn it on in Settings</a>`)}
       ${row(h.claude.token && h.claude.token.old ? "warm" : h.claude.last_used ? "done" : "", "Claude connection", `${h.claude.last_used ? "Last connected " + ago(h.claude.last_used) : "Not connected yet"}${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}`)}
       ${failures(errs, "Job boards")}${failures(feedErrs, "News feeds")}
+      <div class="section">What changed</div>${whatChanged()}
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       ${costs()}`;
   },
 };
+
+// What changed: the last week of the change log, fetched when Activity opens (it isn't in /api/state)
+let CHG = null, chgAt = 0;
+const chgOpen = new Set();
+const WHO = { you: "You", claude: "Claude", triage: "Triage" };
+const STAGE_NAME = { new: "New", skipped: "Skipped", ...LABEL };
+async function loadChanges() {
+  chgAt = Date.now();
+  const d = await fetch("/api/changes", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (d) { CHG = d; if ((location.hash || "").startsWith("#health")) render(true); }
+}
+function openChanged(id) {  // a role on your board opens there, as its card does; any other shows what it is
+  const j = S.jobs.find(o => o.id === id);
+  if (!j || !PIPE.includes(j.stage)) return roleDetails(id);
+  if (location.hash === "#pipeline") return openRole(id);
+  addEventListener("hashchange", () => openRole(id), { once: true });
+  location.hash = "pipeline";
+}
+function toggleChg(k) { chgOpen.has(k) ? chgOpen.delete(k) : chgOpen.add(k); render(true); }
+const chgDay = iso => {
+  const d = new Date(iso), day = x => x.toDateString(), t = new Date();
+  return day(d) === day(t) ? "Today" : day(d) === day(new Date(t - DAY)) ? "Yesterday" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+};
+const chgTime = iso => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const chgRole = c => c.title ? `<b><button class="link" onclick="openChanged(${jsq(c.role)})">${esc(c.title)}</button></b> <span>${esc(c.company || "")}</span>`
+  : `<b>A role no longer in Gus</b>`;
+const skipName = r => r ? esc((S.labels.skip_reasons[r] || r).toLowerCase()) : "";
+function chgLine(c, all) {
+  const who = WHO[c.actor] || "Someone", why = c.reason ? `: <b>${esc(c.reason)}</b>` : "", at = ` · ${chgTime(c.at)}`;
+  let what, was = "";
+  if (c.field === "stage") {
+    const r = all.find(o => o.role === c.role && o.at === c.at && o.field === "skip_reason" && o.new);
+    what = `${who} moved it from ${esc(STAGE_NAME[c.old] || c.old || "nowhere")} to ${esc(STAGE_NAME[c.new] || c.new)}${r ? ` (${skipName(r.new)})` : ""}`;
+  } else if (c.field === "skip_reason") what = `${who} said why it was skipped: ${skipName(c.new)}`;
+  else if (c.field === "note") {
+    what = `${who} ${!c.old ? "added a note" : !c.new ? "removed your note" : "replaced your note"}`;
+    if (c.old) was = `<button class="was${chgOpen.has(c.id) ? " all" : ""}" aria-expanded="${chgOpen.has(c.id)}" title="The note before" onclick="toggleChg(${jsq(c.id)})"><span>${esc(c.old)}</span></button>`;
+  } else what = c.new ? `${who} set its folder to ${esc(c.new)}` : `${who} cleared its folder`;
+  return `<article class="mv"><div class="mv-row"><span class="mv-who">${chgRole(c)}</span><span class="mv-because">${what}${why}${at}</span></div>${was}</article>`;
+}
+function whatChanged() {
+  if (!CHG || Date.now() - chgAt > 30000) loadChanges();
+  if (!CHG) return `<div class="empty">Loading what changed…</div>`;
+  const all = CHG.changes;  // a reason for skipping given with the skip shows on the skip; one cleared with a move isn't news
+  const shown = all.filter(c => c.field !== "skip_reason" || (c.new && !all.some(o => o.role === c.role && o.at === c.at && o.field === "stage")));
+  if (!shown.length) return `<div class="empty">Nothing changed on your roles this week.</div>`;
+  const days = new Map();
+  for (const c of shown) { const d = chgDay(c.at); if (!days.has(d)) days.set(d, []); days.get(d).push(c); }
+  return [...days].map(([d, cs]) => {
+    const skips = cs.filter(c => c.actor === "triage"), k = "triage:" + d, open = chgOpen.has(k);
+    let grouped = false;
+    const lines = cs.map(c => {
+      if (c.actor !== "triage") return chgLine(c, all);
+      if (grouped) return "";
+      grouped = true;
+      return `<article class="mv${open ? " open" : ""}"><button class="mv-row" onclick="toggleChg(${jsq(k)})" aria-expanded="${open}">
+        <span class="mv-who"><b>Triage skipped ${skips.length} role${skips.length === 1 ? "" : "s"}</b> <span>scoring under 5</span></span>
+        <span class="mv-because">Last at ${chgTime(skips[0].at)}</span><span class="mv-tog">${open ? "Close" : "Open"}</span></button>
+        ${open ? `<div class="mv-body">${skips.map(c => `<div class="follow">${chgRole(c)} <span class="sub">· ${esc(c.reason || "")}</span></div>`).join("")}</div>` : ""}</article>`;
+    }).join("");
+    return `<h3 class="day">${d}</h3>${lines}`;
+  }).join("") + (CHG.total > all.length ? `<p class="sub">Showing the newest ${all.length} of ${CHG.total} changes this week.</p>` : "");
+}
 
 let SET = null;
 const fieldRow = f => `<div class="field"><label for="f_${f.key}">${esc(f.label)}</label>

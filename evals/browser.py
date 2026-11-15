@@ -5,6 +5,7 @@ fails the case too. See evals/README.md.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -64,11 +65,32 @@ def step(page, text):
         page.route("**/api/**", lambda r: r.abort() if r.request.method == "POST" else r.fallback())
     elif m := re.fullmatch(r'message says "(.+)"', text):
         page.locator("#toast.on", has_text=m[1]).wait_for(timeout=WAIT_MS)
+    elif m := re.fullmatch(r'Claude moves "(.+)" to (\w+), saying "(.+)"', text):  # over MCP, as Claude in a chat would
+        claude_moves(page, *m.groups())
     elif text == "reload":
         page.reload()
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)
     else:
         raise ValueError(f"Unknown step: {text}")
+
+
+def claude_moves(page, title, stage, reason):
+    """Turn on "Let Claude make changes", find the role by its title and move it through /mcp, with a reason."""
+    base = "/".join(page.url.split("/")[:3])
+    page.request.post(f"{base}/api/settings", data={"changes": {"mcp_allow_writes": True}})
+
+    def tool(name, arguments):
+        reply = page.request.post(f"{base}/mcp", data={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                                         "params": {"name": name, "arguments": arguments}}).json()
+        out = json.loads(reply["result"]["content"][0]["text"])
+        assert "error" not in out, f"{name}: {out['error']}"
+        return out
+
+    roles = [r for r in tool("list_roles", {"query": title, "stage": ["new", "shortlisted", "preparing", "applied",
+                                                                    "interviewing", "closed", "skipped"]})["roles"]
+             if r.get("title") == title]
+    assert roles, f'Claude can\'t find "{title}"'
+    tool("update_role", {"role_id": roles[0]["role_id"], "stage": stage, "reason": reason})
 
 
 def fresh_world(given, scanned) -> World:
