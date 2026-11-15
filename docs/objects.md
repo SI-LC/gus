@@ -161,6 +161,25 @@ The inbox: a raw item from a feed or social search, before anyone has looked at 
 A signal is never acted on itself. One that matters becomes an event (or a role) and points at it; the rest are ignored.
 The funnel's first step counts fresh events, not signals.
 
+## Change (`data/changes.jsonl`)
+
+The log of changes to your roles: one JSON object per line, appended, never edited. Each line is one field on one role.
+
+| Field | Meaning |
+|---|---|
+| `id` | `chg_<YYYYMMDDTHHMMSS>_<4 hex>`, sortable |
+| `at` | When, ISO time, UTC |
+| `role` | The role's id in `jobs.json` |
+| `field` | `stage`, `skip_reason`, `note` or `folder` |
+| `old`, `new` | The value before and after; `null` when there was none. A replaced note keeps its full old text here |
+| `actor` | `you` (the cockpit), `claude` (MCP) or `triage` (the automatic skip of a role scoring under 5) |
+| `reason` | Why, in a sentence. Always there from Claude, whose `update_role` needs one; `scored N/10` from triage |
+
+Only `server.update_job` and triage's skip write it, while holding the jobs lock. What the ad says (description,
+`last_seen`, a role you added by hand's details) isn't logged. A role's `history` stays what you did to its stage: triage's
+skip is in the log, not in `history`. Activity shows the last 7 days (`/api/changes`), and Claude reads it with
+`list_changes`.
+
 ## Everything else
 
 - `data/emails.json`, `data/meetings.json`: filtered inbox snippets and calendar invites, processed by an agent with no internet access.

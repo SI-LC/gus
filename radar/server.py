@@ -18,7 +18,7 @@ import socket
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -28,7 +28,7 @@ from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS, WATCHLIST
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASONS
-from radar import firstrun, links, service, settings, sources, usage
+from radar import changes, firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked, read
 
@@ -511,51 +511,68 @@ def get_job(jid):
     return {"ok": True, "job": j} if j else {"error": "Gus can't find that role any more. Reload the page."}
 
 
-def update_job(body):
+def update_job(body, actor="you", why=None):
+    """Change a role as the cockpit or Claude asks. Every change to its stage, reason, note or folder goes in the log,
+    with who asked (`you` or `claude`) and, from Claude, why."""
     with locked(JOBS) as store:
         j = store.get(body.get("id"))
         if not j:
             return {"error": "Gus can't find that role any more. Reload the page."}
-        reason = body.get("skip_reason") or None
-        if reason and reason not in SKIP_REASONS:
-            return {"error": f"No such reason: {reason}. The reasons are {', '.join(SKIP_REASONS)}"}
-        if reason and (body.get("stage") if body.get("stage") in JOB_STAGES else j.get("stage")) != "skipped":
-            return {"error": "Only a role you skipped can have a reason for skipping it"}
-        if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
-            if j.get("source") != "manual":
-                return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
-            changes = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
-            if "title" in changes and not changes["title"]:
-                return {"error": "Needs a title"}
-            if "url" in body:
-                changes["url"] = str(body["url"] or "").strip()
-                if changes["url"] and not re.match(r"https?://\S+$", changes["url"]):
-                    return {"error": "The link needs to start with http"}
-            if "description" in body:
-                changes["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
-                if changes["description"] != (j.get("description") or ""):
-                    changes.update(score=None, why=None, flags=[])  # scored on the old words: the next scan scores it again
-                    j.pop("score_before_salary", None)
-                    j.pop("pruned", None)
-            j.update(changes)
-        if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
-            j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
-            j["stage"] = body["stage"]
-            if j["stage"] != "skipped":
-                j.pop("skip_reason", None)  # restored or taken up: the reason went with the skip
-        if "skip_reason" in body:
-            if reason:
-                j["skip_reason"] = reason
-            else:
-                j.pop("skip_reason", None)
-        if "note" in body:
-            j["note"] = str(body["note"])[:2000]
-        if "folder" in body:
-            folder, problem = clean_folder(body["folder"])
-            if problem:
-                return {"error": problem}
-            j["folder"] = folder
-        return {"ok": True, "job": {k: v for k, v in j.items() if k != "description"}}
+        before = changes.decisions(j)
+        out = edit_job(j, body)
+        changes.append(changes.diff(body["id"], before, changes.decisions(j), actor, why), JOBS)
+        return out
+
+
+def recent_changes(days=7, most=2000):
+    """The last week of the change log, newest first, each change with its role's company and title."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    found = changes.find(since, jobs=JOBS)
+    return {"changes": changes.named(found[:most], read(JOBS, {})), "total": len(found)}
+
+
+def edit_job(j, body):
+    """What update_job does to the role itself, with its checks. Saved by update_job, refusals included."""
+    reason = body.get("skip_reason") or None
+    if reason and reason not in SKIP_REASONS:
+        return {"error": f"No such reason: {reason}. The reasons are {', '.join(SKIP_REASONS)}"}
+    if reason and (body.get("stage") if body.get("stage") in JOB_STAGES else j.get("stage")) != "skipped":
+        return {"error": "Only a role you skipped can have a reason for skipping it"}
+    if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
+        if j.get("source") != "manual":
+            return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
+        edits = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
+        if "title" in edits and not edits["title"]:
+            return {"error": "Needs a title"}
+        if "url" in body:
+            edits["url"] = str(body["url"] or "").strip()
+            if edits["url"] and not re.match(r"https?://\S+$", edits["url"]):
+                return {"error": "The link needs to start with http"}
+        if "description" in body:
+            edits["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
+            if edits["description"] != (j.get("description") or ""):
+                edits.update(score=None, why=None, flags=[])  # scored on the old words: the next scan scores it again
+                j.pop("score_before_salary", None)
+                j.pop("pruned", None)
+        j.update(edits)
+    if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
+        j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
+        j["stage"] = body["stage"]
+        if j["stage"] != "skipped":
+            j.pop("skip_reason", None)  # restored or taken up: the reason went with the skip
+    if "skip_reason" in body:
+        if reason:
+            j["skip_reason"] = reason
+        else:
+            j.pop("skip_reason", None)
+    if "note" in body:
+        j["note"] = str(body["note"])[:2000]
+    if "folder" in body:
+        folder, problem = clean_folder(body["folder"])
+        if problem:
+            return {"error": problem}
+        j["folder"] = folder
+    return {"ok": True, "job": {k: v for k, v in j.items() if k != "description"}}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -628,6 +645,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, get_job(parse_qs(urlparse(self.path).query).get("id", [""])[0]))
         if path == "/api/settings":
             return self.send(200, settings_payload())
+        if path == "/api/changes":  # Activity's What changed: the last week, asked for when Activity opens, not in /api/state
+            return self.send(200, recent_changes())
         if path == "/api/profile":
             return self.send(200, {"text": PROFILE.read_text() if PROFILE.exists() else ""})
         if path == "/api/run":

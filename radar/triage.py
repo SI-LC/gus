@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 
-from radar import ai, doing, salary
+from radar import ai, changes, doing, salary
 from radar.jobs import same_company
 from radar.notify import notify
 from radar.matching import load_config
@@ -74,8 +74,9 @@ def score_batch(profile_path, todo):
             if note:
                 j["score_before_salary"] = r["score"]
             yours = j.get("source") == "manual" or same_company(j.get("company")) in loved  # one you added, or at a favourite: yours to skip
-            if score < 5 and j.get("stage") == "new" and not yours:
+            if score < 5 and j.get("stage") == "new" and not yours:  # no history entry: history is what you did
                 j["stage"] = "skipped"
+                changes.append(changes.diff(r["id"], {"stage": "new"}, {"stage": "skipped"}, "triage", f"scored {score}/10"), JOBS)
             if score >= threshold:
                 alerts.append((j["company"], j["title"], f"Scores {score} of 10. {r['why']}", j["url"]))
     from radar import events

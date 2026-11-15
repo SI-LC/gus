@@ -17,7 +17,7 @@ from unittest import mock
 
 from radar import accounts as A, events as E, jobs as J, mcp, network, server, settings
 
-MATRIX = {"list_roles", "get_role", "create_role", "update_role",
+MATRIX = {"list_roles", "get_role", "create_role", "update_role", "list_changes",
           "list_companies", "get_company", "create_company", "update_company",
           "list_events", "create_event", "update_event",
           "list_people", "create_person", "update_person",
@@ -101,7 +101,7 @@ class Names(unittest.TestCase):
     def test_every_tool_is_one_of_four_verbs_and_an_object(self):
         for name in mcp.TOOLS:
             self.assertRegex(name, r"^(list|get|create|update)_[a-z]+$")
-        self.assertEqual({n.split("_")[1] for n in mcp.TOOLS if n.startswith("list_")}, {"roles", "companies", "events", "people", "moves"})
+        self.assertEqual({n.split("_")[1] for n in mcp.TOOLS if n.startswith("list_")}, {"roles", "changes", "companies", "events", "people", "moves"})
 
     def test_no_name_or_parameter_says_job_or_account(self):
         for name, (_d, props, need, _f) in mcp.TOOLS.items():
@@ -170,7 +170,7 @@ class Tools(World):
 
     def test_applying_to_a_role_records_the_date(self):
         self.writes()
-        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "applied", "note": "Sent Tuesday"})
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "applied", "note": "Sent Tuesday", "reason": "the user applied"})
         self.assertEqual(out["role"]["role_id"], "gh:acme:2")
         j = self.stored("jobs")["gh:acme:2"]
         self.assertEqual((j["stage"], j["note"], j["history"][-1]["stage"]), ("applied", "Sent Tuesday", "applied"))
@@ -180,9 +180,34 @@ class Tools(World):
     def test_a_skip_can_carry_the_users_reason(self):
         self.writes()
         self.assertIn("error", mcp.call("update_role", {"role_id": "gh:acme:2", "skip_reason": "pay"}))  # not skipped
-        mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "skip_reason": "pay"})
+        mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "skip_reason": "pay", "reason": "the pay is too low"})
         self.assertEqual(self.stored("jobs")["gh:acme:2"]["skip_reason"], "pay")
         self.assertEqual(mcp.call("list_roles", {"stage": "skipped"})["roles"][0]["skip_reason"], "pay")
+
+    def test_a_change_by_claude_needs_a_reason_and_is_logged_with_it(self):
+        self.writes()
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped"})
+        self.assertIn("reason", out["error"])
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+        mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "reason": "ad closed"})
+        out = mcp.call("list_changes", {})
+        self.assertEqual([(c["role_id"], c["field"], c["old"], c["new"], c["who"], c["reason"], c["company"], c["title"]) for c in out["changes"]],
+                         [("gh:acme:2", "stage", "shortlisted", "skipped", "claude", "ad closed", "Acme", "Group PM")])
+
+    def test_what_changed_can_be_narrowed_and_says_when_there_is_more(self):
+        self.writes()
+        for n in range(3):
+            mcp.call("update_role", {"role_id": "gh:acme:2", "note": f"note {n}", "reason": f"edit {n}"})
+        out = mcp.call("list_changes", {"limit": 2})
+        self.assertEqual([c["new"] for c in out["changes"]], ["note 2", "note 1"])  # newest first
+        self.assertEqual(out["changes"][0]["old"], "note 1")  # the text it replaced is kept
+        self.assertIn("2 of 3", out["more"])
+        self.assertEqual(mcp.call("list_changes", {"who": "you"})["changes"], [])
+        self.assertEqual(mcp.call("list_changes", {"role_id": "gh:acme:1"})["changes"], [])
+        self.assertEqual(mcp.call("list_changes", {"until": "2000-01-01"})["changes"], [])
+        self.assertEqual(mcp.call("list_changes", {"since": "2000-01-01"})["total"], 3)
+        self.assertIn("error", mcp.call("list_changes", {"since": "yesterday"}))
+        self.assertIn("error", mcp.call("list_changes", {"who": "nobody"}))
 
     def test_a_role_added_by_hand_joins_its_company(self):
         self.writes()
@@ -261,7 +286,7 @@ class Tools(World):
 
     def test_no_result_says_job_or_account(self):
         self.writes()
-        calls = [("list_roles", {}), ("get_role", {"role_id": "gh:acme:2"}), ("update_role", {"role_id": "gh:acme:2", "stage": "preparing"}),
+        calls = [("list_roles", {}), ("get_role", {"role_id": "gh:acme:2"}), ("update_role", {"role_id": "gh:acme:2", "stage": "preparing", "reason": "preparing"}),
                  ("create_role", {"company": "Acme", "title": "VP Product"}), ("list_companies", {}), ("get_company", {"company": "Acme"}),
                  ("list_events", {}), ("create_event", {"company": "Nobody", "type": "launch", "url": "https://x", "date": TODAY}),
                  ("list_people", {}), ("list_moves", {}), ("update_move", {"move_id": self.move_id, "status": "done"}), ("get_run", {})]
@@ -272,7 +297,7 @@ class Tools(World):
 
     def test_every_call_is_logged_by_name_and_target_only(self):
         self.writes()
-        mcp.call("update_role", {"role_id": "gh:acme:2", "note": "a private thought"}, "me@example.com")
+        mcp.call("update_role", {"role_id": "gh:acme:2", "note": "a private thought", "reason": "asked"}, "me@example.com")
         mcp.call("get_role", {"role_id": "nope"})
         rows = self.log()
         self.assertEqual([(r["tool"], r["target"], r["ok"]) for r in rows], [("update_role", "gh:acme:2", True), ("get_role", "nope", False)])
