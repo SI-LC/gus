@@ -104,6 +104,7 @@ def main():
     live = {j["id"] for j in jobs} | boards.listed_ids
     with locked(JOBS) as store:
       mark_closed(store, _boards_answered, live, now)
+      J.settle_sources(store)  # older records: a job site's role already found on the board
       alias = J.aliases(store)
       for j in jobs:
         hn = j.pop("_hn", False)

@@ -6,7 +6,8 @@ employer's board once a role has been found on it.
 Every role that didn't come from a board scan is checked, whatever it scored: a summary on a job site can score badly
 while the company behind it is worth watching, and finding the board is what gets its real ads read. Public job boards
 are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes when the same
-title is found on the company's board. Otherwise the role keeps its link and the cockpit offers a web search.
+title is found on the company's board, and an Adzuna or JSearch role found there becomes a board role. Otherwise the role
+keeps its link and the cockpit offers a web search.
 
 With "Find employer pages with AI" on in Settings, strong roles still without a link get a Claude web search. That uses
 your Claude allowance, so it's limited per run and stops at your daily AI limit.
@@ -17,7 +18,7 @@ import csv
 import json
 import re
 import urllib.error
-from datetime import date
+from datetime import date, datetime, timezone
 from urllib.parse import urlparse
 
 from radar import ai
@@ -27,7 +28,7 @@ from radar.boards import SOURCES
 from radar.matching import load_config
 from radar.paths import watchlist_path, JOBS, ROOT
 from radar.web import fetch_bytes
-from radar.jobs import same_company, same_title
+from radar.jobs import same_company, same_title, to_board
 from radar.sources import LABEL
 from radar.store import locked, read
 
@@ -110,7 +111,7 @@ def find(company, title, boards, careers=None):
     wanted = same_title(title)
     for row in SOURCES[ats](company, slug):
         if same_title(row["title"]) == wanted and row.get("url"):
-            return {"url": row["url"], "ats": ats, "slug": slug}
+            return {"url": row["url"], "ats": ats, "slug": slug, "id": row.get("id")}
     return None
 
 
@@ -143,7 +144,7 @@ def main():
         except Exception as e:  # one bad board shouldn't stop the rest; this role is tried again next time
             print(f"{j['company']}: {type(e).__name__}")
             found[j["id"]] = False
-    added = []
+    added, now = [], datetime.now(timezone.utc).isoformat(timespec="seconds")
     with locked(JOBS) as store:
         for jid, hit in found.items():
             j = store.get(jid)
@@ -152,6 +153,9 @@ def main():
             j["link_checked"] = str(date.today())
             if hit:
                 j.update(source_url=j["url"], url=hit["url"], link_kind="company", board={"ats": hit["ats"], "slug": hit["slug"]})
+                to_board(j)  # a job site's role, found on the employer's board: from now on it's a board role
+                if hit.get("id") and hit["id"] != jid:  # so the board scan sees it, and closes it when the ad goes
+                    j.setdefault("also", {})[hit["id"]] = {"url": hit["url"], "source": "board", "seen": now}
                 if watch(j):  # the board is confirmed to be theirs: from now on every role on it is read at source
                     added.append(j["company"])
     if added:

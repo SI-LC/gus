@@ -17,7 +17,7 @@ check:
 judge: Is it clear the role has moved, and where to find it?
 ```
 
-- `given`: `empty` is a brand new install, so it starts on first run. `signed out` is the same with AI not connected yet. `scanned` is an install in use that has run one scan of the made-up job board, and `scanned, signed out` is the same after its Claude login has expired.
+- `given`: `empty` is a brand new install, so it starts on first run. `signed out` is the same with AI not connected yet. `scanned` is an install in use that has run one scan of the made-up job board, `scanned, signed out` is the same after its Claude login has expired, and `scanned after a job site` is a scanned install where Adzuna had already found one of the board's roles.
 - `check`: `open <screen>`, `see "text"`, `not see "text"`, `status bar says "text"`, `status bar doesn't say "text"`, `banner says "text"`, `no banner`, `click "text"`, `click "text" in the status bar`, `click "text" in the progress`, `click "text" in the message`, `progress says "text"` (waits for a whole scan), `no progress`, `pick "chip"`, `"chip" is picked`, `"text" appears before "other text"`, `type "text" into "label"`, `Gus stops answering`, `the page is refreshing slowly`, `the refresh arrives`, `message says "text"`, `reload`.
 - `judge`: a question for an AI reviewer. It isn't run yet.
 

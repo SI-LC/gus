@@ -22,7 +22,7 @@ class Finding(unittest.TestCase):
 
     def test_finds_the_same_title_on_the_company_board(self):
         with mock.patch.object(links, "resolve", return_value=("greenhouse", "acme", 4)):
-            self.assertEqual(links.find("Acme Ltd", "Senior Product Manager", {}), {"url": "https://acme.example/1", "ats": "greenhouse", "slug": "acme"})
+            self.assertEqual(links.find("Acme Ltd", "Senior Product Manager", {}), {"url": "https://acme.example/1", "ats": "greenhouse", "slug": "acme", "id": None})
 
     def test_a_different_title_changes_nothing(self):
         with mock.patch.object(links, "resolve", return_value=("greenhouse", "acme", 4)):
@@ -115,6 +115,20 @@ class Saving(unittest.TestCase):
             links.main()
         j = self.saved()
         self.assertEqual((j["url"], j["source_url"], j["link_kind"]), ("https://acme.example/1", "https://jobsite.example/1", "company"))
+
+    def test_a_job_site_role_found_on_the_board_becomes_a_board_role_the_scan_can_close(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role()}))
+        with mock.patch.object(links, "find", return_value={"url": "https://acme.example/1", "ats": "ashby", "slug": "acme", "id": "ashby:acme:1"}):
+            links.main()
+        j = self.saved()
+        self.assertEqual((j["source"], j["found_via"]), ("board", "jsearch"))
+        self.assertEqual(j["also"]["ashby:acme:1"]["source"], "board")
+
+    def test_a_role_from_the_web_keeps_its_source(self):
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web")}))
+        with mock.patch.object(links, "find", return_value={"url": "https://acme.example/1", "ats": "ashby", "slug": "acme", "id": "ashby:acme:1"}):
+            links.main()
+        self.assertEqual(json.loads(self.jobs.read_text())["web:1"]["source"], "web")
 
     def test_a_found_board_is_watched_and_reaches_the_companies_screen(self):
         self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=4, stage="skipped")}))
