@@ -43,6 +43,11 @@ let S = { jobs: [], companies: {}, health: {} };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const link = u => /^https?:\/\//i.test(String(u ?? "").trim()) ? esc(String(u).trim()) : "#";  // never javascript: and friends
+const siteHost = u => String(u || "").replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
+const coName = j => {  // a role's employer, opening its own website when Gus has one
+  const u = (S.websites || {})[j.co];
+  return u ? `<a href="${link(u)}" target="_blank" rel="noopener" title="Open ${esc(siteHost(u))} in a new tab">${esc(j.company)} ↗</a>` : esc(j.company);
+};
 const band = s => s == null ? "none" : s >= 8 ? "hi" : s >= 5 ? "mid" : "lo";
 const ago = iso => {
   if (!iso) return "never";
@@ -195,7 +200,7 @@ function rolePanel(j) {  // everything you do to one role, a click away from its
       : `<button onclick="roleContact(${id}, ${jsq(p.id)}, true)" aria-label="Messaged ${esc(p.name)}">Messaged</button>`}</div>`; };
   return `<div class="panel-back" onclick="closeRole()"></div>
     <aside class="panel" id="role-panel" role="dialog" aria-label="${esc(j.title)} at ${esc(j.company)}">
-      <div class="panel-head"><span class="co">${esc(j.company)}</span><button class="link" onclick="closeRole()">Close</button></div>
+      <div class="panel-head"><span class="co">${coName(j)}</span><button class="link" onclick="closeRole()">Close</button></div>
       <div class="title">${roleTitle(j, j.url)}</div>
       <div class="sub">${[esc(j.location || ""), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`, j.score != null ? `Fit ${j.score} of 10` : ""].filter(Boolean).join(" · ")}</div>
       ${j.ad_closed || j.readvertised ? `<div class="mt-2">${j.ad_closed ? `<span class="pill due">Ad closed</span>` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
@@ -430,7 +435,7 @@ function roleCard(j, actions, extra = "") {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
     <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
     <div>
-      <div class="co">${esc(j.company)}</div>
+      <div class="co">${coName(j)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
       <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Gus scores it on the next check."}</span>`}</p>
@@ -600,11 +605,12 @@ const V = {
         <div class="acct-head">
           <div><button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
-            ${a.board_broken ? '<span class="pill due">job board not working</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}</div>
+            ${a.board_broken ? '<span class="pill due">job board not working</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}${a.website_broken ? '<span class="pill due" title="This website no longer opens. Change it below, or Gus looks for a new one.">website gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button class="link danger" onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
         </div>
+        ${siteForm(a)}
         ${a.london || a.last_contacted ? `<div class="sub">${[a.london ? "Near you: " + esc(a.london) : "", a.last_contacted ? "contacted " + ago(a.last_contacted) : ""].filter(Boolean).join(" · ")}</div>` : ""}
         ${a.why ? `<p class="why">${esc(a.why)}</p>` : ""}
         ${evs.length ? `<div class="chips">${evs.slice(0, 6).map(e => sigChip(e, true)).join("")}${evs.length > 6 ? `<span class="sub">+${evs.length - 6} older</span>` : ""}</div>` : `<div class="sub mt-2">No news yet.</div>`}
@@ -1098,6 +1104,18 @@ async function startRun(job) {
   if (!d) return;
   toast(!d.started ? "Already running" : aiMessage() ? "Started, but AI is paused, so nothing will be scored" : `${jobName(job, "now")}. Progress shows at the top`);
   await load();
+}
+function siteForm(a) {  // the company's own website, and the way to give or correct it
+  const k = "site" + a.name.replace(/[^a-z0-9]/gi, "");
+  return `<div class="row site">${a.website ? `<a class="btn-link" href="${link(a.website)}" target="_blank" rel="noopener">${esc(siteHost(a.website))} ↗</a>` : ""}
+    <details class="add-event keep" id="${k}"><summary class="sub">${a.website ? "Change website" : "+ Add website"}</summary>
+    <div class="row mt-1.5"><input type="text" id="${k}-url" placeholder="acme.com" value="${esc(a.website || "")}" aria-label="Website for ${esc(a.name)}" class="flex-1">
+      <button class="primary" onclick="setWebsite(${jsq(a.name)}, ${jsq(k)})">Save website</button></div>
+    <p class="sub">Gus keeps the address you give and stops looking for one. Leave it empty if ${esc(a.name)} has no website.</p></details></div>`;
+}
+async function setWebsite(name, k) {
+  const website = $(k + "-url").value.trim();
+  if (await post("/api/account", { name, website })) { toast(website ? `Saved ${name}'s website` : `${name} has no website`); $(k).open = false; load(); }  // closed first, or the open form holds the redraw back
 }
 function eventForm(name) {
   const k = "ev" + name.replace(/[^a-z0-9]/gi, "");

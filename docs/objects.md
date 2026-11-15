@@ -68,6 +68,7 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed |
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
 | `careers_checked` | When an agent last read the careers page of a company with no board, looking for a board or for roles |
+| `website`, `website_locked`, `website_broken`, `website_checked` | The company's own site, which its name in the cockpit opens. Kept only once its homepage (or the sitemap its robots.txt lists) links to the company's board or careers address, or, with neither, its page title carries the company's name: `radar.websites`, up to 50 companies a scan, each looked at again after 30 days. `website_locked` when you set or cleared it on the company's card: Gus never replaces it. `website_broken` when it no longer opens |
 | `favourite`, `neighbour_of`, `neighbours_checked` | Companies you love and the ones found next to them |
 | `added`, `people_checked` | Housekeeping dates |
 
