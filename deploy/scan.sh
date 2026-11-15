@@ -20,30 +20,11 @@ git log -p --format='%an %ae %s%n%b' "$range" >> "$content"
 
 if grep -qEf deploy/secret-patterns.txt "$content"; then bad "something that looks like a key"; else good "no keys"; fi
 
-# 3. Your details: contact info, employers and the people you're tracking, read from your private files
-hits=$(CONTENT="$content" python3 - <<'PY'
-import json, os, re
-terms = set()
-try:
-    t = open("profile/profile.md").read()
-    terms |= set(re.findall(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", t)) | set(re.findall(r"\+?\d[\d ]{9,}\d", t))
-except OSError:
-    pass
-try:
-    terms |= {x.strip() for x in json.load(open("settings.json")).get("my_employers", "").splitlines() if len(x.strip()) > 3}
-except (OSError, ValueError):
-    pass
-try:
-    terms |= {p["name"] for p in json.load(open("data/people.json")).values() if p.get("name")}
-except (OSError, ValueError):
-    pass
-text = open(os.environ["CONTENT"], errors="ignore").read()
-print("\n".join(sorted(t for t in terms if t in text)))
-PY
-)
-if [ ! -f profile/profile.md ] && [ ! -f settings.json ]; then
-  echo "  - your details: not checked here, your private files aren't on this machine (the checks before a push cover this)"
-elif [ -z "$hits" ]; then good "none of your details"; else bad "personal details found: $hits"; fi
+# 3. Your details: contact info, employers and the people you're tracking, read from your private files here or on the Pi
+bash deploy/details.sh "$content" || fail=1
+# A commit made with no email set is signed with your username and your computer's name
+local_authors=$(git log --format='%ae%n%ce' "$range" | grep -E '\.(local|lan|home|localdomain)$' | sort -u || true)
+[ -z "$local_authors" ] && good "commits don't carry your computer's name" || bad "commits signed with your computer's name: $local_authors (set git config user.email to your GitHub noreply address, then git rebase origin/main --exec 'git commit --amend --no-edit --reset-author')"
 
 # 4. Risky patterns this project has rules about
 grep -rnE 'shell=True|\beval\(|\bexec\(|verify=False|_create_unverified_context' radar --include=*.py && bad "unsafe Python" || good "no unsafe Python patterns"
