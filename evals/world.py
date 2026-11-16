@@ -14,6 +14,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +35,15 @@ JOB_SITE_ROLE = {"adzuna:1002": {"id": "adzuna:1002", "company": "Harborlight", 
                                  "text_kind": "summary", "description": "A made-up job site summary.", "stage": "new", "score": 6,
                                  "why": "Made-up reason for Product Manager, Growth.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
                                  "last_seen": "2026-01-01T09:00:00+00:00"}}
+# A second company whose board has answered "slow down" since three days ago
+REFUSING = "Quillmere,greenhouse,quillmere,software\n"
+
+
+def refused_for_days(days=3) -> dict:
+    then = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    return {"Quillmere": {"board": "greenhouse:quillmere", "read": then, "since": then, "failed": "HTTP Error 429: Too Many Requests"}}
+
+
 BOOT = "from radar import service; service.main()"
 
 
@@ -44,7 +54,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self, new=False, signed_out=False, job_site=False):
+    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -61,6 +71,9 @@ class World:
             (self.app / "settings.json").write_text(json.dumps(SETTINGS))
             (self.app / "data").mkdir(exist_ok=True)
             (self.app / "data" / "companies.json").write_text(json.dumps(COMPANIES))
+            if refusing:
+                (self.app / "watchlist.csv").write_text(WATCHLIST + REFUSING)
+                (self.app / "data" / "board_health.json").write_text(json.dumps(refused_for_days()))
             if job_site:
                 (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ROLE))
         tools = self.home / ".local" / "bin"

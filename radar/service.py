@@ -19,7 +19,7 @@ import time
 import traceback
 from datetime import date, datetime
 
-from radar import doing
+from radar import boardhealth, doing
 from radar.matching import load_config
 from radar.paths import DATA, JOBS, MOVES, ROOT
 from radar.store import read
@@ -50,7 +50,13 @@ def _check_roles():
         return False, "Didn't finish: " + ((out.stdout + out.stderr).strip()[-250:] or f"exit code {out.returncode}")
     after = _counts()
     new = after["roles"] - before["roles"]
-    return True, f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox"
+    return True, f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox" + _unread_note()
+
+
+def _unread_note() -> str:
+    """Boards Gus hasn't been able to read for days, for the end of a run's summary: roles there could be missing."""
+    note = boardhealth.note()
+    return f". {note}" if note else ""
 
 
 def _sources():
@@ -163,6 +169,7 @@ def full_run():
     after = _counts()
     new = after["roles"] - before["roles"]
     summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox, {_moves_this_week()} moves this week"
+    summary += _unread_note()
     summary += f". {sources_note}" if sources_note else ""
     return ok and not stop, f"{stop}. {summary}" if stop else summary
 

@@ -296,7 +296,7 @@ function readChart() {  // roles read on each of the last 14 days, drawn to one 
 }
 // What a failed board or feed means, in plain words, and what to do about it: the first that matches the error's text
 const WHY_FAILED = [
-  [/429|too many|slow down/i, "asked to slow down by the job site", "Nothing to do: Gus tries again on the next check."],
+  [/429|too many|slow down/i, "asked to slow down by the job site", "Nothing to do: Gus leaves the site alone for a while, then asks again."],
   [/expecting value|json|decode/i, "that sent back a page that wasn't a list of jobs", "Nothing to do: Gus tries again on the next check."],
   [/401|403|forbidden|denied/i, "refused by the site", "If it keeps happening, check the address on the company's card."],
   [/404|not found|gone/i, "moved or gone", "Check the address on the company's card."],
@@ -304,7 +304,8 @@ const WHY_FAILED = [
   [/no jobs|sitemap/i, "with no jobs Gus can read", "Give the company its careers address, on its card."],
   [/timed? ?out|timeout|temporar|unreachable|50\d|oserror|connection/i, "didn't answer", "Nothing to do: Gus tries again on the next check."],
 ];
-function failures(errs, what) {  // the failures grouped by what happened, with every name, and the raw messages a click away
+const nDays = n => `${n} day${n === 1 ? "" : "s"}`;
+function failures(errs, what, unread = {}) {  // the failures grouped by what happened, with every name, and the raw messages a click away
   if (!errs.length) return "";
   const groups = new Map();
   for (const [name, e] of errs) {
@@ -312,7 +313,7 @@ function failures(errs, what) {  // the failures grouped by what happened, with 
     (groups.get(said) || groups.set(said, { said, todo, names: [] }).get(said)).names.push(name);
   }
   return `<div class="section">${what} that didn't work · ${errs.length}</div>` + [...groups.values()].sort((a, b) => b.names.length - a.names.length).map(g =>
-    `<div class="src fail"><div><b>${g.names.length}</b> ${g.said}<div class="sub">${g.names.map(esc).join(", ")}</div></div><span class="sub">${g.todo}</span></div>`).join("") +
+    `<div class="src fail"><div><b>${g.names.length}</b> ${g.said}<div class="sub">${g.names.sort((a, b) => (unread[b] || 0) - (unread[a] || 0)).map(n => esc(n) + (unread[n] >= 1 ? ` (${nDays(unread[n])} unread)` : "")).join(", ")}</div></div><span class="sub">${g.todo}</span></div>`).join("") +
     `<details class="add-event"><summary>Show each message</summary><table class="mt-2">${errs.map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="sub break-all">${esc(e)}</td></tr>`).join("")}</table></details>`;
 }
 function costs() {
@@ -605,7 +606,7 @@ const V = {
         <div class="acct-head">
           <div><button class="mini star ${a.favourite ? "on" : ""}" aria-pressed="${a.favourite}" title="${a.favourite ? "A company you love. Gus looks for companies like it." : "Mark as a company you love, and Gus will look for companies like it"}" aria-label="Favourite ${esc(a.name)}" onclick="setFavourite(${jsq(a.name)}, ${!a.favourite})">${a.favourite ? "★" : "☆"}</button>
             ${a.fit != null ? `<span class="pill">fit ${a.fit}</span>` : ""} ${warm ? `<span class="pill warm">${warm} 1st-degree</span>` : closest === 2 ? `<span class="pill warm">a route in</span>` : ""}
-            ${a.board_broken ? '<span class="pill due">job board not working</span>' : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}${a.website_broken ? '<span class="pill due" title="This website no longer opens. Change it below, or Gus looks for a new one.">website gone</span>' : ""}</div>
+            ${a.board_broken ? `<span class="pill due">${a.board_unread_days >= 1 ? `job board not read for ${nDays(a.board_unread_days)}` : "job board not working"}</span>` : ""}${a.careers_url_broken ? '<span class="pill due" title="The careers address Gus has for this company no longer opens. The next refresh looks for a new one.">careers address gone</span>' : ""}${a.website_broken ? '<span class="pill due" title="This website no longer opens. Change it below, or Gus looks for a new one.">website gone</span>' : ""}</div>
           <div class="row"><select aria-label="Tier for ${esc(a.name)}" onchange="setTier(${jsq(a.name)}, this.value)">
             ${tiers.map(t => `<option ${t === a.tier ? "selected" : ""}>${t}</option>`).join("")}</select>
             <button class="link danger" onclick="vetoCo(${jsq(a.name)})">Remove</button></div>
@@ -622,7 +623,7 @@ const V = {
       const ppl = peopleAt(a.name), evs = eventsAt(a.name), top = evs[0], open = openAcct.has(a.name) || list.length === 1;
       return `<article class="mv acct${open ? " open" : ""}">
         <button class="mv-row" onclick="toggleAcct(${jsq(a.name)})" aria-expanded="${open}">
-          <span class="mv-who"><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b>${a.favourite ? " ★" : ""} <span>${esc(a.product || "")}</span></span>
+          <span class="mv-who"><span class="tier t${a.tier}">${a.tier}</span> <b>${esc(a.name)}</b>${a.favourite ? " ★" : ""} <span>${esc(a.product || "")}</span>${a.board_unread_days >= S.health.board_unread_days ? ` <span class="pill due">job board not read for ${nDays(a.board_unread_days)}</span>` : ""}</span>
           <span class="mv-because">${top ? `<b>${esc(top.summary)}</b>${top.age_days != null ? ` · ${top.age_days === 0 ? "today" : top.age_days + "d ago"}` : ""}${evs.length > 1 ? ` · +${evs.length - 1} more` : ""}` : "No news yet"}${ppl.length ? ` · ${ppl.length} ${ppl.length === 1 ? "person" : "people"}` : ""}</span>
           <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
         ${open ? body(a, ppl, evs) : ""}</article>`;
@@ -739,6 +740,7 @@ const V = {
   },
   health() {
     const h = S.health, u = S.usage, errs = Object.entries(h.board_errors || {}), feedErrs = Object.entries(h.feed_errors || {});
+    const unread = h.board_unread || {}, late = errs.filter(([n]) => unread[n] >= h.board_unread_days).length;
     const { read, saved, month } = gusDid(), worth = u.ai.month.cost_usd + u.x.month.cost_usd;
     const big = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
     const row = (kind, name, text) => `<div class="src"><span class="pill ${kind}">${name}</span><span class="sub">${text}</span></div>`;  // kind: done is working, warm wants a look, due is broken, none is off
@@ -752,13 +754,13 @@ const V = {
       ${ai}
       ${signedOut() ? `<p class="bad">Your Claude sign-in expired ${ago(S.ai.signed_out_since)}. Nothing that needs AI has worked since, and roles found since then have no score.</p>
       <div class="row"><button class="primary" onclick="signIn('health-login')">Sign in with Claude</button></div><div id="health-login"></div>` : ""}
-      ${row(!errs.length ? "done" : errs.length > h.boards / 4 ? "due" : "warm", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} of ${h.boards} didn't work on the last check` : "All worked"} · checked ${ago(h.last_scan)}`)}
+      ${row(!errs.length ? "done" : late || errs.length > h.boards / 4 ? "due" : "warm", `Job boards · ${h.boards}`, `${errs.length ? `${errs.length} of ${h.boards} didn't work on the last check` : "All worked"}${late ? ` · ${late} not read for ${h.board_unread_days} days or more` : ""} · checked ${ago(h.last_scan)}`)}
       ${row(feedErrs.length ? "warm" : "done", "News feeds", feedErrs.length ? `${feedErrs.length} didn't work on the last check` : "All worked on the last check")}
       ${row(h.last_agent_run ? "done" : "", "Research", h.last_agent_run ? `Last ran ${ago(h.last_agent_run)}` : "Not run yet. Full run starts it")}
       ${row(h.signals_waiting > 50 ? "warm" : h.signals_waiting ? "done" : "", "News to read", h.signals_waiting ? `${h.signals_waiting} item${h.signals_waiting === 1 ? "" : "s"}. The next Full run reads them` : "Nothing waiting")}
       ${row(h.x && h.x.day ? "done" : "", "X", h.x && h.x.day ? `${h.x.used || 0} posts read today` : `Off. <a href="#settings/sources">Turn it on in Settings</a>`)}
       ${row(h.claude.token && h.claude.token.old ? "warm" : h.claude.last_used ? "done" : "", "Claude connection", `${h.claude.last_used ? "Last connected " + ago(h.claude.last_used) : "Not connected yet"}${h.claude.refused ? ` · ${h.claude.refused} refused` : ""}${h.claude.token && h.claude.token.old ? " · token is old" : ""}`)}
-      ${failures(errs, "Job boards")}${failures(feedErrs, "News feeds")}
+      ${failures(errs, "Job boards", unread)}${failures(feedErrs, "News feeds")}
       <div class="section">What changed</div>${whatChanged()}
       <div class="section">Job source limits</div>${sourceLimits(h.sources)}
       ${costs()}`;

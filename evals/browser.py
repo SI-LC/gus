@@ -19,7 +19,7 @@ CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
 RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
 PLACES = {"status bar": "#ticker", "progress": "#progress", "message": "#toast.on"}
-GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site")
+GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site", "scanned with a board that says no")
 
 
 def step(page, text):
@@ -99,7 +99,7 @@ def fresh_world(given, scanned) -> World:
     if not given.startswith("scanned"):
         return World(new=True, signed_out="signed out" in given)
     if given not in scanned:
-        scanned[given] = World(signed_out="signed out" in given, job_site="job site" in given)
+        scanned[given] = World(signed_out="signed out" in given, job_site="job site" in given, refusing="says no" in given)
         scanned[given].scan()
     return scanned[given].copy()
 

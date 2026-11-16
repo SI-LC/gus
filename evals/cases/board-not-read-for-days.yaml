@@ -1,0 +1,11 @@
+id: board-not-read-for-days
+requirement: When a company's job board has turned Gus away for days, I can see which one, for how long and why.
+given: scanned with a board that says no
+check:
+  - open Activity
+  - see "1 not read for 2 days or more"
+  - see "Quillmere (3 days unread)"
+  - see "asked to slow down by the job site"
+  - open Companies
+  - see "job board not read for 3 days"
+judge: Would I notice a board I'm missing roles from, and know whether there is anything for me to do?

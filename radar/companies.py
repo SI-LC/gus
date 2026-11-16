@@ -19,6 +19,7 @@ import re
 import sys
 from datetime import date, timedelta
 
+from radar import web
 from radar.paths import COMPANIES, DATA, SIGNALS, watchlist_path
 from radar.store import read
 
@@ -119,7 +120,7 @@ def due():
                 out["reassess"].append(n)
             elif (r.get("assessed") or r.get("updated") or "") < cutoff:
                 out["stale"].append(n)
-            if r.get("board_broken"):
+            if r.get("board_broken") and not web.said_slow_down(r["board_broken"]):  # told to slow down: asking again makes it worse
                 out["broken_boards"].append(n)
         elif s == "rejected" and not r.get("vetoed") and (r.get("recheck_after") or "9999") <= today:
             out["recheck_rejected"].append(n)
