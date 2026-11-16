@@ -361,9 +361,10 @@ TOOLS = {
                      "careers_url": _s("The company's careers page, which finds its board more surely.")}, ["company", "title"], create_role),
     "update_role": ("Move a role to another stage, set the user's note on it, or record why the user skipped it. \"Applied to <role>\" is stage \"applied\": the date is recorded.",
                     {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note."),
-                     "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role.", enum=list(SKIP_REASONS)),
-                     "reason": _s("Why you're making this change, in one short sentence, such as \"the ad has closed\". Required: the user sees it "
-                                  "in Activity, beside the change.")},
+                     "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role. "
+                                       "It doesn't stand in for reason: send both.", enum=list(SKIP_REASONS)),
+                     "reason": _s("Why you're making this change, in one short sentence, such as \"the ad has closed\". Required on every "
+                                  "call, as well as skip_reason when you send that: the user sees it in Activity, beside the change.")},
                     ["role_id", "reason"], update_role),
     "list_changes": ("What changed on the user's roles, newest first: each change to a stage, a reason for skipping, a note or a folder, with "
                      "the value before and after, who made it (you: the user in the cockpit, claude, or triage, which skips roles scoring "
@@ -431,6 +432,12 @@ def writes_on() -> bool:
     return bool(settings.load().get("mcp_allow_writes"))
 
 
+def needed(name: str, k: str) -> str:
+    """A missing parameter with what it's for, so it can't be taken for another one with a similar name."""
+    about = TOOLS[name][1][k].get("description")
+    return f"{k}: {about.rstrip('.')}" if about else k
+
+
 def call(name: str, args: dict, who: str = "") -> dict:
     """Run one tool. The answer is always a dict; a refusal or a problem is {"error": ...}."""
     if name not in TOOLS:
@@ -438,7 +445,7 @@ def call(name: str, args: dict, who: str = "") -> dict:
     elif is_write(name) and not writes_on():
         out = {"error": "Gus is read-only for Claude. The user can turn on \"Let Claude make changes\" under Settings, Claude."}
     elif missing := [k for k in TOOLS[name][2] if args.get(k) in (None, "")]:
-        out = {"error": f"Needs {', '.join(missing)}"}
+        out = {"error": "Needs " + "; ".join(needed(name, k) for k in missing)}
     else:
         try:
             out = TOOLS[name][3](args)
