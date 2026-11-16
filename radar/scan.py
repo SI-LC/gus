@@ -108,6 +108,7 @@ def main():
     with locked(JOBS) as store:
       mark_closed(store, _boards_answered, live, now)
       J.settle_sources(store)  # older records: a job site's role already found on the board
+      J.rename_skip_reasons(store)  # older records: a reason the list no longer has
       alias = J.aliases(store)
       for j in jobs:
         hn = j.pop("_hn", False)
