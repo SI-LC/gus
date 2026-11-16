@@ -28,13 +28,14 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from radar import accounts as A, changes, events as E, server, service, settings
 from radar.jobs import same_company
@@ -116,15 +117,22 @@ def list_roles(a):
     roles = [j for j in read(JOBS, {}).values() if j.get("stage", "new") in stages
              and (not a.get("company") or at_company(j.get("company"), str(a["company"])))
              and (not q or q in f"{j.get('company')} {j.get('title')}".lower())]
+    if a.get("company") and not roles and not company_name(a["company"]) \
+            and not any(at_company(j.get("company"), str(a["company"])) for j in read(JOBS, {}).values()):
+        return {"error": f"No such company: {a['company']}"}  # a company Gus knows with no roles here is an empty list
     roles.sort(key=lambda j: str(j.get("first_seen") or ""), reverse=True)  # newest first among equal scores
     roles.sort(key=lambda j: (j.get("score") is None, -(j.get("score") or 0)))
     n = limit_of(a, 30)
     return {"roles": [record("role", j, keep=ROLE_ROW) for j in roles[:n]], "total": len(roles), "about_this_text": UNTRUSTED}
 
 
+def no_role(a) -> dict:
+    return {"error": f"No such role: {a.get('role_id')}. A role_id comes from list_roles."}
+
+
 def get_role(a):
     out = server.get_job(a.get("role_id"))
-    return {"error": out["error"]} if "error" in out else {"role": record("role", out["job"]), "about_this_text": UNTRUSTED}
+    return no_role(a) if "error" in out else {"role": record("role", out["job"]), "about_this_text": UNTRUSTED}
 
 
 def create_role(a):
@@ -136,9 +144,15 @@ def create_role(a):
 
 def update_role(a):
     if not any(k in a for k in ("stage", "note", "skip_reason")):
-        return {"error": "Give a stage, a note or a reason for skipping"}
+        return {"error": "Give a stage, a note or a skip_reason. reason alone changes nothing: it only says why you're making the change."}
     if "stage" in a and a["stage"] not in JOB_STAGES:
         return {"error": f"No such stage: {a['stage']}. The stages are {', '.join(JOB_STAGES)}"}
+    j = read(JOBS, {}).get(a.get("role_id"))
+    if not j:
+        return no_role(a)
+    if a.get("skip_reason") and a.get("stage", j.get("stage")) != "skipped":
+        return {"error": f"skip_reason only goes on a skipped role, and this one is {a.get('stage') or j.get('stage', 'new')}. "
+                         "To skip it, send stage \"skipped\" in the same call."}
     return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason") if k in a}},
                                     actor="claude", why=" ".join(str(a["reason"]).split())[:300]))
 
@@ -234,16 +248,32 @@ def list_events(a):
     return {"events": [record("event", e) for e in ev[:limit_of(a, 50)]], "total": len(ev), "about_this_text": UNTRUSTED}
 
 
+def bad_link(a) -> str | None:
+    if not re.match(r"https?://\S+$", str(a.get("url") or "")):
+        return f"url must be a web link starting with http, not {a.get('url')}"
+
+
+def bad_date(a) -> str | None:
+    if "date" in a and not E.parse_date(str(a["date"])):
+        return f"date must be a real day, like {date.today()}, not {a['date']}"
+
+
 def create_event(a):
     name = company_name(a.get("company"))
     if not name:
         return {"error": f"No such company: {a.get('company')}"}
+    if problem := bad_link(a) or bad_date(a):
+        return {"error": problem}
     return result(server.update_event({"account": name, **{k: a.get(k) for k in ("type", "summary", "url", "date")}}), "event")
 
 
 def update_event(a):
     if not a.get("event_id"):
         return {"error": "Needs an event_id"}
+    if not any(k in a for k in ("type", "summary", "date", "dismissed")):
+        return {"error": "Give a type, a summary, a date or dismissed"}
+    if problem := bad_date(a):
+        return {"error": problem}
     return result(server.update_event({"id": a["event_id"], **{k: a[k] for k in ("type", "summary", "date", "dismissed") if k in a}}), "event")
 
 
@@ -277,8 +307,10 @@ def create_person(a):
 def update_person(a):
     if not a.get("person_id"):
         return {"error": "Needs a person_id"}
-    if not any(k in a for k in ("stage", "note", "degree")):
+    if not any(k in a for k in ("stage", "note", "degree", "via")):
         return {"error": "Give a stage, a note or a degree"}
+    if "via" in a and "degree" not in a:
+        return {"error": "via is saved with degree: send degree as well, such as 2 for someone a connection of the user's knows"}
     if "stage" in a and a["stage"] not in PERSON_STAGES:
         return {"error": f"No such stage: {a['stage']}. The stages are {', '.join(PERSON_STAGES)}"}
     return result(server.update_person({"id": a["person_id"], **{k: a[k] for k in ("stage", "note", "degree", "via") if k in a}}), "person")
@@ -288,6 +320,8 @@ def update_person(a):
 
 def list_moves(a):
     week = a.get("week") or A.week_id()
+    if not re.fullmatch(r"\d{4}-W\d{2}", str(week)):
+        return {"error": f"week should look like 2026-W46, not {week}. Left out, it is this week."}
     people, stored = read(A.PEOPLE, {}), read(A.EVENTS, {})
     rows = []
     for mid, m in read(A.MOVES, {}).items():
@@ -438,14 +472,34 @@ def needed(name: str, k: str) -> str:
     return f"{k}: {about.rstrip('.')}" if about else k
 
 
+def wrong(name: str, args: dict) -> str | None:
+    """What's wrong with what was sent, going by what the tool says it takes. A parameter the tool doesn't have, or text where it
+    wants true or false, was once dropped or taken as yes, and the tool answered ok."""
+    props = TOOLS[name][1]
+    if extra := [k for k in args if k not in props]:
+        return f"{name} has no {', '.join(extra)}. " + (f"It takes {', '.join(props)}." if props else "It takes nothing.")
+    for k, v in args.items():
+        kinds, allowed = props[k].get("type"), props[k].get("enum")
+        if v is None or (v == "" and k not in TOOLS[name][2]):
+            continue  # left out, or cleared: the tool decides whether that's allowed
+        if kinds == "boolean":
+            if not isinstance(v, bool):
+                return f"{k} must be true or false, not {json.dumps(v)}"
+        elif allowed and (v not in allowed or isinstance(v, bool)):
+            return f"{k} must be one of: {', '.join(str(x) for x in allowed if x is not None)}. Not {json.dumps(v)}"
+    return None
+
+
 def call(name: str, args: dict, who: str = "") -> dict:
     """Run one tool. The answer is always a dict; a refusal or a problem is {"error": ...}."""
     if name not in TOOLS:
         out = {"error": f"No such tool: {name}"}
     elif is_write(name) and not writes_on():
         out = {"error": "Gus is read-only for Claude. The user can turn on \"Let Claude make changes\" under Settings, Claude."}
-    elif missing := [k for k in TOOLS[name][2] if args.get(k) in (None, "")]:
+    elif missing := [k for k in TOOLS[name][2] if args.get(k) is None or not str(args[k]).strip()]:
         out = {"error": "Needs " + "; ".join(needed(name, k) for k in missing)}
+    elif problem := wrong(name, args):
+        out = {"error": problem}
     else:
         try:
             out = TOOLS[name][3](args)

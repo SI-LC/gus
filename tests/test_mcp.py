@@ -201,6 +201,81 @@ class Tools(World):
         self.assertIn("as well as skip_reason", out["error"])  # and that the one sent isn't it
         self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
 
+    def test_a_reason_alone_is_told_it_changes_nothing_and_which_parameter_skips(self):
+        self.writes()
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "reason": "pay"})
+        self.assertIn("skip_reason", out["error"])
+        self.assertIn("reason alone changes nothing", out["error"])
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "reason": "   "})  # spaces aren't a reason
+        self.assertIn("Needs reason", out["error"])
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+
+    def test_a_skip_reason_on_a_role_not_skipped_says_to_send_the_stage_too(self):
+        self.writes()
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "skip_reason": "pay", "reason": "the user said the pay is low"})
+        self.assertIn('stage "skipped" in the same call', out["error"])
+        self.assertIn("shortlisted", out["error"])  # where the role is now
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "applied", "skip_reason": "pay", "reason": "x"})
+        self.assertIn("skip_reason", out["error"])
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "skip_reason": "too low pay", "reason": "x"})
+        self.assertIn("skip_reason must be one of", out["error"])
+        self.assertIn("too low pay", out["error"])
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+        ok = mcp.call("update_role", {"role_id": "gh:acme:3", "skip_reason": "junior", "reason": "the user said so"})  # already skipped
+        self.assertEqual(ok["role"]["skip_reason"], "junior")
+
+    def test_a_parameter_the_tool_doesnt_have_is_refused_not_dropped(self):
+        self.writes()
+        for name, args, wrong in [("update_event", {"event_id": "acme:funding:1", "url": "https://x/new"}, "url"),
+                                  ("update_move", {"move_id": self.move_id, "status": "done", "note": "sent"}, "note"),
+                                  ("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "reason": "x", "why": "y"}, "why"),
+                                  ("list_roles", {"status": "new"}, "status")]:
+            out = mcp.call(name, args)
+            self.assertIn(f"{name} has no {wrong}", out["error"], name)
+            self.assertIn(next(iter(mcp.TOOLS[name][1])), out["error"], name)  # and says what it does have
+        self.assertEqual(self.stored("moves")[self.move_id]["status"], "todo")
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+
+    def test_a_value_of_the_wrong_kind_is_refused_not_taken_as_yes(self):
+        self.writes()
+        out = mcp.call("update_event", {"event_id": "acme:funding:1", "dismissed": "no"})
+        self.assertIn("dismissed must be true or false", out["error"])
+        self.assertNotIn("closed", self.stored("events")["acme:funding:1"])
+        out = mcp.call("update_company", {"company": "Acme", "favourite": "no"})
+        self.assertIn("favourite must be true or false", out["error"])
+        self.assertFalse(self.stored("companies")["Acme"].get("favourite"))
+        for degree in (4, "second", True):
+            self.assertIn("degree must be one of", mcp.call("update_person", {"person_id": "sam-jones@acme", "degree": degree})["error"])
+        self.assertIn("kind must be one of", mcp.call("create_person", {"name": "Al B", "company": "Acme", "kind": "boss"})["error"])
+        self.assertNotIn("[", mcp.call("create_event", {"company": "Acme", "type": "party", "url": "https://x/y", "date": TODAY})["error"])
+
+    def test_a_change_that_changes_nothing_is_refused(self):
+        self.writes()
+        self.assertIn("Give a type", mcp.call("update_event", {"event_id": "acme:funding:1"})["error"])
+        out = mcp.call("update_person", {"person_id": "sam-jones@acme", "note": "met at a meetup", "via": "Jo"})
+        self.assertIn("via is saved with degree", out["error"])
+        self.assertNotIn("note", self.stored("people")["sam-jones@acme"])
+        mcp.call("update_person", {"person_id": "sam-jones@acme", "degree": 2, "via": "Jo"})
+        self.assertEqual(self.stored("people")["sam-jones@acme"]["via"], "Jo")
+
+    def test_a_filter_that_matches_nothing_by_mistake_is_refused(self):
+        self.assertIn("status must be one of", mcp.call("list_moves", {"status": "open"})["error"])
+        self.assertIn("2026-W46", mcp.call("list_moves", {"week": "this week"})["error"])
+        self.assertIn("tier must be one of", mcp.call("list_companies", {"tier": "D"})["error"])
+        self.assertIn("No such company: Nope Ltd", mcp.call("list_roles", {"company": "Nope Ltd"})["error"])
+        self.assertEqual(mcp.call("list_roles", {"company": "acme", "stage": "applied"})["roles"], [])  # a real company with none is no mistake
+
+    def test_problems_are_in_the_tools_words_not_the_cockpits(self):
+        self.writes()
+        for out in (mcp.call("get_role", {"role_id": "nope"}), mcp.call("update_role", {"role_id": "nope", "stage": "skipped", "reason": "x"})):
+            self.assertNotIn("Reload", out["error"])
+            self.assertIn("No such role: nope", out["error"])
+            self.assertIn("list_roles", out["error"])
+        base = {"company": "Acme", "type": "funding", "url": "https://x/y", "date": TODAY}
+        self.assertIn("url must be a web link", mcp.call("create_event", {**base, "url": "x"})["error"])
+        self.assertIn("date must be a real day", mcp.call("create_event", {**base, "date": "last week"})["error"])
+        self.assertIn("date must be a real day", mcp.call("update_event", {"event_id": "acme:funding:1", "date": "soon"})["error"])
+
     def test_what_changed_can_be_narrowed_and_says_when_there_is_more(self):
         self.writes()
         for n in range(3):
