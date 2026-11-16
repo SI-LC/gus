@@ -525,6 +525,26 @@ class RoleContact(unittest.TestCase):
             moves, people, jobs = [json.loads(files[n].read_text()) for n in ("moves", "people", "jobs")]
             self.assertEqual((moves["m"]["status"], people["p"]["stage"], jobs["j"]["contacts"]), ("todo", "mapped", {}))
 
+    def test_setting_a_person_back_to_not_contacted_clears_messaged(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        from radar import accounts as A, server
+        d = Path(tempfile.mkdtemp())
+        files = {n: d / f"{n}.json" for n in ("jobs", "moves", "people")}
+        files["jobs"].write_text(json.dumps({"j": {"id": "j", "contacts": {"p": "2026-11-01T10:00:00+00:00", "q": "x"}}, "k": {"id": "k"}}))
+        files["moves"].write_text(json.dumps({"m": {"person_id": "p", "status": "done", "done_at": "x"},
+                                              "said": {"person_id": "p", "status": "done", "outcome": "replied"}}))
+        files["people"].write_text(json.dumps({"p": {"name": "Pat", "stage": "contacted"}}))
+        with mock.patch.object(server, "JOBS", files["jobs"]), mock.patch.object(A, "MOVES", files["moves"]), mock.patch.object(A, "PEOPLE", files["people"]):
+            self.assertTrue(server.update_person({"id": "p", "stage": "mapped"}).get("ok"))
+            moves, people, jobs = [json.loads(files[n].read_text()) for n in ("moves", "people", "jobs")]
+            self.assertEqual(people["p"]["stage"], "mapped")
+            self.assertEqual(jobs["j"]["contacts"], {"q": "x"})
+            self.assertEqual((moves["m"]["status"], moves["said"]["status"]), ("todo", "done"))
+
 
 class PeopleSearchReply(unittest.TestCase):
     def test_reads_the_list_when_more_follows(self):

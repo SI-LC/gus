@@ -379,6 +379,14 @@ def update_person(body):
             else:
                 for k in ("degree", "via", "degree_at"):
                     p.pop(k, None)
+    if body.get("stage") == "mapped":  # "Not contacted": forget every message logged to them, as Undo does for one role
+        with locked(JOBS) as store:
+            for j in store.values():
+                (j.get("contacts") or {}).pop(body["id"], None)
+        with locked(A.MOVES) as moves:
+            for m in moves.values():
+                if m.get("person_id") == body["id"] and m.get("status") == "done" and not m.get("outcome"):
+                    m.update(status="todo", done_at=None)
     return {"ok": True, "id": body["id"]} | ({"created": created} if created is not None else {})
 
 
