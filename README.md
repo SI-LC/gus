@@ -2,6 +2,11 @@
 
 **An agentic, account-based job search.** It watches the companies you care about, notices what happens at each, scores new roles against your CV, finds the people behind them, and plans a few well-aimed moves each week. You make the decisions and send the messages.
 
+![The Role Inbox: new roles scored against your CV, best first, with why each one fits](docs/cockpit.jpg)
+<sub>The Role Inbox, with made-up roles and companies.</sub>
+
+**Built with** standard-library Python, Claude (Claude Code or the Anthropic API) for scoring and agents, an MCP server so Claude can use it as a tool, Tailwind for the cockpit, Playwright for the browser checks, and a Raspberry Pi on Tailscale to keep it running.
+
 ```
  SIGNALS     raw items from job boards · job search sites · newsletters · funding news · social · email
     ↓
@@ -186,6 +191,14 @@ Gus reads untrusted text from the web and email, so it limits what that text can
 2. **Signal over volume.** Five good moves a week beat 40 roles in a queue.
 3. **Warm beats cold.** The person who posted "we're hiring" is worth more than the apply button.
 4. **Human in the loop where it counts.** The agent prepares; you apply and you press send. No auto-submitting or auto-DMs, ever.
+
+## What I learned building it
+
+- **Put the rules in code, not in the prompt.** "No event, no move" started as a line in a prompt, and the model kept bending it. Once it became a check in code that rejects the move, it held.
+- **Spend AI only where judgement is needed.** Reading job boards is plain code and costs nothing. The model only sees roles that are new, so a daily run costs pennies and the daily limit is rarely reached.
+- **Write the bar before the build.** Each requirement is a plain-words check in `evals/cases` that runs in a real browser. It fails before a change and passes after, and a failure blocks the merge. Coding agents ship much better work against a bar like that.
+- **Check the model against your own judgement.** Labelling 40 real roles by hand and scoring them three times showed where the prompt was wrong far faster than reading its output did.
+- **Treat everything from outside as hostile.** Job ads and emails are written by strangers, so the agents that read them can't reach keys or send anything out, and email goes to an agent with no internet at all.
 
 ## How the code is laid out
 
