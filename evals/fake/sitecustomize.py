@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 
 BOARD = "https://boards-api.greenhouse.io/v1/boards/harborlight/jobs"
+QUIET = "https://boards-api.greenhouse.io/v1/boards/quillmere/jobs"  # a board that tells every visitor to slow down
 HOME = "https://harborlight.com/"  # its own site, which links to its board: how Gus knows the site is really theirs
 HOME_PAGE = '<html><head><title>Harborlight</title></head><body><a href="https://job-boards.greenhouse.io/harborlight">Careers</a></body></html>'
 ROLES = [(1, "Senior Product Manager", "London"), (2, "Product Manager, Growth", "London"), (3, "Product Owner", "London"),
@@ -34,6 +35,8 @@ class Response(io.BytesIO):
 
 def urlopen(request, *args, **kwargs):
     url = request if isinstance(request, str) else request.full_url
+    if url == QUIET:
+        raise urllib.error.HTTPError(url, 429, "Too Many Requests", {}, None)
     body = reply_for(url)
     if body is None:  # a 404 fails straight away, where a dropped connection would be retried
         raise urllib.error.HTTPError(url, 404, "Not in the smoke test's world", {}, None)

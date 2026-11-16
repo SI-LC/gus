@@ -14,7 +14,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from radar import boards, doing, matching
+from radar import boardhealth, boards, doing, matching
 from radar import jobs as J
 from radar.paths import DATA, JOBS, watchlist_path
 from radar.store import locked
@@ -83,7 +83,10 @@ def fetch_all():
     _boards_answered.clear()
     _boards_answered.update(answered)
     boards.save_looked_up(answered)
-    (DATA / "board_errors.json").write_text(json.dumps(dict(e for e in errors if isinstance(e, tuple))))
+    failed = dict(e for e in errors if isinstance(e, tuple))
+    (DATA / "board_errors.json").write_text(json.dumps(failed))
+    boardhealth.record({t[0]: f"{t[1]}:{t[2]}" for t in tasks}, failed, datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                       DATA / "board_health.json")
     errors = [e if isinstance(e, str) else f"{e[0]} ({e[1]})" for e in errors]
     if matching.load_config().get("source_hn", True):
         doing.say("Reading Hacker News: Who is hiring")

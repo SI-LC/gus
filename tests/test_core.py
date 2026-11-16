@@ -774,9 +774,9 @@ class BotIdentity(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", lambda req, timeout=30: Reply(b"ok")), mock.patch.object(boards.time, "sleep", slept.append), \
              mock.patch.dict(web._hosts, clear=True):
             web.fetch_bytes("https://boards.example.com/a/jobs")
-            web.fetch_bytes("https://other.example.com/jobs")
-            self.assertEqual(slept, [], "different hosts run side by side")
-            web.fetch_bytes("https://boards.example.com/b/jobs")
+            web.fetch_bytes("https://boards.example.org/jobs")
+            self.assertEqual(slept, [], "different vendors run side by side")
+            web.fetch_bytes("https://other.example.com/b/jobs")  # another company on the same vendor waits its turn too
         self.assertEqual(len(slept), 1)
         self.assertAlmostEqual(slept[0], web.HOST_PAUSE, delta=0.2)
 

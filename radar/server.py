@@ -23,6 +23,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from radar import boardhealth
 from radar.companies import veto
 from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
@@ -64,6 +65,7 @@ def last_agent_run():
 
 def state():
     watched = links.watched()
+    unread = boardhealth.unread()
     raw_jobs = read(JOBS, {})  # read once: with every description in it, it's the biggest file there is
     cfg = settings.load()
     places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
@@ -87,6 +89,7 @@ def state():
         accts.append({"name": name, "tier": t, "tier_locked": bool(c.get("tier_locked")), "fit": c.get("fit"),
                       "why": c.get("fit_why"), "product": c.get("product"), "london": c.get("london"),
                       "stage": c.get("stage"), "board": c.get("board"), "board_broken": c.get("board_broken"),
+                      "board_unread_days": (unread.get(name) or {}).get("days") if c.get("board_broken") else None,
                       "added": c.get("added"), "previous_fit": c.get("previous_fit"), "favourite": bool(c.get("favourite")),
                       "events": ev[:6], "fresh": sum(e["fresh"] for e in ev),
                       "careers_url_broken": bool(c.get("careers_url_broken")),
@@ -127,6 +130,8 @@ def state():
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),
             "signals_waiting": sum(1 for l in signals.values() if l.get("status") == "new"),
             "board_errors": read(DATA / "board_errors.json", {}),
+            "board_unread": {n: u["days"] for n, u in unread.items()},
+            "board_unread_days": boardhealth.UNREAD_DAYS,
             "feed_errors": read(DATA / "feed_errors.json", {}),
             "x": read(DATA / "x_state.json", {}),
             "sources": sources.status(),
