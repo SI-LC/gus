@@ -1149,6 +1149,7 @@ const STEP_MARK = { done: "✓", running: "●", failed: "✗", skipped: "–", 
 const JOB = {  // what each job is called while it runs, once it's done, and what it's doing
   scan: { now: "Checking roles", done: "Check roles", what: "Reading your job boards, feeds and email, then scoring anything new. Usually about 2 minutes.", link: ["#roles", "Open Role Inbox"] },
   sources: { now: "Checking job sources", done: "Job sources check", what: "Asking the job sources that are due for new roles, then scoring them. This can take a while.", link: ["#roles", "Open Role Inbox"] },
+  catchup: { now: "Reading boards that were told to wait", done: "Catch-up on boards", what: "A supplier asked Gus to slow down this morning, so some job boards weren't read. Its wait is over: Gus is reading those boards now and scoring anything new.", link: ["#roles", "Open Role Inbox"] },
   run: { now: "Full run", done: "Full run", what: "Everything Check roles does, plus finding new companies, catching up on news at yours, and picking who to contact this week. Takes longer and uses more of your daily AI limit.", link: ["#week", "See who to contact"] },
 };
 const jobName = (j, k) => (JOB[j] || {})[k] || j;

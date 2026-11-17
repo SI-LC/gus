@@ -2,11 +2,12 @@
 
     python3 -m radar.service --host 0.0.0.0
 
-There are three jobs, run strictly one at a time. A full run does everything in a fixed order, so the
+There are four jobs, run strictly one at a time. A full run does everything in a fixed order, so the
 parts can't drift out of sync; it starts at your daily time (if the scheduler is on in Settings) or from
 the Full run button. Check roles is its first step on its own: one scan (run.sh), which reads every board,
 feed and inbox, scores what's new and maps people at accounts with fresh news. Job sources searches Adzuna
-and JSearch when they're due.
+and JSearch when they're due. Catch-up reads the boards a vendor held back ("slow down") once its hold has run out, so a
+refusal in the morning costs a few hours and not the day.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import time
 import traceback
 from datetime import date, datetime
 
-from radar import boardhealth, doing
+from radar import boardhealth, doing, scan, web
 from radar.matching import load_config
 from radar.paths import DATA, JOBS, MOVES, ROOT
 from radar.store import read
@@ -45,12 +46,22 @@ def _save_schedule_state(s):
 def _check_roles():
     """One scan, start to finish: everything in run.sh. Says what it found, as the full run does."""
     before = _counts()
-    out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+    # an hour: a vendor that has said "slow down" is asked at web.SLOWER_PAUSE, and a big board on one takes minutes
+    out = subprocess.run(["bash", str(ROOT / "run.sh")], capture_output=True, text=True, timeout=3600, cwd=ROOT)
     if out.returncode:
         return False, "Didn't finish: " + ((out.stdout + out.stderr).strip()[-250:] or f"exit code {out.returncode}")
     after = _counts()
     new = after["roles"] - before["roles"]
     return True, f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox" + _unread_note()
+
+
+def _catch_up():
+    """Read the boards a vendor held back on the last scan, now its hold has run out, and score anything new."""
+    before = _counts()["roles"]
+    out = subprocess.run([sys.executable, "-m", "radar.scan", "--held"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+    if _counts()["roles"] > before:
+        _run_modules("triage")
+    return out.returncode == 0, (out.stdout.strip().splitlines() or ["Didn't finish"])[0] + _unread_note()
 
 
 def _unread_note() -> str:
@@ -175,7 +186,7 @@ def full_run():
 
 
 def _run_job(job):
-    return {"run": full_run, "scan": _check_roles, "sources": _sources}[job]()
+    return {"run": full_run, "scan": _check_roles, "sources": _sources, "catchup": _catch_up}[job]()
 
 
 def start(job: str) -> bool:
@@ -229,11 +240,20 @@ def sources_due(now: datetime, cfg: dict, s: dict) -> bool:
     return bool(_sources_on(cfg) and cfg.get("sources_auto") and t and now.strftime("%H:%M") >= t and s.get("sources") != str(now.date()))
 
 
+def catch_up_due(cfg: dict, s: dict) -> str:
+    """The moment a vendor's hold ran out, when boards are still waiting on it and they haven't been read since; else ""."""
+    ended = web.hold_ended() if cfg.get("scheduler_enabled") else ""
+    return ended if ended and s.get("catch_up") != ended and scan.waiting() else ""
+
+
 def tick(first: bool, now: datetime = None) -> None:
     """One look at the clock. `first` is the look made as Gus starts."""
     cfg = load_config()
     now = now or datetime.now()
     s = _schedule_state()
+    if (ended := catch_up_due(cfg, s)) and start("catchup"):
+        s["catch_up"] = ended
+        _save_schedule_state(s)
     if sources_due(now, cfg, s) and start("sources"):
         s["sources"] = str(now.date())
         _save_schedule_state(s)
