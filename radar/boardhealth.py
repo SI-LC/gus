@@ -15,11 +15,12 @@ PATH = DATA / "board_health.json"
 UNREAD_DAYS = 2  # a board unread for this many days is named in the run's summary: one bad morning isn't news
 
 
-def record(asked: dict, errors: dict, now: str, path=None) -> None:
+def record(asked: dict, errors: dict, now: str, path=None, partial: bool = False) -> None:
     """After a scan. asked is {company: "ats:slug"} for every board it tried, errors is {company: what went wrong}.
-    A board that has left the watchlist is forgotten, and one that has moved starts afresh."""
+    A board that has left the watchlist is forgotten, and one that has moved starts afresh. partial: only some boards were
+    asked (the ones held back earlier in the day), so the rest are left as they were."""
     with locked(path or PATH) as health:
-        for name in [n for n in health if n not in asked]:
+        for name in [] if partial else [n for n in health if n not in asked]:
             del health[name]
         for name, board in asked.items():
             rec = health.get(name) or {}

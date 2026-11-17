@@ -1,0 +1,18 @@
+id: pipeline-list-by-stage
+requirement: The Pipeline list shows my roles in groups, one for each stage, and I can drag a role from one group to another.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Shortlist"
+  - open Pipeline
+  - pick "List"
+  - see "Finished"
+  - drag "Senior Product Manager" to "Interviewing"
+  - message says "Moved to Interviewing"
+  - click "Senior Product Manager"
+  - see "Mark finished"
+  - reload
+  - '"List" is picked'
+  - click "Senior Product Manager"
+  - see "Mark finished"
+judge: Can I tell at a glance how many roles are at each stage, and that a stage with no roles is still somewhere I can drop one?

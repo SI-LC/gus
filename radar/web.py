@@ -50,7 +50,7 @@ def ua() -> dict:
 
 
 HOST_PAUSE = 1.5  # seconds between any two requests to one vendor, whichever threads send them
-SLOWER_PAUSE = 6  # the same, for the rest of the run, once a vendor has said "slow down": no vendor says what gap it wants
+SLOWER_PAUSE = 10  # the same for a vendor that has said "slow down", for CAREFUL_DAYS after: no vendor says what gap it wants
 _hosts: dict = {}  # vendor -> the moment it may next be asked
 _hosts_lock = threading.Lock()
 
@@ -96,10 +96,11 @@ def vendor(host: str) -> str:
 def _pace(who: str) -> None:
     """Requests to one vendor come at least HOST_PAUSE apart, whichever thread sends them. The scan reads six boards at once,
     and many of them live with the same vendor: paced, they arrive one at a time rather than as a burst from one address."""
+    slow = who in _cooled or _said_lately(who)
     with _hosts_lock:
         now = time.monotonic()
         turn = max(now, _hosts.get(who, 0))
-        _hosts[who] = turn + (SLOWER_PAUSE if who in _cooled else HOST_PAUSE)
+        _hosts[who] = turn + (SLOWER_PAUSE if slow else HOST_PAUSE)
     if turn > now:
         time.sleep(turn - now)
 
@@ -114,12 +115,13 @@ class SlowDown(Refused):
     """Not asked at all: the vendor told Gus to slow down, and Gus is waiting before it asks again."""
 
 
-SLOW_DOWN = DATA / "slow_down.json"  # {vendor: {"until", "times", "said"}}, shared by every Gus process
+SLOW_DOWN = DATA / "slow_down.json"  # {vendor: {"until", "times", "said", "why", "asked_for"}}, shared by every Gus process
 SHORT_WAIT = 30  # seconds: a "try again in" this short is waited out once, there and then
 STRIKES = 3  # refusals in a row from one vendor, with no answer between them, before Gus changes what it does
 COOL_OFF = 60  # seconds the vendor is left alone the first time that happens in a run
 FIRST_HOLD = 2 * 3600  # seconds it isn't asked at all when it still says no after that: long enough to cover one run
 LONGEST_HOLD = 20 * 3600  # each hold in a row is twice the last, up to this: under a day, so the daily run always asks once
+CAREFUL_DAYS = 7  # how long after a "slow down" the vendor is still asked at SLOWER_PAUSE, though it answers again
 _strikes: dict = {}  # vendor -> refusals in a row, in this process
 _cooled: set = set()  # vendors already given their cool-off in this process
 
@@ -134,6 +136,17 @@ def said_slow_down(text: str) -> bool:
     return bool(re.search(r"\b429\b|slow down|too many requests", text or "", re.I))
 
 
+def why(e: urllib.error.HTTPError) -> str:
+    """What the vendor said, in a few words: slowing down can cure "too many requests", and never a bot check."""
+    return f"a bot check ({e.code})" if e.code != 429 else "too many requests (429)"
+
+
+def held_back(failure: str) -> bool:
+    """Whether a board's recorded failure is one that waiting cures: its vendor was on hold, or answered 429. Those boards
+    are read again the same day, once the hold runs out (`hold_ended`)."""
+    return bool(re.search(r"Not asked: |\b429\b", failure or ""))
+
+
 def _retry_after(e: urllib.error.HTTPError):
     try:
         return max(0, int((e.headers or {}).get("Retry-After")))
@@ -145,23 +158,46 @@ def _utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _holds() -> dict:
+    return read(SLOW_DOWN) if SLOW_DOWN.exists() else {}
+
+
+def _stale(rec: dict) -> bool:
+    """Said so long ago that the vendor is asked at the usual pace again."""
+    return rec.get("said", "") < (_utc() - timedelta(days=CAREFUL_DAYS)).isoformat(timespec="seconds")
+
+
+def _said_lately(who: str) -> bool:
+    rec = _holds().get(who)
+    return bool(rec) and not _stale(rec)
+
+
+def hold_ended() -> str:
+    """When the latest hold to run out did so, while its vendor hasn't answered since; "" when none is waiting to be asked.
+    The service reads the boards held back once for each such moment."""
+    now = _utc().isoformat(timespec="seconds")
+    return max((r["until"] for r in _holds().values() if r.get("times") and r.get("until", now) < now), default="")
+
+
 def _check_hold(who: str) -> None:
-    rec = read(SLOW_DOWN).get(who) if SLOW_DOWN.exists() else None
+    rec = _holds().get(who)
     if rec and rec.get("until", "") > _utc().isoformat(timespec="seconds"):
         again = datetime.fromisoformat(rec["until"]).astimezone().strftime("%H:%M on %-d %b")
-        raise SlowDown(f"Not asked: {who} told Gus to slow down. Gus asks it again after {again}")
+        said = f" ({rec['why']})" if rec.get("why") else ""
+        raise SlowDown(f"Not asked: {who} told Gus to slow down{said}. Gus asks it again after {again}")
 
 
-def _refused(who: str, wait) -> None:
-    """One more "slow down" from a vendor. STRIKES in a row and it's left alone for COOL_OFF; if it still says no after that,
-    or it was already on hold before this run, Gus stops asking it until the hold runs out."""
+def _refused(who: str, wait, said: str = "") -> None:
+    """One more "slow down" from a vendor. STRIKES in a row and it's left alone for COOL_OFF, then asked more slowly; if it
+    still says no, Gus stops asking it until the hold runs out. A vendor held before this run, and not heard from since,
+    gets that one slower try at its first refusal: it has already said no, and one more no shouldn't cost another day."""
     with _hosts_lock:
         _strikes[who] = _strikes.get(who, 0) + 1
-        held_before = SLOW_DOWN.exists() and who in read(SLOW_DOWN)
+        held_before = bool((_holds().get(who) or {}).get("times"))
         if _strikes[who] < STRIKES and not held_before:
             return
         _strikes[who] = 0
-        if who not in _cooled and not held_before:
+        if who not in _cooled:
             _cooled.add(who)
             _hosts[who] = max(_hosts.get(who, 0), time.monotonic() + COOL_OFF)
             return
@@ -172,16 +208,21 @@ def _refused(who: str, wait) -> None:
         times = rec.get("times", 0) + 1
         hold = min(LONGEST_HOLD, max(FIRST_HOLD * 2 ** (times - 1), wait or 0))
         holds[who] = {"until": (now + timedelta(seconds=hold)).isoformat(timespec="seconds"), "times": times,
-                      "said": now.isoformat(timespec="seconds")}
+                      "said": now.isoformat(timespec="seconds"), "why": said, "asked_for": wait}
 
 
 def _answered(who: str) -> None:
-    """The vendor answered: the count starts again, and a hold that has run out is forgotten."""
+    """The vendor answered: the count starts again and its hold is over, so the next one would start short. What it said is
+    kept for CAREFUL_DAYS, to go on asking it slowly, and then forgotten."""
     with _hosts_lock:
         _strikes.pop(who, None)
-    if SLOW_DOWN.exists() and who in read(SLOW_DOWN):
+    rec = _holds().get(who)
+    if rec and (rec.get("times") or _stale(rec)):
         with locked(SLOW_DOWN) as holds:
-            holds.pop(who, None)
+            if _stale(holds.get(who) or {}):
+                holds.pop(who, None)
+            else:
+                holds[who] = {k: v for k, v in holds[who].items() if k != "until"} | {"times": 0}
 
 
 def _fetch(req, timeout: int) -> bytes:
@@ -219,14 +260,14 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
             raise
         wait = _retry_after(e)
         if wait is None or wait > SHORT_WAIT or getattr(_limit, "deadline", None) is not None:
-            _refused(who, wait)
+            _refused(who, wait, why(e))
             raise
         time.sleep(wait)
         try:
             data = _fetch(req, timeout)
         except urllib.error.HTTPError as again:
             if told_to_slow_down(again):
-                _refused(who, _retry_after(again))
+                _refused(who, _retry_after(again), why(again))
             raise
     _answered(who)
     if len(data) > MAX_RESPONSE:
