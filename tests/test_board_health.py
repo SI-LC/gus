@@ -215,6 +215,25 @@ class BackingOff(unittest.TestCase):
             web.fetch_bytes(self.A)
         self.assertEqual(len(self.asked), asked + 1, "a long wait isn't sat through, and the request isn't repeated")
 
+    def test_a_bot_check_that_answers_429_is_not_taken_for_too_many_requests(self):
+        check = {"cf-mitigated": "challenge"}
+        self.assertEqual(web.why(slow_down(self.A, 429, check)), "a bot check (429)")
+        self.answers.append(slow_down(self.A, 429, check))
+        with self.assertRaises(urllib.error.HTTPError) as said:
+            web.fetch_bytes(self.A)
+        self.assertIn("bot check", str(said.exception))
+        self.assertFalse(web.held_back(f"workday:acme: {said.exception}"), "waiting doesn't cure a bot check")
+        for _ in range(2 * web.STRIKES - 1):
+            self.answers.append(slow_down(self.A, 429, check))
+            with self.assertRaises(urllib.error.HTTPError):
+                web.fetch_bytes(self.A)
+        self.assertEqual(self.hold()["why"], "a bot check (429)")
+        with self.assertRaises(web.SlowDown) as stopped:
+            web.fetch_bytes(self.B)
+        self.assertIn("a bot check (429)", str(stopped.exception))
+        self.assertNotIn("slow down", str(stopped.exception))
+        self.assertFalse(web.held_back(f"workday:bolt: {stopped.exception}"), "so the board isn't read again when the hold ends")
+
     def test_a_bot_check_counts_as_slow_down_and_a_plain_refusal_does_not(self):
         self.assertTrue(web.told_to_slow_down(slow_down(self.A, 403, {"cf-mitigated": "challenge"})))
         self.assertFalse(web.told_to_slow_down(slow_down(self.A, 403)))
