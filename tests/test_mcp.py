@@ -194,6 +194,13 @@ class Tools(World):
         self.assertEqual([(c["role_id"], c["field"], c["old"], c["new"], c["who"], c["reason"], c["company"], c["title"]) for c in out["changes"]],
                          [("gh:acme:2", "stage", "shortlisted", "skipped", "claude", "ad closed", "Acme", "Group PM")])
 
+    def test_a_skip_sent_without_why_says_which_reason_is_missing(self):
+        self.writes()
+        out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "skipped", "skip_reason": "pay"})
+        self.assertIn("Why you're making this change", out["error"])  # what the missing one is for
+        self.assertIn("as well as skip_reason", out["error"])  # and that the one sent isn't it
+        self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+
     def test_what_changed_can_be_narrowed_and_says_when_there_is_more(self):
         self.writes()
         for n in range(3):
