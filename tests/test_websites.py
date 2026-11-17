@@ -92,6 +92,56 @@ class Checking(unittest.TestCase):
         self.assertEqual(out["looked"], 1)
 
 
+class RunningOutOfTime(Checking):
+    """The step has a fixed time for the whole batch, so one scan's websites can never hold up the run."""
+
+    def test_a_site_that_never_answers_doesnt_hold_up_the_rest(self):
+        import threading
+        import time
+        hang = threading.Event()
+        self.addCleanup(hang.set)
+        self.path.write_text(json.dumps({"Slow": {"status": "watched", "board": "ashby:slow"}, "Acme": {"status": "watched", "board": "ashby:acme"}}))
+
+        def fetch(url):
+            if "slow" in url:
+                hang.wait(10)
+                raise OSError("never answered")
+            return BOARD_PAGE
+
+        began = time.monotonic()
+        with mock.patch.object(websites.web, "polite_fetch", fetch), mock.patch.object(websites, "sitemap_of", lambda url: []):
+            out = websites.run(budget=0.5)
+        saved = json.loads(self.path.read_text())
+        self.assertLess(time.monotonic() - began, 3, "the step ends when its time is up, whatever one site is doing")
+        self.assertEqual(saved["Acme"]["website"], "https://acme.com/", "what was found in time is kept")
+        self.assertEqual(saved["Slow"].get("website_checked"), str(date.today()), "the one that hung isn't first in line again tomorrow")
+        self.assertNotIn("website", saved["Slow"])
+        self.assertEqual((out["looked"], out["left"]), (2, 0))
+
+    def test_what_there_was_no_time_for_waits_for_the_next_scan(self):
+        self.path.write_text(json.dumps({"Acme": {"status": "watched", "board": "ashby:acme"}}))
+        with mock.patch.object(websites.web, "polite_fetch", lambda url: BOARD_PAGE):
+            out = websites.run(budget=0)
+        self.assertEqual((out["looked"], out["left"]), (0, 1))
+        self.assertNotIn("website_checked", json.loads(self.path.read_text())["Acme"], "not looked at, so still due")
+
+    def test_a_company_out_of_time_isnt_asked_about_its_other_addresses(self):
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            raise OSError("out of time")
+
+        with mock.patch.object(websites.web, "polite_fetch", fetch), mock.patch.object(websites, "TIME_PER_COMPANY", -1):
+            self.assertIsNone(websites.find("Acme", {"board": "ashby:acme"}))
+        self.assertEqual(asked, [])
+
+    def test_the_scan_looks_for_websites_last_after_everything_you_rely_on(self):
+        steps = (Path(websites.__file__).parent.parent / "run.sh").read_text()
+        for needed in ("radar.triage", "radar.events sync", "radar.prune", "release_held", "heartbeat.log"):
+            self.assertLess(steps.index(needed), steps.index("radar.websites"), f"{needed} comes before the websites")
+
+
 class SettingIt(unittest.TestCase):
     def setUp(self):
         d = tempfile.TemporaryDirectory()
