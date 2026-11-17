@@ -1,0 +1,15 @@
+id: drag-a-role-on-the-board
+requirement: On the Pipeline board I can drag a role's card to another stage and it stays there, and clicking the card still opens it.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Shortlist"
+  - open Pipeline
+  - drag "Senior Product Manager" to "Applied"
+  - message says "Moved to Applied"
+  - click "Senior Product Manager"
+  - see "Got an interview"
+  - reload
+  - click "Senior Product Manager"
+  - see "Got an interview"
+judge: Is it clear while I drag which stage the card will land in, and afterwards that it moved?
