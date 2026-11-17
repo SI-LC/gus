@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -99,16 +100,26 @@ def claude_moves(page, title, stage, reason):
     tool("update_role", {"role_id": roles[0]["role_id"], "stage": stage, "reason": reason})
 
 
+def scan_once(givens) -> dict:
+    """One scanned install for each kind the cases start from. Each case gets its own copy, as a scan of the made-up
+    boards always comes out the same. The scans run at the same time, each in its own folder: a scan is mostly Gus
+    pausing between requests, so four take as long as one."""
+    def scan(given):
+        world = World(signed_out="signed out" in given, job_site="job site" in given, refusing="says no" in given)
+        world.scan()
+        return world
+
+    kinds = sorted({g for g in givens if g.startswith("scanned")})
+    with ThreadPoolExecutor(max_workers=len(kinds) or 1) as pool:
+        return dict(zip(kinds, pool.map(scan, kinds)))
+
+
 def fresh_world(given, scanned) -> World:
-    """An install for the case to start from. The scan runs once for each kind of scanned install and each case gets
-    its own copy of the result, as a scan of the made-up boards always comes out the same."""
+    """An install for the case to start from."""
     if given == "demo":
         return demo.build()
     if not given.startswith("scanned"):
         return World(new=True, signed_out="signed out" in given)
-    if given not in scanned:
-        scanned[given] = World(signed_out="signed out" in given, job_site="job site" in given, refusing="says no" in given)
-        scanned[given].scan()
     return scanned[given].copy()
 
 
@@ -141,7 +152,7 @@ def main():
     for c in cases:
         if not (c.get("id") and c.get("requirement") and c.get("given") in GIVENS and c.get("check")):
             sys.exit(f"Case {c.get('id')} needs an id, a requirement, given ({' or '.join(GIVENS)}) and a check")
-    failed, scanned = 0, {}
+    failed, scanned = 0, scan_once(c["given"] for c in cases)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         for case in cases:
