@@ -30,8 +30,10 @@ PERSON_KINDS = ["product_leader", "hiring_manager", "peer_pm", "recruiter", "war
 PERSON_STAGES = ["mapped", "contacted", "replied", "conversation", "referred", "closed"]
 MOVE_STATUS = ["todo", "done", "skipped"]
 # why you skipped a role, as the cockpit offers it: what you say here is what scoring got wrong
-SKIP_REASONS = {"junior": "Too junior", "senior": "Too senior", "domain": "Wrong domain", "location": "Location", "pay": "Pay", "company": "Not this company",
-                "recruiter": "Recruiter, company not named", "applied_before": "Applied here before"}
+SKIP_REASONS = {"role": "The role isn't right", "level": "Wrong level", "domain": "Wrong domain", "location": "Location or office days", "pay": "Pay",
+                "in_play": "Already in play at this company", "conflict": "Competitor or past employer", "company": "Don't want this company",
+                "recruiter": "Recruiter, company not named"}
+SKIP_REASON_WAS = {"junior": "level", "senior": "level", "applied_before": "in_play"}  # older reasons: the next scan renames them
 OUTCOMES = ["no_reply", "replied", "conversation", "interview", "referral", "not_now"]
 SIGNAL_STATUS = ["new", "processed", "ignored"]
 
@@ -41,7 +43,7 @@ OBJECTS = {
              {"company": STR, "title": STR, "url": STR, "location": STR, "description": STR, "score": INT, "why": STR,
               "flags": LIST, "history": LIST, "contacts": DICT, "note": STR, "folder": STR, "missed": INT, "also": DICT, "ref": STR, "pruned": STR,
               "source_url": STR, "link_kind": STR, "board": DICT},
-             {"stage": JOB_STAGES, "source": JOB_SOURCES, "found_via": JOB_SOURCES, "text_kind": TEXT_KINDS, "skip_reason": list(SKIP_REASONS)}),
+             {"stage": JOB_STAGES, "source": JOB_SOURCES, "found_via": JOB_SOURCES, "text_kind": TEXT_KINDS, "skip_reason": [*SKIP_REASONS, *SKIP_REASON_WAS]}),
     "companies": ("companies.json", r".", ["status"],
                   {"fit": NUM, "fit_why": STR, "source": STR, "signal": STR, "investors": LIST,
                    "product_leaders": LIST, "tier_locked": BOOL, "favourite": BOOL, "vetoed": BOOL, "reassess": BOOL,

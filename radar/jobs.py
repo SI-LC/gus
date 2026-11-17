@@ -21,6 +21,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from radar.matching import load_config, matches
 from radar.paths import JOBS
+from radar.schema import SKIP_REASON_WAS
 from radar.store import locked, read
 
 STAGE_ORDER = ["new", "skipped", "closed", "shortlisted", "preparing", "applied", "interviewing"]
@@ -150,6 +151,14 @@ def board_sighting(job: dict) -> str | None:
 def settle_sources(store: dict) -> list[str]:
     """Roles a job site found and Gus has since found on the board, from before board sightings became board roles. Returns their ids."""
     return [jid for jid, j in store.items() if j.get("source") in JOB_SITES and (url := board_sighting(j)) and to_board(j, url)]
+
+
+def rename_skip_reasons(store: dict) -> list[str]:
+    """Roles skipped for a reason the list no longer has, given the one that replaced it. Returns their ids."""
+    renamed = [jid for jid, j in store.items() if j.get("skip_reason") in SKIP_REASON_WAS]
+    for jid in renamed:
+        store[jid]["skip_reason"] = SKIP_REASON_WAS[store[jid]["skip_reason"]]
+    return renamed
 
 
 def absorb(existing: dict, role: dict, now: str) -> None:

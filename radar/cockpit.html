@@ -792,7 +792,7 @@ const chgDay = iso => {
 const chgTime = iso => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const chgRole = c => c.title ? `<b><button class="link" onclick="openChanged(${jsq(c.role)})">${esc(c.title)}</button></b> <span>${esc(c.company || "")}</span>`
   : `<b>A role no longer in Gus</b>`;
-const skipName = r => r ? esc((S.labels.skip_reasons[r] || r).toLowerCase()) : "";
+const skipName = r => r ? esc((S.labels.skip_reasons[r] || S.labels.skip_reasons[(S.labels.skip_reason_was || {})[r]] || r).toLowerCase()) : "";  // an older reason by its new name
 function chgLine(c, all) {
   const who = WHO[c.actor] || "Someone", why = c.reason ? `: <b>${esc(c.reason)}</b>` : "", at = ` · ${chgTime(c.at)}`;
   let what, was = "";

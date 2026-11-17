@@ -110,7 +110,7 @@ class AddRole(unittest.TestCase):
         self.assertEqual(server.update_job({"id": jid, "skip_reason": "pay"})["job"]["skip_reason"], "pay")
         server.update_job({"id": jid, "skip_reason": ""})
         self.assertNotIn("skip_reason", self.stored()[jid])
-        server.update_job({"id": jid, "skip_reason": "junior"})
+        server.update_job({"id": jid, "skip_reason": "level"})
         server.update_job({"id": jid, "stage": "new"})
         self.assertNotIn("skip_reason", self.stored()[jid])
 

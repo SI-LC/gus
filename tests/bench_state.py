@@ -67,7 +67,7 @@ def build(app: Path) -> None:
                      "board": {"ats": "greenhouse", "slug": company.split()[0].lower()} if i % 4 == 0 else None,
                      "link_checked": day(3), "also": {f"adzuna:{i}": {"url": f"https://jobs.example/{i}", "source": "adzuna", "seen": day(2)}} if i % 6 == 0 else {}}
         if stage == "skipped" and i % 7 == 0:
-            jobs[jid]["skip_reason"] = rng.choice(["junior", "senior", "domain", "location", "pay"])
+            jobs[jid]["skip_reason"] = rng.choice(["role", "level", "domain", "location", "pay"])
 
     people = {}
     while len(people) < PEOPLE:

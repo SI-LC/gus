@@ -177,6 +177,15 @@ class JobSiteThenBoard(unittest.TestCase):
         self.assertEqual(J.settle_sources(store), [])
 
 
+class OlderSkipReasons(unittest.TestCase):
+    def test_a_reason_the_list_no_longer_has_takes_the_one_that_replaced_it_once(self):
+        store = {"a": role("a", stage="skipped", skip_reason="junior"), "b": role("b", stage="skipped", skip_reason="senior"),
+                 "c": role("c", stage="skipped", skip_reason="applied_before"), "d": role("d", stage="skipped", skip_reason="domain")}
+        self.assertEqual(J.rename_skip_reasons(store), ["a", "b", "c"])
+        self.assertEqual([store[i]["skip_reason"] for i in "abcd"], ["level", "level", "in_play", "domain"])
+        self.assertEqual(J.rename_skip_reasons(store), [])
+
+
 class AddedByAnAgent(unittest.TestCase):
     """A role an agent finds on a careers page goes through the same checks as every other source, in code."""
 
