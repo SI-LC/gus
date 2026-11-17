@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # The code scan. Runs before every push (.githooks/pre-push), on every pull request (.github/workflows/scan.yml)
 # and every deploy. Any failure stops it.
+#   bash deploy/scan.sh                           everything
+#   bash deploy/scan.sh --tested-on-github 154    from deploy.sh alone, once it has checked that GitHub's scan passed on
+#                                                 this exact code in that pull request: the tests aren't run a second time
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 fail=0
+tested=""; [ "${1:-}" = "--tested-on-github" ] && tested="${2:-}"
 bad() { echo "  ✗ $1"; fail=1; }
 good() { echo "  ✓ $1"; }
 
@@ -54,7 +58,8 @@ fi
 python3 -m compileall -q radar tests && good "Python compiles" || bad "Python doesn't compile"
 if [ -d data ]; then python3 -m radar.schema check >/dev/null 2>&1 && good "data files match docs/objects.md" || bad "data files don't match docs/objects.md (run: python3 -m radar.schema check)"; fi
 # Every test file at once, each in its own process; only the failing files' output comes back, and the failures are shown, not the tail
-if out=$(python3 deploy/run_tests.py 2>&1); then good "tests pass"; else
+if [ -n "$tested" ]; then echo "  - tests: not run again, GitHub passed them on this exact code (pull request #$tested)"
+elif out=$(python3 deploy/run_tests.py 2>&1); then good "tests pass"; else
   bad "tests fail (python3 deploy/run_tests.py)"
   echo "$out" | grep -v ResourceWarning | grep -A 25 -E "^(FAIL|ERROR):|^=== |test files passed|^  failed:" | head -120
 fi
