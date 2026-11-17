@@ -4,6 +4,7 @@ import json
 import re
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -459,7 +460,7 @@ class Closing(Base):
         self.assertIsNone(role.get("ad_closed"))
 
     def test_a_list_cut_short_closes_nothing(self):
-        with mock.patch.object(boards, "WORKDAY_LIST_PAGES", 1):
+        with mock.patch.object(boards, "WORKDAY_LIST_PAGES", 0):
             role = self.workday_twice(lambda: workday_site(**{"Product-Manager_JR1": refused("x", 404)}))
         self.assertIsNone(role.get("ad_closed"))
         self.assertIsNone(role.get("missed"))
@@ -482,13 +483,36 @@ class Salesforce(Base):
         self.run_scan(site)
         self.assertEqual([u.rsplit("/", 1)[1] for u in site.pages()], ["Senior-Product-Manager_JR360001"])
 
+    def filtered(self, **counts):
+        """A site whose first answer is the whole board and whose filtered answers count these places ({} for no counts at all)."""
+        board = json.loads(sample("workday_list.json"))
+        inside = json.loads(sample("workday_list.json"))
+        if counts:
+            for place in inside["facets"][2]["values"][0]["values"]:
+                place["count"] = counts.get(place["descriptor"], place["count"])
+        else:
+            del inside["facets"]
+        pages = iter([json.dumps(board).encode()] + [json.dumps(inside).encode()] * 9)
+        return workday_site(**{"External_Career_Site/jobs": lambda _: next(pages)})
+
     def test_asks_only_for_jobs_in_your_locations(self):
-        site = workday_site()
+        site = self.filtered()  # its filtered answers don't say what they cover, so every filter is asked
         self.run_scan(site)
         country, places = site.filters()[1:]
         self.assertEqual(site.filters()[0], {})
         self.assertEqual(list(country.values()), [["29247e57dbaf46fb855b224e03170bc7"]])  # United Kingdom, not India
         self.assertEqual(len(places["locations"]), 2)  # London and England remote, not Bangalore or California remote
+
+    def test_places_the_country_already_covers_are_not_read_a_second_time(self):
+        site = workday_site()  # within the United Kingdom it counts as many jobs in London and England as on the whole board
+        jobs, errors = self.run_scan(site)
+        self.assertEqual(len(site.filters()), 2, "the filters, then the country: its places would be the same jobs again")
+        self.assertEqual(([j["id"] for j in jobs], errors), ([f"wd:{WD}:JR360001"], {}))
+
+    def test_a_place_with_jobs_outside_the_country_is_still_asked_for(self):
+        site = self.filtered(**{"United Kingdom - England - Remote": 3})  # 5 on the whole board, so 2 aren't under the country
+        self.run_scan(site)
+        self.assertEqual(site.filters()[2:], [{"locations": ["1038e944b1101012453aa714c1510000"]}], "only that place, not London again")
 
     def test_never_filters_by_anything_but_place(self):
         site = workday_site()
@@ -917,6 +941,23 @@ class Gem(Base):
                 _, errors = self.run_scan(site)
                 self.assertIn(f"robots.txt answered {code}", errors["Acme"])
                 self.assertEqual([u for u in site.asked if "robots" not in u], [])
+
+    def test_a_robots_file_is_kept_for_a_day_between_scans(self):
+        site, kept = gem_site(**{"api.gem.com/robots.txt": b"User-agent: *\nDisallow: /private/\n"}), self.dir / "robots.json"
+        with self.fetch(site):
+            web.site_rules("api.gem.com")
+            web.keep_robots(kept)
+            web._robots.clear()  # the next scan is a new process
+            web.remember_robots(kept)
+            self.assertFalse(web.robots_allow(web.site_rules("api.gem.com")[0], "/private/x"), "the rules are the ones it read")
+            self.assertEqual(len(site.asked), 1, "not asked for again the same day")
+            web._robots.clear()
+            tomorrow = time.time() + web.ROBOTS_KEEP + 60
+            with mock.patch.object(web.time, "time", lambda: tomorrow):
+                web.remember_robots(kept)
+                web.site_rules("api.gem.com")
+            self.assertEqual(len(site.asked), 2, "a day later it is read again")
+        self.assertLessEqual(web.ROBOTS_KEEP, 24 * 3600, "no longer than a day (RFC 9309)")
 
     def test_the_gateway_403_only_means_no_file_on_gems_api(self):
         site = Site({"elsewhere.example.com/robots.txt": gateway_403})

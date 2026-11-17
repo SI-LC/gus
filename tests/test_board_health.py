@@ -178,6 +178,15 @@ class BackingOff(unittest.TestCase):
         self.assertAlmostEqual(self.slept[-1] - self.slept[-2], web.HOST_PAUSE, delta=0.5)
         self.assertIsNone(self.hold(), "and it's forgotten")
 
+    def test_a_vendor_whose_boards_take_many_requests_is_always_asked_gently(self):
+        a, b = "https://acme.wd1.myworkdayjobs.com/jobs", "https://bolt.wd5.myworkdayjobs.com/jobs"
+        self.assertTrue(web.unhurried("myworkdayjobs.com"), "though it has never said slow down")
+        self.assertFalse(web.unhurried("vendor.example"))
+        web.fetch_bytes(a)
+        web.fetch_bytes(b)
+        self.assertAlmostEqual(self.slept[-1], web.GENTLE["myworkdayjobs.com"], delta=0.5)
+        self.assertGreaterEqual(web.GENTLE["myworkdayjobs.com"], 30)
+
     def test_the_hold_keeps_what_the_vendor_said(self):
         self.refuse(self.A, web.STRIKES)
         self.answers += [slow_down(self.A, headers={"Retry-After": "900"})] * web.STRIKES
@@ -275,6 +284,55 @@ class CatchUp(unittest.TestCase):
     def test_a_board_that_broke_is_not_one_that_is_waiting(self):
         (self.dir / "board_errors.json").write_text(json.dumps({"Bolt": "ashby:bolt: HTTP Error 404: Not Found"}))
         self.assertEqual(self.scan.waiting(), set())
+
+
+class SlowLane(unittest.TestCase):
+    """Boards on a vendor Gus asks slowly are read one after another in a slot of their own, so the other boards don't wait on them."""
+
+    def setUp(self):
+        import csv
+        import threading
+        from radar import boards, matching, scan
+        self.dir = Path(tempfile.mkdtemp())
+        slow, quick = [f"Slow{n}" for n in range(8)], [f"Quick{n}" for n in range(8)]
+        with (self.dir / "watchlist.csv").open("w", newline="") as f:
+            csv.writer(f).writerows([["company", "ats", "slug", "sector", "only"], *([c, "slow", c.lower(), "ai", ""] for c in slow),
+                                     *([c, "quick", c.lower(), "ai", ""] for c in quick)])
+        self.quick_done, self.at_once, self.most_at_once, self.stalled, lock = threading.Event(), 0, 0, False, threading.Lock()
+        quick_left = [len(quick)]
+
+        def slow_board(company, slug):
+            with lock:
+                self.at_once += 1
+                self.most_at_once = max(self.most_at_once, self.at_once)
+            self.stalled = self.stalled or not self.quick_done.wait(5)  # a slow vendor: its answer comes after everyone else's
+            with lock:
+                self.at_once -= 1
+            return [{"id": f"slow:{slug}:1", "company": company, "title": "Product Manager"}]
+
+        def quick_board(company, slug):
+            with lock:
+                quick_left[0] -= 1
+                if not quick_left[0]:
+                    self.quick_done.set()
+            return [{"id": f"quick:{slug}:1", "company": company, "title": "Product Manager"}]
+
+        for patcher in (mock.patch.dict(boards.SOURCES, slow=slow_board, quick=quick_board, clear=True),
+                        mock.patch.dict(boards.VENDORS, slow="vendor.example", clear=True),
+                        mock.patch.object(web, "unhurried", lambda who: who == "vendor.example"),
+                        mock.patch.object(scan, "watchlist_path", lambda: self.dir / "watchlist.csv"),
+                        mock.patch.object(matching, "load_config", lambda: {"source_hn": False}),
+                        mock.patch.object(boards, "save_looked_up", lambda a: None), mock.patch.object(scan, "DATA", self.dir)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.scan = scan
+
+    def test_slow_boards_go_one_at_a_time_and_never_hold_up_the_rest(self):
+        jobs, errors = self.scan.fetch_all()
+        self.assertFalse(self.stalled, "the quick boards were all read while the slow vendor was still answering its first")
+        self.assertEqual(self.most_at_once, 1, "one board at a time on the slow vendor")
+        self.assertEqual((len(jobs), errors), (16, []), "and every board is read")
+        self.assertEqual(json.loads((self.dir / "board_errors.json").read_text()), {})
 
 
 class CatchUpTime(unittest.TestCase):
