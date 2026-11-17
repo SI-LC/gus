@@ -112,8 +112,8 @@ class World:
         log = self.home / "claude-calls.log"
         return len(log.read_text().splitlines()) if log.exists() else 0
 
-    def start(self):
-        port = free_port()
+    def start(self, port=None):
+        port = port or free_port()
         self.url = f"http://127.0.0.1:{port}"
         self.server = subprocess.Popen(["python3", "-c", BOOT, "--port", str(port)], cwd=self.app, env=self.env,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

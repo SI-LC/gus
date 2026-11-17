@@ -1,0 +1,18 @@
+id: demo-shows-a-made-up-search
+requirement: When I start the demo, every screen is filled with a made-up search, and the menu says it's demo data.
+given: demo
+check:
+  - menu says "Demo data"
+  - see "Staff Product Manager, Agents"
+  - see "Second round, with the VP Product"
+  - open Role Inbox
+  - see "Senior Product Manager, Enterprise"
+  - status bar says "to review"
+  - open To do
+  - see "Priya Raman"
+  - open Companies
+  - see "Tier A"
+  - see "Thistledown"
+  - open Activity
+  - not see "Nothing yet"
+judge: Could I show this to someone without explaining anything, and without them seeing my own search?
