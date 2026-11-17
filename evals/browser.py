@@ -57,6 +57,9 @@ def step(page, text):
         page.locator("#main .chips-row a", has_text=m[1]).first.click()
     elif m := re.fullmatch(r'"(.+)" is picked', text):
         page.locator("#main .chips-row a.on", has_text=m[1]).first.wait_for(timeout=WAIT_MS)
+    elif m := re.fullmatch(r'drag "(.+)" to "(.+)"', text):  # a role, on to the stage with that heading: a board column or a group in the list
+        stage = page.locator("#main [data-drop]").filter(has=page.locator("h3", has_text=m[2])).first
+        page.locator("#main [data-drag]", has_text=m[1]).first.drag_to(stage, timeout=WAIT_MS)
     elif m := re.fullmatch(r'type "(.+)" into "(.+)"', text):
         page.get_by_label(m[2], exact=True).fill(m[1])
     elif text == "the page is refreshing slowly":  # a background refresh is under way and its answer arrives late, as on a busy Pi

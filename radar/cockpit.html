@@ -182,9 +182,10 @@ function roleHint(j) {  // the one thing worth knowing about a role on the board
   const who = peopleAt(j.company), done = who.filter(p => sentAt(j, p)).length;
   return { text: !who.length ? "" : done ? `${done} of ${who.length} messaged` : `${who.length} ${who.length === 1 ? "person" : "people"}`, kind: "" };
 }
+const DRAG_TIP = "Click to open, or drag to another stage";
 function roleChip(j) {
   const h = roleHint(j), since = stageSince(j);
-  return `<button class="pc${h.flag ? " next" : ""}${j.id === openRoleId ? " on" : ""}" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">
+  return `<button class="pc${h.flag ? " next" : ""}${j.id === openRoleId ? " on" : ""}" data-id="${esc(j.id)}" draggable="true" data-drag="${esc(j.id)}" title="${DRAG_TIP}" onclick="openRole(${jsq(j.id)})">
     <span class="pc-top"><span>${esc(j.company)}</span>${since ? `<span title="In this stage since">${ago(since).replace(" ago", "")}</span>` : ""}</span>
     <span class="pc-title">${esc(j.title)}</span>
     <span class="pc-bot"><span${h.kind ? ` class="pill ${h.kind}"` : ""}>${esc(h.text)}</span><b title="Fit score">${j.score ?? "–"}</b></span></button>`;
@@ -656,15 +657,18 @@ const V = {
     const open = mine.find(j => j.id === openRoleId);
     const views = [["board", "Board"], ["list", "List"], ["people", `People <span class="sub">${talking.length}</span>`]];
     const personStage = p => `<select onchange="setPerson(${jsq(p.id)}, this.value)" aria-label="Where it stands with ${esc(p.name)}">${S.labels.person_stages.map(st => `<option value="${st}" ${st === p.stage ? "selected" : ""}>${personLabel(st)}</option>`).join("")}</select>`;
-    const body = pipeView === "list" ? (mine.length ? `<table class="plist"><tr><th>Role</th><th>Stage</th><th>Fit</th><th class="hide-sm">Since</th><th>Next</th></tr>${mine.map(j => { const h = roleHint(j), since = stageSince(j);
-        return `<tr class="${j.stage === "closed" ? "dim" : ""}"><td><button class="link rowlink" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button><div class="sub">${esc(j.company)}</div></td>
-          <td>${LABEL[j.stage]}</td><td class="num">${j.score ?? "–"}</td><td class="hide-sm sub">${since ? ago(since) : ""}</td><td>${h.text ? `<span${h.kind ? ` class="pill ${h.kind}"` : ` class="sub"`}>${esc(h.text)}</span>` : ""}</td></tr>`; }).join("")}</table>` : "")
+    const listRow = j => { const h = roleHint(j), since = stageSince(j);
+      return `<tr class="${j.stage === "closed" ? "dim" : ""}" draggable="true" data-drag="${esc(j.id)}" title="${DRAG_TIP}"><td><button class="link rowlink" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button><div class="sub">${esc(j.company)}</div></td>
+          <td class="num">${j.score ?? "–"}</td><td class="hide-sm sub">${since ? ago(since) : ""}</td><td>${h.text ? `<span${h.kind ? ` class="pill ${h.kind}"` : ` class="sub"`}>${esc(h.text)}</span>` : ""}</td></tr>`; };
+    // one group for each stage, empty ones too, so there's always somewhere to drop a role
+    const body = pipeView === "list" ? (mine.length ? `<table class="plist"><thead><tr><th>Role</th><th>Fit</th><th class="hide-sm">Since</th><th>Next</th></tr></thead>${PIPE.map(st => { const rows = mine.filter(j => j.stage === st);
+        return `<tbody data-drop="${st}"><tr class="grp"><th colspan="4"><h3>${LABEL[st]} <span>${rows.length}</span></h3></th></tr>${rows.map(listRow).join("")}</tbody>`; }).join("")}</table>` : "")
       : pipeView === "people" ? (talking.length ? `<table class="plist"><tr><th>Person</th><th>Company</th><th class="hide-sm">Role</th><th>Where it stands</th></tr>${talking.map(p => { const j = mine.find(o => o.company === p.company);
         return `<tr><td><b><a href="${link(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a></b> ${distBadge(p)}<div class="sub">${esc(p.role || "")}</div></td><td>${esc(p.company)}</td>
           <td class="hide-sm">${j ? `<button class="link" data-id="${esc(j.id)}" onclick="openRole(${jsq(j.id)})">${esc(j.title)}</button>` : `<span class="sub">No role yet</span>`}</td><td>${personStage(p)}</td></tr>`; }).join("")}</table>`
         : `<div class="empty">No conversations yet. When someone you've messaged replies, move them on and they appear here.</div>`)
       : `<div class="board">${PIPE.map(st => { const rows = mine.filter(j => j.stage === st);
-          return `<div class="col"><h3>${LABEL[st]} <span>${rows.length}</span></h3>${rows.map(roleChip).join("")}</div>`; }).join("")}</div>
+          return `<div class="col" data-drop="${st}"><h3>${LABEL[st]} <span>${rows.length}</span></h3>${rows.map(roleChip).join("")}</div>`; }).join("")}</div>
         ${loose.length ? `<p class="sub mt-3">You're also talking to ${loose.length} ${loose.length === 1 ? "person" : "people"} at companies with no role here yet. <button class="link" onclick="setPipeView('people')">See People</button></p>` : ""}`;
     return `<h1>Pipeline</h1>
       ${meetingsBlock()}
@@ -793,7 +797,7 @@ const chgDay = iso => {
 const chgTime = iso => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const chgRole = c => c.title ? `<b><button class="link" onclick="openChanged(${jsq(c.role)})">${esc(c.title)}</button></b> <span>${esc(c.company || "")}</span>`
   : `<b>A role no longer in Gus</b>`;
-const skipName = r => r ? esc((S.labels.skip_reasons[r] || r).toLowerCase()) : "";
+const skipName = r => r ? esc((S.labels.skip_reasons[r] || S.labels.skip_reasons[(S.labels.skip_reason_was || {})[r]] || r).toLowerCase()) : "";  // an older reason by its new name
 function chgLine(c, all) {
   const who = WHO[c.actor] || "Someone", why = c.reason ? `: <b>${esc(c.reason)}</b>` : "", at = ` · ${chgTime(c.at)}`;
   let what, was = "";
@@ -1076,13 +1080,47 @@ function drawNav() {
 function toggleNav() { try { localStorage.setItem("radar-nav", navSlim() ? "open" : "slim"); } catch (e) {} drawNav(); }
 drawNav();
 let lastView = null;
+// Dragging a role to another stage, on the Pipeline board or in its list. It saves as the Move to… menu in the role's panel does,
+// which is still the way from the keyboard or a phone
+let dragId = null, dragHeld = false;
+const dropAt = e => dragId && e.target.closest ? e.target.closest("[data-drop]") : null;
+const dropMark = zone => document.querySelectorAll(".drop-on").forEach(el => el !== zone && el.classList.remove("drop-on"));
+function dragDone() {
+  dragId = null; dropMark(null);
+  document.querySelectorAll(".dragging").forEach(el => el.classList.remove("dragging"));
+  if (dragHeld) { dragHeld = false; render(); }
+}
+function dragSetup() {
+  const main = $("main");
+  main.addEventListener("dragstart", e => {
+    const el = e.target.closest ? e.target.closest("[data-drag]") : null;
+    if (!el) return;
+    dragId = el.dataset.drag; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", el.textContent.trim());
+    el.classList.add("dragging");
+    el.addEventListener("dragend", dragDone, { once: true });  // on the card itself: it still hears this if the page was redrawn under it
+  });
+  main.addEventListener("dragover", e => {
+    const zone = dropAt(e); dropMark(zone);
+    if (!zone) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "move"; zone.classList.add("drop-on");
+  });
+  main.addEventListener("dragleave", e => { if (!main.contains(e.relatedTarget)) dropMark(null); });
+  main.addEventListener("drop", e => {
+    const zone = dropAt(e), id = dragId, j = S.jobs.find(o => o.id === id);
+    if (!zone) return;
+    e.preventDefault(); dragDone();
+    if (j && j.stage !== zone.dataset.drop) setStage(id, zone.dataset.drop);
+  });
+}
 function render(force) {
+  if (!S.labels) return;  // a screen opened before the first data arrives: load() draws it when it does
   const v = (location.hash || "#pipeline").slice(1).split("/")[0];
   document.querySelector(".app").classList.toggle("first", v === "welcome");
   if (v === "welcome" && $("fr")) return;  // it keeps itself up to date, and redrawing would wipe what you're typing
   drawTicker();
   if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
   if (!force && document.querySelector("#main details.keep[open], #main dialog[open]")) return;  // a form you've opened: a refresh would close it and wipe what you typed
+  if (!force && dragId) { dragHeld = true; return; }  // a role in mid-drag: a redraw would drop it
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
   $("n-week").textContent = S.moves.filter(m => m.week === S.week && m.status === "todo").length || "";
   $("n-accounts").textContent = S.accounts.filter(a => a.tier === "A" && a.fresh).length || "";
@@ -1112,6 +1150,7 @@ const STEP_MARK = { done: "✓", running: "●", failed: "✗", skipped: "–", 
 const JOB = {  // what each job is called while it runs, once it's done, and what it's doing
   scan: { now: "Checking roles", done: "Check roles", what: "Reading your job boards, feeds and email, then scoring anything new. Usually about 2 minutes.", link: ["#roles", "Open Role Inbox"] },
   sources: { now: "Checking job sources", done: "Job sources check", what: "Asking the job sources that are due for new roles, then scoring them. This can take a while.", link: ["#roles", "Open Role Inbox"] },
+  catchup: { now: "Reading boards that were told to wait", done: "Catch-up on boards", what: "A supplier asked Gus to slow down this morning, so some job boards weren't read. Its wait is over: Gus is reading those boards now and scoring anything new.", link: ["#roles", "Open Role Inbox"] },
   run: { now: "Full run", done: "Full run", what: "Everything Check roles does, plus finding new companies, catching up on news at yours, and picking who to contact this week. Takes longer and uses more of your daily AI limit.", link: ["#week", "See who to contact"] },
 };
 const jobName = (j, k) => (JOB[j] || {})[k] || j;
@@ -1236,6 +1275,7 @@ window.addEventListener("hashchange", () => { if (location.hash !== "#search") $
 document.addEventListener("keydown", e => { if (e.key === "Escape" && openRoleId && !document.querySelector("dialog[open]")) closeRole(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 setInterval(() => { if (!document.hidden) load(); }, 60000);
+dragSetup();
 load();
 </script>
 </body>

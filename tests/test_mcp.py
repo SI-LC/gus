@@ -221,8 +221,8 @@ class Tools(World):
         self.assertIn("skip_reason must be one of", out["error"])
         self.assertIn("too low pay", out["error"])
         self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
-        ok = mcp.call("update_role", {"role_id": "gh:acme:3", "skip_reason": "junior", "reason": "the user said so"})  # already skipped
-        self.assertEqual(ok["role"]["skip_reason"], "junior")
+        ok = mcp.call("update_role", {"role_id": "gh:acme:3", "skip_reason": "level", "reason": "the user said so"})  # already skipped
+        self.assertEqual(ok["role"]["skip_reason"], "level")
 
     def test_a_parameter_the_tool_doesnt_have_is_refused_not_dropped(self):
         self.writes()

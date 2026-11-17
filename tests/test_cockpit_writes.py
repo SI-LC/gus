@@ -66,7 +66,8 @@ class Companies(unittest.TestCase):
         self.watchlist.write_text("company,ats,slug,sector,only\nAcme,greenhouse,acme,,\n")
         self.patches = [mock.patch.object(server, "COMPANIES", self.companies),
                         mock.patch("radar.resolve.watchlist_path", lambda: self.watchlist),
-                        mock.patch("radar.links.watchlist_path", lambda: self.watchlist)]
+                        mock.patch("radar.links.watchlist_path", lambda: self.watchlist),
+                        mock.patch("radar.websites.find", return_value=None)]  # the website search, which would otherwise go to the internet
         for p in self.patches:
             p.start()
         self.addCleanup(lambda: [p.stop() for p in self.patches])

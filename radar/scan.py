@@ -4,6 +4,7 @@ before, and mark roles closed once they've gone from a board that answered.
 Usage:
     python3 -m radar.scan            # scan everything, print new roles
     python3 -m radar.scan --json     # same, as JSON
+    python3 -m radar.scan --held     # only the boards a vendor held back on the last scan ("slow down"), now it may be asked
 """
 from __future__ import annotations
 
@@ -14,10 +15,10 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from radar import boardhealth, boards, doing, matching
+from radar import boardhealth, boards, doing, matching, web
 from radar import jobs as J
 from radar.paths import DATA, JOBS, watchlist_path
-from radar.store import locked
+from radar.store import locked, read
 
 MISSES_TO_CLOSE = 2  # scans in a row a role must be missing before it counts as closed
 _boards_answered: set = set()
@@ -44,7 +45,14 @@ def mark_closed(store: dict, answered: set, live: set, now: str) -> list:
     return closed
 
 
-def fetch_all():
+def waiting() -> set:
+    """Companies whose board wasn't read on the last scan because its vendor said slow down: waiting cures those, so they're
+    read again the same day. A board that broke or moved isn't one of them."""
+    return {name for name, failure in read(DATA / "board_errors.json").items() if web.held_back(failure)}
+
+
+def fetch_all(only: set = None):
+    """Every board, or with `only` just those companies' boards: the rest keep what the last scan recorded for them."""
     rows = list(csv.DictReader(watchlist_path().open()))
     # `only`: a company that shares a parent's board (Base44 on Wix's) keeps just the titles matching this pattern
     tasks = [(r["company"], r["ats"], r["slug"], r.get("only") or None) for r in rows if r["ats"] in boards.SOURCES]
@@ -59,6 +67,8 @@ def fetch_all():
     if matching.load_config().get("source_mindtheproduct"):
         tasks.append(("Mind the Product", "mindtheproduct", "jobs", None))
     tasks += [(host, "getro", host, None) for host in boards.getro_hosts(matching.load_config().get("getro_boards"))]
+    if only is not None:
+        tasks = [t for t in tasks if t[0] in only]
     errors, jobs = [], []
 
     def run(t):
@@ -84,11 +94,14 @@ def fetch_all():
     _boards_answered.update(answered)
     boards.save_looked_up(answered)
     failed = dict(e for e in errors if isinstance(e, tuple))
+    asked = {t[0]: f"{t[1]}:{t[2]}" for t in tasks}
+    if only is not None:  # boards not asked this time keep the failure they had
+        failed = {**{n: f for n, f in read(DATA / "board_errors.json").items() if n not in asked}, **failed}
     (DATA / "board_errors.json").write_text(json.dumps(failed))
-    boardhealth.record({t[0]: f"{t[1]}:{t[2]}" for t in tasks}, failed, datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                       DATA / "board_health.json")
+    boardhealth.record(asked, failed, datetime.now(timezone.utc).isoformat(timespec="seconds"), DATA / "board_health.json",
+                       partial=only is not None)
     errors = [e if isinstance(e, str) else f"{e[0]} ({e[1]})" for e in errors]
-    if matching.load_config().get("source_hn", True):
+    if only is None and matching.load_config().get("source_hn", True):
         doing.say("Reading Hacker News: Who is hiring")
         try:
             jobs += [dict(j, _hn=True) for j in boards.hn_who_is_hiring()]
@@ -100,7 +113,11 @@ def fetch_all():
 def main():
     cfg = matching.load_config()
     DATA.mkdir(exist_ok=True)
-    jobs, errors = fetch_all()  # slow network part, outside the lock
+    held = waiting() if "--held" in sys.argv else None
+    if held is not None and not held:
+        print("No boards are waiting to be read")
+        return
+    jobs, errors = fetch_all(held) if held else fetch_all()  # slow network part, outside the lock
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     new = []
@@ -108,6 +125,7 @@ def main():
     with locked(JOBS) as store:
       mark_closed(store, _boards_answered, live, now)
       J.settle_sources(store)  # older records: a job site's role already found on the board
+      J.rename_skip_reasons(store)  # older records: a reason the list no longer has
       alias = J.aliases(store)
       for j in jobs:
         hn = j.pop("_hn", False)
@@ -130,7 +148,12 @@ def main():
     if "--json" in sys.argv:
         print(json.dumps({"new": new, "errors": errors}, indent=2, ensure_ascii=False))
         return
-    print(f"{len(new)} new of {total} tracked roles")
+    if held:
+        left = len(waiting() & held)
+        print(f"{len(held) - left} of {len(held)} boards that were told to wait are now read"
+              + (f", {left} still waiting" if left else "") + f": {len(new)} new role{'' if len(new) == 1 else 's'}")
+    else:
+        print(f"{len(new)} new of {total} tracked roles")
     for j in new:
         print(f"  • {j['company']}: {j['title'][:80]}  [{j['location'][:40]}]\n    {j['url']}")
     for e in errors:

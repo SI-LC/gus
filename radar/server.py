@@ -28,7 +28,7 @@ from radar.companies import veto
 from radar.jobs import role_key, same_company
 from radar.matching import role_type, where
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS, WATCHLIST
-from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASONS
+from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASON_WAS, SKIP_REASONS
 from radar import changes, firstrun, links, service, settings, sources, usage
 from radar.settings import secret
 from radar.store import locked, read
@@ -125,7 +125,7 @@ def state():
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
         "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
-        "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES, "skip_reasons": SKIP_REASONS,
+        "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES, "skip_reasons": SKIP_REASONS, "skip_reason_was": SKIP_REASON_WAS,
                    "role_stages": JOB_STAGES},
         "health": {
             "last_scan": next((b for b in reversed(beats) if "T" in b), None),

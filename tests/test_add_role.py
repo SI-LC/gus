@@ -20,7 +20,8 @@ class AddRole(unittest.TestCase):
         self.watchlist.write_text("company,ats,slug,sector,only\nAcme,greenhouse,acme,,\n")
         self.lookup = mock.Mock(return_value=None)  # the board search, which would otherwise go to the internet
         for p in (mock.patch.object(server, "JOBS", self.jobs), mock.patch.object(server, "COMPANIES", self.companies),
-                  mock.patch.object(resolve, "resolve", self.lookup), mock.patch("radar.resolve.watchlist_path", lambda: self.watchlist)):
+                  mock.patch.object(resolve, "resolve", self.lookup), mock.patch("radar.resolve.watchlist_path", lambda: self.watchlist),
+                  mock.patch("radar.websites.find", return_value=None)):  # the website search, which would go there too
             p.start()
             self.addCleanup(p.stop)
 
@@ -110,7 +111,7 @@ class AddRole(unittest.TestCase):
         self.assertEqual(server.update_job({"id": jid, "skip_reason": "pay"})["job"]["skip_reason"], "pay")
         server.update_job({"id": jid, "skip_reason": ""})
         self.assertNotIn("skip_reason", self.stored()[jid])
-        server.update_job({"id": jid, "skip_reason": "junior"})
+        server.update_job({"id": jid, "skip_reason": "level"})
         server.update_job({"id": jid, "stage": "new"})
         self.assertNotIn("skip_reason", self.stored()[jid])
 
