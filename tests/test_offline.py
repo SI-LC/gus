@@ -1,7 +1,7 @@
 """The tests never use the internet. A test that looks up any host but this computer fails here, naming the host, instead
 of waiting 20 seconds for an answer that changes from day to day. The check is put in place when the tests are collected,
-so it covers every test file in a full run (python3 -m unittest discover -s tests), though not the separate processes
-some tests start."""
+so it covers every test file in a full run (python3 -m unittest discover -s tests), and deploy/run_tests.py loads this
+file first in each process it starts. It doesn't cover the separate processes some tests start."""
 import socket
 import unittest
 
