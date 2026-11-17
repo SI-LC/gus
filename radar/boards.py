@@ -862,7 +862,7 @@ def read_microsoft(address: str) -> list:
     titles has its own page read too; if that fails the role still arrives, to be judged on its title. Turned away part-way
     through, the roles already read are kept: they are the newest, and tomorrow's read starts from the top again."""
     jobs, turned_away = [], False
-    for page in range(MICROSOFT_PAGES):
+    for _ in range(MICROSOFT_PAGES):
         try:
             d = microsoft_data(f"{address}&start={len(jobs)}")
         except Refused as e:
