@@ -204,7 +204,6 @@ AMAZON_PAGE = 100  # jobs per request, the most the site gives
 AMAZON_PAGES = 5  # requests per read, so 500 roles; a longer list is cut short
 MICROSOFT_HOST = "https://apply.careers.microsoft.com"
 MICROSOFT_PAGES = 10  # requests per read, of 10 roles each, so 100 roles; a longer list is cut short
-MICROSOFT_PAUSE = 10  # seconds between requests: the site turns away anything much faster
 APPLE_HOST = "https://jobs.apple.com"
 APPLE_PAGES = 10  # requests per read, of 20 roles each, so 200 roles; a longer list is cut short
 APPLE_DATA = re.compile(r'window\.__staticRouterHydrationData\s*=\s*JSON\.parse\("(.*?)"\);', re.S)
@@ -859,12 +858,19 @@ def microsoft_job(p: dict) -> dict:
 
 
 def read_microsoft(address: str) -> list:
-    """Every page of the search, newest first, slowly. The list has no ad text, so a new role with one of your titles has its own
-    page read too; if that fails the role still arrives, to be judged on its title."""
-    jobs = []
+    """Every page of the search, newest first, slowly (`web.GENTLE`). The list has no ad text, so a new role with one of your
+    titles has its own page read too; if that fails the role still arrives, to be judged on its title. Turned away part-way
+    through, the roles already read are kept: they are the newest, and tomorrow's read starts from the top again."""
+    jobs, turned_away = [], False
     for page in range(MICROSOFT_PAGES):
-        time.sleep(MICROSOFT_PAUSE if page else 0)
-        d = microsoft_data(f"{address}&start={len(jobs)}")
+        try:
+            d = microsoft_data(f"{address}&start={len(jobs)}")
+        except Refused as e:
+            if not jobs or "slow down" not in str(e):
+                raise
+            turned_away = True
+            cut_short.add("microsoft")  # the rest wasn't read: a role missing from these may just be further down
+            break
         try:
             found = [microsoft_job(p) for p in d["positions"]]
             total = int(d.get("count") or 0)
@@ -875,8 +881,7 @@ def read_microsoft(address: str) -> list:
             break
     else:
         cut_short.add("microsoft")  # more pages than Gus reads: a role missing from these may just be further down
-    for j in new_and_wanted(jobs):
-        time.sleep(MICROSOFT_PAUSE)
+    for j in [] if turned_away else new_and_wanted(jobs):  # turned away: no more is asked today
         try:
             ad = microsoft_data(f"{MICROSOFT_HOST}/api/pcsx/position_details?{urlencode({'position_id': j['id'].split(':')[2], 'domain': 'microsoft.com'})}")
             j["description"] = web.strip_html(ad.get("jobDescription") or "")

@@ -1567,9 +1567,6 @@ class SavedSearch(Base):
     def setUp(self):
         super().setUp()
         self.watch()
-        patcher = mock.patch.object(boards, "MICROSOFT_PAUSE", 0)
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     def run_scan(self, site):
         real = matching.load_config
@@ -1628,6 +1625,21 @@ class MicrosoftCareers(SavedSearch):
         self.assertEqual((len(jobs), errors), (3, {}))
         self.assertEqual([re.search(r"start=(\d+)", u)[1] for u in self.pages(site) if "/search" in u], ["0", "2"])
         self.assertNotIn("microsoft", boards.cut_short)
+
+    def test_turned_away_part_way_through_the_roles_already_read_are_kept(self):
+        full = json.loads(sample("microsoft_search.json"))["data"]["positions"]
+
+        def reply(url):
+            if "start=0" not in url:
+                raise refused(url, 429)
+            return json.dumps({"data": {"count": 3, "positions": full[:2]}}).encode()
+        jobs, errors = self.run_scan(microsoft_site(reply))
+        self.assertEqual((len(jobs), errors), (2, {}), "the list is newest first, so the pages read are the ones that matter")
+        self.assertIn("microsoft", boards.cut_short, "and a role missing from them isn't called closed")
+
+    def test_turned_away_on_the_first_page_is_reported(self):
+        _, errors = self.run_scan(microsoft_site(lambda url: refused(url, 429)))
+        self.assertIn("slow down", errors["Microsoft"])
 
     def test_more_pages_than_gus_reads_means_nothing_can_be_called_closed(self):
         full = json.loads(sample("microsoft_search.json"))["data"]["positions"]

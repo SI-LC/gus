@@ -51,9 +51,12 @@ def ua() -> dict:
 
 HOST_PAUSE = 1.5  # seconds between any two requests to one vendor, whichever threads send them
 SLOWER_PAUSE = 10  # the same for a vendor that has said "slow down", for CAREFUL_DAYS after: no vendor says what gap it wants
-# The same, always, for a vendor where one board takes many requests and every company shares one front door. Reading
-# seven Workday boards 1.5 seconds apart was some 80 requests in two minutes, and its front door put up a bot check.
-GENTLE = {"myworkdayjobs.com": 30}
+# The same, always, for a vendor that has turned Gus away at the usual pace, in seconds, with what was seen:
+# - Workday: one board takes many requests and every company shares one front door. Seven boards 1.5 seconds apart was some
+#   80 requests in two minutes, and it put up a bot check.
+# - Workable: answered 429 on and off for two weeks at 1.5 seconds; all twelve boards read at 10.
+# - Microsoft: answers two requests 10 seconds apart and refuses the third, with no wait given. A minute is a guess.
+GENTLE = {"myworkdayjobs.com": 30, "workable.com": 10, "microsoft.com": 60}
 _hosts: dict = {}  # vendor -> the moment it may next be asked
 _hosts_lock = threading.Lock()
 
