@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Stands in for the Claude Code command: fixed scores for made-up roles, and a record of each call."""
+"""Stands in for the Claude Code command: fixed scores for made-up roles, and a record of each call.
+The demo (evals/demo.py) brings its own scores and reasons, in scores.json in the made-up home folder."""
 import json
 import os
 import sys
 
 SCORES = {"Senior Product Manager": 9, "Product Manager, Growth": 6, "Product Owner": 3}
+try:
+    with open(os.path.join(os.environ["HOME"], "scores.json")) as f:
+        SAID = json.load(f)  # {title: [score, why]}
+except OSError:
+    SAID = {}
 
 SIGNED_OUT = os.path.join(os.environ["HOME"], "signed-out")
 if sys.argv[1:3] == ["auth", "status"]:
@@ -30,6 +36,7 @@ if "## CV\n" in prompt:
                          "edge": ["A made-up strength"]})
 if "## Roles (JSON)" in prompt:
     roles = json.loads(prompt[prompt.index("## Roles (JSON)\n") + 16:prompt.index("\n\nFor each role")])
-    result = json.dumps([{"id": r["id"], "score": SCORES.get(r["title"], 5), "why": f"Made-up reason for {r['title']}.",
+    result = json.dumps([{"id": r["id"], "score": SAID.get(r["title"], [SCORES.get(r["title"], 5)])[0],
+                          "why": SAID.get(r["title"], [0, f"Made-up reason for {r['title']}."])[1],
                           "flags": [], "talk_to": "Head of Product"} for r in roles])
 print(json.dumps({"result": result, "total_cost_usd": 0, "usage": {}}))

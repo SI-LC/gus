@@ -13,13 +13,14 @@ from pathlib import Path
 import yaml
 from playwright.sync_api import Error, sync_playwright
 
+from evals import demo
 from evals.world import World
 
 CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
 RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
 PLACES = {"status bar": "#ticker", "progress": "#progress", "message": "#toast.on"}
-GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site", "scanned with a board that says no")
+GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site", "scanned with a board that says no", "demo")
 
 
 def step(page, text):
@@ -35,6 +36,8 @@ def step(page, text):
         page.locator("#banner").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
     elif text == "no banner":
         page.locator("#banner[hidden]").wait_for(state="attached", timeout=WAIT_MS)
+    elif m := re.fullmatch(r'menu says "(.+)"', text):
+        page.locator("#nav").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'status bar says "(.+)"', text):
         page.locator("#ticker").get_by_text(m[1]).first.wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'status bar doesn\'t say "(.+)"', text):
@@ -96,6 +99,8 @@ def claude_moves(page, title, stage, reason):
 def fresh_world(given, scanned) -> World:
     """An install for the case to start from. The scan runs once for each kind of scanned install and each case gets
     its own copy of the result, as a scan of the made-up boards always comes out the same."""
+    if given == "demo":
+        return demo.build()
     if not given.startswith("scanned"):
         return World(new=True, signed_out="signed out" in given)
     if given not in scanned:

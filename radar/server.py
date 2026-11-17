@@ -102,6 +102,7 @@ def state():
         m["signal"] = {k: ev.get(k) for k in ("type", "summary", "url", "date")} if ev else m.get("signal") or {}
     return {
         "setup": firstrun.setup_state(),
+        "demo": (DATA / "demo").exists(),  # a made-up search (evals/demo.py): the cockpit says so
         "places": list(dict.fromkeys(p[0] for p in places)),
         "kinds": list(dict.fromkeys(k[0] for k in kinds)),
         "kind_default": kinds[-1][0] if kinds else "",

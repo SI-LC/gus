@@ -183,6 +183,7 @@ skip is in the log, not in `history`. Activity shows the last 7 days (`/api/chan
 ## Everything else
 
 - `data/emails.json`, `data/meetings.json`: filtered inbox snippets and calendar invites, processed by an agent with no internet access.
+- `data/demo`: there only in the demo (`python3 -m evals.demo`), a separate copy of Gus with a made-up search. The cockpit's menu says "Demo data" while it exists.
 - `data/network.json`: your LinkedIn connections (name, link, company, position, date; emails dropped).
 - `watchlist.csv`: the boards to scan; `companies sync` mirrors it into each account's `board`. An optional `only` column holds a pattern a role's title must match, for a company whose roles sit on its parent's board (Base44 on Wix's).
 - `data/*_state.json`, `board_errors.json`, `feed_errors.json`, `heartbeat.log`: state for the scheduler, sources, feeds and X.

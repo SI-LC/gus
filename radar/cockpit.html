@@ -20,7 +20,7 @@
 <body>
 <div class="app">
   <nav id="nav">
-    <div class="brand">g<span class="us">us</span><b>/</b><small>Your job-search agent</small></div>
+    <div class="brand">g<span class="us">us</span><b>/</b><small id="tagline">Your job-search agent</small></div>
     <a href="#roles" data-v="roles" data-i="01" title="Role Inbox"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3zM3 13h6l1 2h4l1-2h6"/></svg><span class="lb">Role Inbox</span> <span class="n" id="n-roles"></span></a>
     <a href="#pipeline" data-v="pipeline" data-i="02" title="Pipeline"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v5h-4z"/></svg><span class="lb">Pipeline</span> <span class="n" id="n-pipeline"></span></a>
     <a href="#week" data-v="week" data-i="03" title="To do"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2"/></svg><span class="lb">To do</span> <span class="n" id="n-week"></span></a>
@@ -86,6 +86,7 @@ async function load() {
   S = s; checkRoleFilters();
   if (S.labels.role_stages) PIPE = S.labels.role_stages.filter(st => !["new", "skipped"].includes(st));
   if ((S.running || []).length) watchRun();
+  if (S.demo) $("tagline").textContent = "Demo data: all made up";  // python3 -m evals.demo
   if (S.setup.needed && location.hash !== "#welcome") location.hash = "#welcome";
   else if (location.hash === "#welcome" && !S.setup.can_run) location.hash = "#pipeline";
   render();
@@ -1124,13 +1125,14 @@ function lastFinished() {  // the most recent job to finish, if it's recent and 
   const [job, r] = Object.entries(S.last_runs || {}).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at)))[0] || [];
   return r && r.at && Date.now() - new Date(r.at) < 30 * 6e4 && r.at > seenRun() ? { job, ...r } : null;
 }
+const appName = () => S.demo ? "Gus demo" : "Gus";  // the browser tab says which one this is
 function drawProgress() {
   const el = $("progress"), running = S.running || [], p = S.progress || {};
   if (running.length) {
     const job = p.job || running[0], steps = p.steps || [], queued = running.filter(j => j !== job);
     const at = steps.findIndex(x => x.status === "running"), left = steps.filter(x => x.status === "waiting").length;
     el.className = "progress"; el.hidden = false;
-    document.title = `● ${jobName(job, "now")} · Gus`;
+    document.title = `● ${jobName(job, "now")} · ${appName()}`;
     el.innerHTML = `<div class="prog-head"><span class="prog-mark beat" aria-hidden="true">●</span><b>${esc(jobName(job, "now"))}</b>
         ${steps.length && at >= 0 ? `<span class="sub">step ${at + 1} of ${steps.length}: ${esc(steps[at].name)}</span>` : ""}
         ${p.started ? `<span class="sub">· <span id="prog-elapsed">${elapsed(p.started)}</span> so far</span>` : `<span class="sub">· starting</span>`}
@@ -1141,7 +1143,7 @@ function drawProgress() {
       + (steps.length ? `<div class="prog-bar" style="width:${Math.round(100 * (steps.length - left - (at >= 0 ? 0.5 : 0)) / steps.length)}%"></div>` : `<div class="prog-bar ind"></div>`);
     return;
   }
-  document.title = "Gus";
+  document.title = appName();
   const r = lastFinished();
   el.hidden = !r;
   if (!r) return;
