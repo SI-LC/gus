@@ -22,6 +22,16 @@ case "$*" in
 esac
 """
 
+FAKE_GH = """#!/bin/sh
+# Answers as GitHub would once its --jq filter is applied: the pull request a commit came from and how its scan went,
+# from files a test writes. With no such file it answers nothing, as for a commit that came from no pull request.
+case "$*" in
+  *"/pulls --jq"*) cat "$HOME/pull_request" 2>/dev/null ;;
+  *check-runs*) cat "$HOME/scan_result" 2>/dev/null ;;
+  *) echo "$*" >> "$HOME/released" ;;
+esac
+"""
+
 
 class UpdatePi(unittest.TestCase):
     def setUp(self):
@@ -113,12 +123,12 @@ class Deploy(UpdatePi):
 
     def setUp(self):
         super().setUp()
-        for name, body in (("ssh", '#!/bin/sh\ncat >> "$HOME/sent"\n'), ("gh", '#!/bin/sh\necho "$*" >> "$HOME/released"\n')):
+        for name, body in (("ssh", '#!/bin/sh\ncat >> "$HOME/sent"\n'), ("gh", FAKE_GH)):
             tool = self.home / "bin" / name
             tool.write_text(body)
             tool.chmod(0o755)
         (self.home / "dev" / "deploy").mkdir()
-        (self.home / "dev" / "deploy" / "scan.sh").write_text('echo scanned\n[ -z "${GUS_DEPLOY_PULLED:-}" ] || echo "the scan can see the deploy\'s mark"\n')
+        (self.home / "dev" / "deploy" / "scan.sh").write_text('echo "scanned $*"\n[ -z "${GUS_DEPLOY_PULLED:-}" ] || echo "the scan can see the deploy\'s mark"\n')
         (self.home / "dev" / "deploy" / "update.sh").write_text("# the update\n")
         self.commit("deploy/deploy.sh", (ROOT / "deploy" / "deploy.sh").read_text())
         self.git("pull", "-q", "origin", "main", cwd=self.app)  # the machine deploying, on main as it was
@@ -136,6 +146,44 @@ class Deploy(UpdatePi):
         self.assertEqual((self.home / "sent").read_text(), "# the update\n")
         self.assertIn("release create v0.1.0", (self.home / "released").read_text())
         self.assertNotIn("the deploy's mark", out, "the scan runs these tests, which must start from a clean deploy")
+
+    def merge_pull_request(self, scan="success", changed_after_the_scan=False):
+        """A branch squashed into main as pull request 7, as GitHub does it, with the scan's result on the branch's last commit."""
+        self.git("checkout", "-q", "-b", "work")
+        (self.home / "dev" / "radar" / "app.py").write_text("x = 2\n")
+        self.git("commit", "-q", "-am", "work")
+        self.git("push", "-q", "origin", "HEAD:refs/pull/7/head")
+        (self.home / "pull_request").write_text(f"7 {self.git('rev-parse', 'HEAD')}\n")
+        (self.home / "scan_result").write_text(scan + "\n")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--squash", "work")
+        if changed_after_the_scan:
+            (self.home / "dev" / "radar" / "app.py").write_text("x = 3\n")
+        self.git("commit", "-q", "-am", "work (#7)")
+        self.git("push", "-q", "origin", "HEAD:main")
+
+    def test_code_github_already_tested_is_not_tested_again(self):
+        self.merge_pull_request()
+        code, out = self.run_deploy()
+        self.assertEqual(code, 0, out)
+        self.assertIn("scanned --tested-on-github 7", out, "the scan still runs, told which pull request passed the tests")
+        self.assertEqual((self.home / "sent").read_text(), "# the update\n")
+
+    def test_code_github_did_not_pass_is_tested_here(self):
+        for why, how in (("the scan failed on GitHub", {"scan": "failure"}), ("the scan hasn't finished on GitHub", {"scan": ""}),
+                         ("main isn't what the scan read", {"changed_after_the_scan": True})):
+            with self.subTest(why):
+                self.setUp()
+                self.merge_pull_request(**how)
+                code, out = self.run_deploy()
+                self.assertEqual(code, 0, out)
+                self.assertIn("scanned \n", out, why)
+                self.assertNotIn("--tested-on-github", out, why)
+
+    def test_a_commit_from_no_pull_request_is_tested_here(self):
+        code, out = self.run_deploy()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("--tested-on-github", out)
 
     def test_a_merge_that_changes_the_deploy_itself_is_deployed_by_the_new_copy(self):
         dev = self.home / "dev" / "deploy"

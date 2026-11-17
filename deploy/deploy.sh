@@ -19,7 +19,26 @@ if [ -z "${GUS_DEPLOY_PULLED:-}" ]; then {
 }; fi
 unset GUS_DEPLOY_PULLED  # the scan below runs this script's own tests: left set, they'd skip the checks above and fail
 
-bash deploy/scan.sh
+# The pull request this commit came from, if GitHub's scan passed on this exact code. Three things must hold: the commit
+# is that pull request's merge; the branch's last commit holds the same files as main does now, and already had
+# everything that was on main before it; and the scan's latest result on that commit is a pass. Anything else, or no
+# answer from GitHub, prints nothing, and the tests run here.
+tested_on_github() {
+  local sha pr head
+  sha=$(git rev-parse HEAD)
+  read -r pr head < <(gh api "repos/{owner}/{repo}/commits/$sha/pulls" --jq ".[] | select(.merge_commit_sha == \"$sha\") | \"\(.number) \(.head.sha)\"" 2>/dev/null) || return 0
+  [ -n "$pr" ] && [ -n "$head" ] || return 0
+  git fetch -q origin "refs/pull/$pr/head" 2>/dev/null || return 0
+  [ "$(git rev-parse FETCH_HEAD)" = "$head" ] || return 0
+  [ "$(git rev-parse "$head^{tree}")" = "$(git rev-parse "HEAD^{tree}")" ] || return 0
+  git merge-base --is-ancestor "HEAD~1" "$head" 2>/dev/null || return 0
+  [ "$(gh api "repos/{owner}/{repo}/commits/$head/check-runs?check_name=scan" --jq '.check_runs | sort_by(.started_at) | last | .conclusion' 2>/dev/null)" = success ] || return 0
+  echo "$pr"
+}
+
+# The scan always runs: only this computer can check for your details. It leaves out the tests when GitHub has run them.
+passed=$(tested_on_github)
+if [ -n "$passed" ]; then bash deploy/scan.sh --tested-on-github "$passed"; else bash deploy/scan.sh; fi
 sha=$(git rev-parse --short HEAD)
 echo "On GitHub: $sha"
 
