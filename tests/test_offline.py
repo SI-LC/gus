@@ -1,9 +1,11 @@
 """The tests never use the internet. A test that looks up any host but this computer fails here, naming the host, instead
 of waiting 20 seconds for an answer that changes from day to day. The check is put in place when the tests are collected,
-so it covers every test file in a full run (python3 -m unittest discover -s tests), though not the separate processes
-some tests start."""
+so it covers every test file in a full run (python3 -m unittest discover -s tests), and deploy/run_tests.py loads this
+file first in each process it starts. It doesn't cover the separate processes some tests start."""
 import socket
 import unittest
+
+from radar import web
 
 LOCAL = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "", None}  # nosec B104: names this computer answers to, nothing is opened
 real_lookup = socket.getaddrinfo
@@ -21,6 +23,11 @@ def local_only(host, *args, **kwargs):
 
 
 socket.getaddrinfo = local_only
+
+# Nor do they ask git which release this is, as every request Gus sends would. Python waits for git by sleeping in short
+# steps, and a test that counts sleeps to check Gus's pacing then counts those too whenever git is slow to answer. The
+# tests of the release itself (test_core.py) set this back for as long as they run.
+web._version = (float("inf"), "0.0.0")
 
 
 class Offline(unittest.TestCase):
