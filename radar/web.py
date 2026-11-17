@@ -129,9 +129,14 @@ _strikes: dict = {}  # vendor -> refusals in a row, in this process
 _cooled: set = set()  # vendors already given their cool-off in this process
 
 
+def bot_check(e: urllib.error.HTTPError) -> bool:
+    """The check a vendor's front door puts up for a visitor it takes for a bot. It can come with any code, a 429 included."""
+    return (e.headers or {}).get("cf-mitigated") == "challenge"
+
+
 def told_to_slow_down(e: urllib.error.HTTPError) -> bool:
     """A 429, or the bot check a vendor's front door puts up once it has had enough of a visitor."""
-    return e.code == 429 or (e.code in (403, 503) and (e.headers or {}).get("cf-mitigated") == "challenge")
+    return e.code == 429 or (e.code in (403, 503) and bot_check(e))
 
 
 def said_slow_down(text: str) -> bool:
@@ -141,13 +146,13 @@ def said_slow_down(text: str) -> bool:
 
 def why(e: urllib.error.HTTPError) -> str:
     """What the vendor said, in a few words: slowing down can cure "too many requests", and never a bot check."""
-    return f"a bot check ({e.code})" if e.code != 429 else "too many requests (429)"
+    return f"a bot check ({e.code})" if e.code != 429 or bot_check(e) else "too many requests (429)"
 
 
 def held_back(failure: str) -> bool:
     """Whether a board's recorded failure is one that waiting cures: its vendor was on hold, or answered 429. Those boards
-    are read again the same day, once the hold runs out (`hold_ended`)."""
-    return bool(re.search(r"Not asked: |\b429\b", failure or ""))
+    are read again the same day, once the hold runs out (`hold_ended`). A bot check isn't one: it's left to the next daily read."""
+    return bool(re.search(r"Not asked: |\b429\b", failure or "")) and "bot check" not in (failure or "")
 
 
 def _retry_after(e: urllib.error.HTTPError):
@@ -196,8 +201,9 @@ def _check_hold(who: str) -> None:
     rec = _holds().get(who)
     if rec and rec.get("until", "") > _utc().isoformat(timespec="seconds"):
         again = datetime.fromisoformat(rec["until"]).astimezone().strftime("%H:%M on %-d %b")
-        said = f" ({rec['why']})" if rec.get("why") else ""
-        raise SlowDown(f"Not asked: {who} told Gus to slow down{said}. Gus asks it again after {again}")
+        said = rec.get("why") or ""
+        what = f"answered with {said}" if "bot check" in said else "told Gus to slow down" + (f" ({said})" if said else "")
+        raise SlowDown(f"Not asked: {who} {what}. Gus asks it again after {again}")
 
 
 def _refused(who: str, wait, said: str = "") -> None:
@@ -272,6 +278,8 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
         if not told_to_slow_down(e):
             raise
         wait = _retry_after(e)
+        if bot_check(e):
+            e.msg = "A bot check"  # so the board's failure says what it was, whatever code came with it
         if wait is None or wait > SHORT_WAIT or getattr(_limit, "deadline", None) is not None:
             _refused(who, wait, why(e))
             raise
@@ -281,6 +289,8 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
         except urllib.error.HTTPError as again:
             if told_to_slow_down(again):
                 _refused(who, _retry_after(again), why(again))
+            if bot_check(again):
+                again.msg = "A bot check"
             raise
     _answered(who)
     if len(data) > MAX_RESPONSE:
@@ -346,7 +356,7 @@ def site_rules(host: str) -> tuple:
         # Gem's API has no robots.txt: its gateway gives this 403 for every address it doesn't know. The job list still answers for itself.
         no_file = e.code == 403 and host == GEM_API and e.headers.get("x-amzn-ErrorType") == "ForbiddenException"
         if (e.code in (401, 403, 429) or e.code >= 500) and not no_file:
-            raise Refused(f"robots.txt answered {e.code}") from e
+            raise Refused(f"robots.txt answered {'with ' + why(e) if bot_check(e) else e.code}") from e
         rules = ([], [])
     _robots[host] = (time.time() + ROBOTS_KEEP, rules)
     return rules
