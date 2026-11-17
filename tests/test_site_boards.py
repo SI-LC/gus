@@ -174,6 +174,14 @@ class Fetching(Base):
                 web.polite_fetch("https://example.com/page")
             self.assertEqual(len(site.asked), 1)
 
+    def test_a_bot_check_on_robots_is_reported_as_one(self):
+        web._robots.clear()
+        check = urllib.error.HTTPError("x", 429, "Too Many Requests", {"cf-mitigated": "challenge"}, None)
+        with self.fetch(Site({"robots.txt": check, "/page": b"hello"})), self.assertRaises(web.Refused) as said:
+            web.polite_fetch("https://example.com/page")
+        self.assertIn("bot check", str(said.exception))
+        self.assertFalse(web.held_back(str(said.exception)))
+
     def test_a_disallowed_page_is_never_requested(self):
         site = Site({"robots.txt": b"User-agent: *\nDisallow: /private/\n"})
         with self.fetch(site), self.assertRaises(web.Refused):
