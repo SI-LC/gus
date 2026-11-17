@@ -5,6 +5,9 @@ careers address, or, for a company with neither, its page title carries the comp
 already holds (the careers address, the research links), then the obvious guesses. Every page is read with `polite_fetch`,
 so a site's robots.txt is followed. A website you set yourself (`website_locked`) is never replaced.
 
+The step is the last thing a scan does and has a fixed time for the whole batch (BUDGET). What it finds in that time is
+kept; a company whose sites hadn't answered by then counts as looked at, and one it never reached waits for the next scan.
+
 Usage:
     python3 -m radar.websites            # the scan's step: up to BATCH companies due a look
     python3 -m radar.websites "Acme"     # one company, now, whatever its last check
@@ -14,10 +17,11 @@ from __future__ import annotations
 import http.client
 import re
 import socket
+import queue
 import sys
+import threading
 import time
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
@@ -29,6 +33,9 @@ COMPANIES = DATA / "companies.json"
 BATCH = 50  # companies looked at per scan, so the first fill of a long list spreads over a few days
 RECHECK_DAYS = 30  # how long before a company is looked at again: a website is re-checked, a miss is tried again
 TIME_PER_COMPANY = 20  # seconds, all its fetches together
+BUDGET = 180  # seconds for the whole batch. A name that's slow to look up isn't stopped by a fetch's own time limit, so the
+#               batch has one of its own: the scan must never wait on this step
+WORKERS = 6
 ENDINGS = (".com", ".ai", ".io")
 MAX_CANDIDATES = 5
 ACTIVE = ("watched", "maybe", "candidate")
@@ -82,9 +89,12 @@ def belongs(page: str, name: str, rec: dict, sitemap: list = ()) -> bool:
 
 def find(name: str, rec: dict):
     """The company's website, as https://host/, or None when no candidate shows it belongs to the company."""
-    web.time_limit(time.monotonic() + TIME_PER_COMPANY)
+    deadline = time.monotonic() + TIME_PER_COMPANY
+    web.time_limit(deadline)
     try:
         for url in candidates(name, rec):
+            if time.monotonic() > deadline:  # out of time: its other addresses aren't tried
+                break
             try:
                 page = web.polite_fetch(url)
             except (OSError, ValueError, http.client.HTTPException):  # gone, refused by robots.txt, or out of time
@@ -158,7 +168,36 @@ def save(results: dict, today: date) -> None:
                 rec.pop("website_broken", None)
 
 
-def run(names: list = None, limit: int = BATCH) -> dict:
+def look_all(todo: list, companies: dict, deadline: float) -> dict:
+    """{name: what its check found} for every company started before the deadline. One still waiting on a site when the time
+    is up is recorded as nothing new, so it isn't first in line at every scan. The threads are daemons: one stuck on a site
+    can't keep the step, or Gus, from finishing."""
+    waiting, started, results, lock = queue.Queue(), [], {}, threading.Lock()
+    for name in todo:
+        waiting.put(name)
+
+    def work():
+        while time.monotonic() < deadline:
+            try:
+                name = waiting.get_nowait()
+            except queue.Empty:
+                return
+            with lock:
+                started.append(name)
+            got = look(name, companies[name])
+            with lock:
+                results[name] = got
+
+    threads = [threading.Thread(target=work, daemon=True) for _ in range(min(WORKERS, len(todo)))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(max(0, deadline - time.monotonic()))
+    with lock:
+        return {n: results.get(n) or {"website": companies[n].get("website"), "broken": False} for n in started}
+
+
+def run(names: list = None, limit: int = BATCH, budget: float = BUDGET) -> dict:
     from radar.accounts import tier
     today, companies = date.today(), read(COMPANIES)
     if names:
@@ -166,17 +205,17 @@ def run(names: list = None, limit: int = BATCH) -> dict:
     else:  # tier A first, and companies never looked at before ones being re-checked
         todo = sorted((n for n, r in companies.items() if due(r, today)),
                       key=lambda n: ("ABC-".find(tier(companies[n])), bool(companies[n].get("website_checked"))))[:limit]
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        results = dict(zip(todo, pool.map(lambda n: look(n, companies[n]), todo)))
+    results = look_all(todo, companies, time.monotonic() + budget)
     save(results, today)
-    found = [n for n in todo if results[n]["website"] and not companies[n].get("website")]
-    broken = [n for n in todo if results[n]["broken"]]
-    return {"looked": len(todo), "found": found, "broken": broken}
+    found = [n for n in results if results[n]["website"] and not companies[n].get("website")]
+    broken = [n for n in results if results[n]["broken"]]
+    return {"looked": len(results), "found": found, "broken": broken, "left": len(todo) - len(results)}
 
 
 def main():
     out = run(sys.argv[1:] or None)
-    print(f"{out['looked']} companies looked at, {len(out['found'])} websites found: {', '.join(out['found']) or 'none'}")
+    print(f"{out['looked']} companies looked at, {len(out['found'])} websites found: {', '.join(out['found']) or 'none'}"
+          + (f". Out of time: {out['left']} left for the next scan" if out["left"] else ""))
     if out["broken"]:
         print(f"websites that have gone: {', '.join(out['broken'])}")
 
