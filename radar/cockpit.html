@@ -1112,13 +1112,14 @@ function dragSetup() {
   });
 }
 function render(force) {
+  if (!S.labels) return;  // a screen opened before the first data arrives: load() draws it when it does
   const v = (location.hash || "#pipeline").slice(1).split("/")[0];
   document.querySelector(".app").classList.toggle("first", v === "welcome");
   if (v === "welcome" && $("fr")) return;  // it keeps itself up to date, and redrawing would wipe what you're typing
   drawTicker();
   if (!force && v === "settings" && document.activeElement && $("main").contains(document.activeElement)) return;
-  if (!force && document.querySelector("#main details.keep[open], #main dialog[open]")) return;
-  if (!force && dragId) { dragHeld = true; return; }  // a role in mid-drag: a redraw would drop it  // a form you've opened: a refresh would close it and wipe what you typed
+  if (!force && document.querySelector("#main details.keep[open], #main dialog[open]")) return;  // a form you've opened: a refresh would close it and wipe what you typed
+  if (!force && dragId) { dragHeld = true; return; }  // a role in mid-drag: a redraw would drop it
   document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
   $("n-week").textContent = S.moves.filter(m => m.week === S.week && m.status === "todo").length || "";
   $("n-accounts").textContent = S.accounts.filter(a => a.tier === "A" && a.fresh).length || "";
