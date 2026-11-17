@@ -1,6 +1,8 @@
-"""Loaded by every Python process in a smoke test: one made-up job board, and no way to reach the real internet."""
+"""Loaded by every Python process in a smoke test: one made-up job board, and no way to reach the real internet.
+The demo (evals/demo.py) adds its own pages, in boards.json in the made-up home folder."""
 import io
 import json
+import os
 import socket
 import urllib.error
 import urllib.request
@@ -18,7 +20,16 @@ def listing(n, title, place):
             "first_published": "2026-01-01T09:00:00Z"}
 
 
+try:
+    with open(os.path.join(os.environ.get("HOME", ""), "boards.json")) as f:
+        PAGES = json.load(f)
+except OSError:
+    PAGES = {}
+
+
 def reply_for(url):
+    if url in PAGES:
+        return PAGES[url]
     if url == HOME:
         return HOME_PAGE
     if url == BOARD:
@@ -35,7 +46,7 @@ class Response(io.BytesIO):
 
 def urlopen(request, *args, **kwargs):
     url = request if isinstance(request, str) else request.full_url
-    if url == QUIET:
+    if url == QUIET and url not in PAGES:
         raise urllib.error.HTTPError(url, 429, "Too Many Requests", {}, None)
     body = reply_for(url)
     if body is None:  # a 404 fails straight away, where a dropped connection would be retried
