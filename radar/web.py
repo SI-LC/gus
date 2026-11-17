@@ -51,6 +51,9 @@ def ua() -> dict:
 
 HOST_PAUSE = 1.5  # seconds between any two requests to one vendor, whichever threads send them
 SLOWER_PAUSE = 10  # the same for a vendor that has said "slow down", for CAREFUL_DAYS after: no vendor says what gap it wants
+# The same, always, for a vendor where one board takes many requests and every company shares one front door. Reading
+# seven Workday boards 1.5 seconds apart was some 80 requests in two minutes, and its front door put up a bot check.
+GENTLE = {"myworkdayjobs.com": 30}
 _hosts: dict = {}  # vendor -> the moment it may next be asked
 _hosts_lock = threading.Lock()
 
@@ -96,11 +99,11 @@ def vendor(host: str) -> str:
 def _pace(who: str) -> None:
     """Requests to one vendor come at least HOST_PAUSE apart, whichever thread sends them. The scan reads six boards at once,
     and many of them live with the same vendor: paced, they arrive one at a time rather than as a burst from one address."""
-    slow = who in _cooled or _said_lately(who)
+    gap = pause(who)
     with _hosts_lock:
         now = time.monotonic()
         turn = max(now, _hosts.get(who, 0))
-        _hosts[who] = turn + (SLOWER_PAUSE if slow else HOST_PAUSE)
+        _hosts[who] = turn + gap
     if turn > now:
         time.sleep(turn - now)
 
@@ -182,6 +185,16 @@ def hold_ended() -> str:
     The service reads the boards held back once for each such moment."""
     now = _utc().isoformat(timespec="seconds")
     return max((r["until"] for r in _holds().values() if r.get("times") and r.get("until", now) < now), default="")
+
+
+def pause(who: str) -> float:
+    """Seconds between two requests to this vendor: longer for one that has said slow down lately, or is always asked gently."""
+    return max(GENTLE.get(who, HOST_PAUSE), SLOWER_PAUSE if who in _cooled or _said_lately(who) else 0)
+
+
+def unhurried(who: str) -> bool:
+    """Whether this vendor is asked more slowly than most. The scan reads its boards in a slot of their own (`scan.fetch_all`)."""
+    return pause(who) > HOST_PAUSE
 
 
 def _check_hold(who: str) -> None:
@@ -296,7 +309,7 @@ def strip_html(s: str) -> str:
 
 # --- a company's own site: only what its robots.txt allows -------------------------------------------
 
-ROBOTS_KEEP = 3600  # seconds to trust a robots.txt
+ROBOTS_KEEP = 24 * 3600  # seconds to trust a robots.txt: a day, the longest RFC 9309 allows, so a daily scan seldom asks for one
 BOT_CHECK = re.compile(r"captcha|just a moment|cf-chl|attention required|access denied", re.I)
 GEM_API = "api.gem.com"
 PUBLIC_HOST = re.compile(r"(?:[a-z0-9-]+\.)+(?!local$|internal$|lan$|home$)[a-z]{2,}", re.I)  # no IP addresses, ports or home network names
@@ -335,7 +348,7 @@ def robots_allow(rules: list, path: str) -> bool:
 def site_rules(host: str) -> tuple:
     """A site's robots.txt, as (rules, sitemaps). A missing file means no rules. If it can't be read, nothing is fetched."""
     kept = _robots.get(host)
-    if kept and kept[0] > time.monotonic():
+    if kept and kept[0] > time.time():
         return kept[1]
     try:
         rules = parse_robots(fetch_bytes(f"https://{host}/robots.txt").decode("utf-8-sig", "ignore"))
@@ -345,8 +358,22 @@ def site_rules(host: str) -> tuple:
         if (e.code in (401, 403, 429) or e.code >= 500) and not no_file:
             raise Refused(f"robots.txt answered {'with ' + why(e) if bot_check(e) else e.code}") from e
         rules = ([], [])
-    _robots[host] = (time.monotonic() + ROBOTS_KEEP, rules)
+    _robots[host] = (time.time() + ROBOTS_KEEP, rules)
     return rules
+
+
+def remember_robots(path) -> None:
+    """Start a scan with the robots.txt files the last one read, where they're under a day old. The file is
+    {host: [the moment it stops being trusted, [rules, sitemaps]]}."""
+    kept = read(path)
+    _robots.update({host: (until, (rules, sitemaps)) for host, (until, (rules, sitemaps)) in kept.items() if until > time.time()})
+
+
+def keep_robots(path) -> None:
+    """Save the robots.txt files read, for the next scan. One that couldn't be read is never kept: it is asked for again."""
+    with locked(path) as kept:
+        kept.clear()
+        kept.update({host: [until, list(rules)] for host, (until, rules) in _robots.items() if until > time.time()})
 
 
 def polite_fetch(url: str, body: bytes = None) -> str:

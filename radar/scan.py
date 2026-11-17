@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import itertools
 import json
 import re
 import sys
@@ -81,9 +82,18 @@ def fetch_all(only: set = None):
         except Exception as e:  # one dead board shouldn't stop the scan
             return t, [], (company, f"{ats}:{slug}: {e}")
 
+    # A vendor Gus asks slowly (Workday always, others for a week after saying "slow down") has its boards read one after
+    # another in a slot of its own: waiting their turn in the six, they would hold up every other board for many minutes.
+    slow = {}
+    for t in tasks:
+        if (who := boards.VENDORS.get(t[1])) and web.unhurried(who):
+            slow.setdefault(who, []).append(t)
+    quick = [t for t in tasks if t not in {s for lane in slow.values() for s in lane}]
     answered = set()
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        for n, ((company, ats, slug, _), found, err) in enumerate(pool.map(run, tasks), 1):
+    with ThreadPoolExecutor(max_workers=6) as pool, ThreadPoolExecutor(max_workers=max(1, len(slow))) as lanes:
+        waiting_on = [lanes.submit(lambda lane=lane: [run(t) for t in lane]) for lane in slow.values()]
+        results = itertools.chain(pool.map(run, quick), (r for lane in waiting_on for r in lane.result()))
+        for n, ((company, ats, slug, _), found, err) in enumerate(results, 1):
             doing.say(f"Reading job boards: {n} of {len(tasks)} done ({company}), {len(jobs) + len(found)} ads so far")
             jobs += found
             if err:
@@ -117,7 +127,9 @@ def main():
     if held is not None and not held:
         print("No boards are waiting to be read")
         return
+    web.remember_robots(DATA / "robots.json")
     jobs, errors = fetch_all(held) if held else fetch_all()  # slow network part, outside the lock
+    web.keep_robots(DATA / "robots.json")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     new = []

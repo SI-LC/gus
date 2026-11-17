@@ -319,16 +319,37 @@ def location_filters(facets: list, cfg) -> tuple:
     return wanted, any_found
 
 
+def place_counts(facets: list) -> dict:
+    """{filter: {place id: jobs there}} as one answer counts them: on the whole board, or within the filters it was asked with."""
+    counts = {}
+    for f in facets or []:
+        values = f.get("values") or []
+        if f.get("facetParameter"):
+            counts[f["facetParameter"]] = {v["id"]: v.get("count") for v in values if v.get("id")}
+        counts.update(place_counts([v for v in values if "values" in v]))  # a group of filters
+    return counts
+
+
 def workday_list(slug: str) -> dict:
     """{job id: (address, title)} for jobs in your locations only. The board says which places it has, your location rules
-    pick from them, and only those jobs are asked for: a handful of requests where the whole list could be a hundred."""
+    pick from them, and only those jobs are asked for: a handful of requests where the whole list could be a hundred.
+    A board often has a country filter and a place filter, and the London jobs are under both. The broadest is read first;
+    its answer counts the jobs in each place within it, and a place with as many there as on the whole board is not read again."""
     host, site = slug.split("/", 1)
-    filters, any_found = location_filters(workday_jobs(slug).get("facets"), matching.load_config())
+    board = workday_jobs(slug).get("facets")
+    filters, any_found = location_filters(board, matching.load_config())
     if not any_found:
         raise Refused("It has no location filter Gus can use, and reading its whole list would be too many requests")
     found, pages = {}, 0
     cut_short.discard(slug)
-    for name, ids in filters.items():  # one filter at a time, as two together would mean "both"
+    everywhere, within = place_counts(board), None
+    for name in sorted(filters, key=lambda name: len(filters[name])):  # one filter at a time, as two together would mean "both"
+        ids = filters[name]
+        if within is not None:  # only the places with jobs the first filter didn't hold; no count means it can't be told
+            known = everywhere.get(name, {})
+            ids = [i for i in ids if known.get(i) is None or within.get(name, {}).get(i) != known[i]]
+            if not ids:
+                continue
         seen = total = 0
         while True:
             if pages >= WORKDAY_LIST_PAGES:
@@ -337,6 +358,7 @@ def workday_list(slug: str) -> dict:
             time.sleep(PAGE_PAUSE)
             pages += 1
             d = workday_jobs(slug, {name: ids}, seen)
+            within = place_counts(d.get("facets")) if within is None else within
             total, rows = total or d.get("total") or 0, d.get("jobPostings") or []
             seen += len(rows)
             for j in rows:
@@ -1000,6 +1022,11 @@ def hn_who_is_hiring():
         })
     return out
 
+
+# The vendor that answers for every board on a system, as `web.vendor` names it. Systems where each company has its own host aren't here.
+VENDORS = {"greenhouse": "greenhouse.io", "ashby": "ashbyhq.com", "lever": "lever.co", "workable": "workable.com",
+           "smartrecruiters": "smartrecruiters.com", "recruitee": "recruitee.com", "workday": "myworkdayjobs.com", "gem": "gem.com",
+           "microsoftcareers": "microsoft.com"}
 
 SOURCES = {"greenhouse": greenhouse, "ashby": ashby, "lever": lever, "workable": workable,
            "smartrecruiters": smartrecruiters, "recruitee": recruitee, "successfactors": successfactors, "workday": workday,
