@@ -771,8 +771,9 @@ class BotIdentity(unittest.TestCase):
             def __exit__(self, *a): return False
 
         slept = []
+        # The release is given, not read from git: Python waits for git by sleeping, and those sleeps would be counted here
         with mock.patch("urllib.request.urlopen", lambda req, timeout=30: Reply(b"ok")), mock.patch.object(boards.time, "sleep", slept.append), \
-             mock.patch.dict(web._hosts, clear=True):
+             mock.patch.dict(web._hosts, clear=True), mock.patch.object(web, "version", lambda: "9.9.9"):
             web.fetch_bytes("https://boards.example.com/a/jobs")
             web.fetch_bytes("https://boards.example.org/jobs")
             self.assertEqual(slept, [], "different vendors run side by side")
