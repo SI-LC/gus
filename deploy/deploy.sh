@@ -22,11 +22,14 @@ unset GUS_DEPLOY_PULLED  # the scan below runs this script's own tests: left set
 # The pull request this commit came from, if GitHub's scan passed on this exact code. Three things must hold: the commit
 # is that pull request's merge; the branch's last commit holds the same files as main does now, and already had
 # everything that was on main before it; and the scan's latest result on that commit is a pass. Anything else, or no
-# answer from GitHub, prints nothing, and the tests run here.
+# answer from GitHub after a few asks, prints nothing, and the tests run here.
 tested_on_github() {
-  local sha pr head
+  local sha wait pr="" head=""
   sha=$(git rev-parse HEAD)
-  read -r pr head < <(gh api "repos/{owner}/{repo}/commits/$sha/pulls" --jq ".[] | select(.merge_commit_sha == \"$sha\") | \"\(.number) \(.head.sha)\"" 2>/dev/null) || return 0
+  for wait in 0 2 2 2 2; do  # GitHub takes a few seconds after a merge to say which pull request the commit came from
+    sleep "$wait"
+    read -r pr head < <(gh api "repos/{owner}/{repo}/commits/$sha/pulls" --jq ".[] | select(.merge_commit_sha == \"$sha\") | \"\(.number) \(.head.sha)\"" 2>/dev/null) && [ -n "$head" ] && break
+  done
   [ -n "$pr" ] && [ -n "$head" ] || return 0
   git fetch -q origin "refs/pull/$pr/head" 2>/dev/null || return 0
   [ "$(git rev-parse FETCH_HEAD)" = "$head" ] || return 0

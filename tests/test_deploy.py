@@ -24,9 +24,12 @@ esac
 
 FAKE_GH = """#!/bin/sh
 # Answers as GitHub would once its --jq filter is applied: the pull request a commit came from and how its scan went,
-# from files a test writes. With no such file it answers nothing, as for a commit that came from no pull request.
+# from files a test writes. With no such file it answers nothing, as for a commit that came from no pull request. With
+# a SLOW_TO_LINK file it names the pull request only on the third ask, as GitHub does in the seconds after a merge.
 case "$*" in
-  *"/pulls --jq"*) cat "$HOME/pull_request" 2>/dev/null ;;
+  *"/pulls --jq"*)
+    echo asked >> "$HOME/asked"
+    [ -f "$HOME/SLOW_TO_LINK" ] && [ "$(wc -l < "$HOME/asked")" -lt 3 ] || cat "$HOME/pull_request" 2>/dev/null ;;
   *check-runs*) cat "$HOME/scan_result" 2>/dev/null ;;
   *) echo "$*" >> "$HOME/released" ;;
 esac
@@ -169,6 +172,14 @@ class Deploy(UpdatePi):
         self.assertIn("scanned --tested-on-github 7", out, "the scan still runs, told which pull request passed the tests")
         self.assertEqual((self.home / "sent").read_text(), "# the update\n")
 
+    def test_github_is_asked_again_when_it_has_not_yet_linked_a_merge_to_its_pull_request(self):
+        self.merge_pull_request()
+        (self.home / "SLOW_TO_LINK").touch()
+        code, out = self.run_deploy()
+        self.assertEqual(code, 0, out)
+        self.assertIn("scanned --tested-on-github 7", out)
+        self.assertEqual(len((self.home / "asked").read_text().splitlines()), 3, "it stops asking once GitHub answers")
+
     def test_code_github_did_not_pass_is_tested_here(self):
         for why, how in (("the scan failed on GitHub", {"scan": "failure"}), ("the scan hasn't finished on GitHub", {"scan": ""}),
                          ("main isn't what the scan read", {"changed_after_the_scan": True})):
@@ -184,6 +195,7 @@ class Deploy(UpdatePi):
         code, out = self.run_deploy()
         self.assertEqual(code, 0, out)
         self.assertNotIn("--tested-on-github", out)
+        self.assertEqual(len((self.home / "asked").read_text().splitlines()), 5, "it asks a few times, then stops waiting")
 
     def test_a_merge_that_changes_the_deploy_itself_is_deployed_by_the_new_copy(self):
         dev = self.home / "dev" / "deploy"
