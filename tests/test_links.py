@@ -102,7 +102,8 @@ class Saving(unittest.TestCase):
         from radar import companies
         for p in (mock.patch.object(links, "JOBS", self.jobs), mock.patch.object(links, "watchlist_path", lambda: self.list),
                   mock.patch.object(links, "COMPANIES", self.companies), mock.patch.object(companies, "COMPANIES", self.companies),
-                  mock.patch.object(companies, "watchlist_path", lambda: self.list)):
+                  mock.patch.object(companies, "watchlist_path", lambda: self.list),
+                  mock.patch.object(links, "GUESSES", Path(d.name) / "board_guesses.json")):
             p.start()
             self.addCleanup(p.stop)
 
@@ -145,6 +146,37 @@ class Saving(unittest.TestCase):
             links.main()
         look.assert_called_once_with("acme", "https://acme.example/careers")
         self.assertEqual(links.careers_addresses(), {"acme": "https://acme.example/careers"})
+
+    def test_a_company_with_no_board_isnt_guessed_at_again_for_a_while(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role()}))
+        with mock.patch.object(links, "resolve", return_value=None) as look:
+            links.main()
+            self.jobs.write_text(json.dumps({"jsearch:1": role(), "jsearch:2": role(id="jsearch:2", title="Head of Product")}))
+            links.main()
+            self.assertEqual(look.call_count, 1, "a second role from the same company the next day asks no vendor again")
+            with mock.patch.object(links, "GUESS_DAYS", 0):
+                self.jobs.write_text(json.dumps({"jsearch:3": role(id="jsearch:3", title="Product Lead")}))
+                links.main()
+        self.assertEqual(look.call_count, 2)
+
+    def test_a_board_found_once_is_read_again_without_guessing(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(title="Head of Design")}))
+        board = mock.Mock(return_value=[{"title": "Senior Product Manager", "url": "https://acme.example/1"}])
+        with mock.patch.object(links, "resolve", return_value=("greenhouse", "acme", 4)) as look, mock.patch.dict(links.SOURCES, greenhouse=board):
+            links.main()
+            self.jobs.write_text(json.dumps({"jsearch:2": role(id="jsearch:2")}))
+            links.main()
+        self.assertEqual((look.call_count, board.call_count), (1, 2))
+        self.assertEqual(json.loads(self.jobs.read_text())["jsearch:2"]["url"], "https://acme.example/1")
+
+    def test_a_careers_address_that_turns_up_is_tried_at_once(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role()}))
+        with mock.patch.object(links, "resolve", return_value=None) as look:
+            links.main()
+            self.companies.write_text(json.dumps({"Acme Ltd": {"status": "candidate", "careers_url": "https://acme.example/careers"}}))
+            self.jobs.write_text(json.dumps({"jsearch:2": role(id="jsearch:2")}))
+            links.main()
+        self.assertEqual(look.call_count, 2)
 
     def test_a_fault_is_tried_again_next_time(self):
         self.jobs.write_text(json.dumps({"jsearch:1": role()}))

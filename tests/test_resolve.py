@@ -110,6 +110,25 @@ class FindingBoards(unittest.TestCase):
         self.assertIn("never dropped", text)
 
 
+class Guessing(unittest.TestCase):
+    """A name is tried on each vendor under a few likely spellings. Each wrong one is a request the vendor answers "no such board"."""
+
+    def tried(self, name, slow=()):
+        asked = []
+        with mock.patch.object(resolve, "try_board", lambda ats, slug: asked.append((ats, slug))), \
+             mock.patch.object(resolve, "unhurried", lambda who: who in slow):
+            resolve.resolve(name)
+        return asked
+
+    def test_a_vendor_asked_slowly_gets_the_name_as_written_only(self):
+        asked = self.tried("Acme Robotics", slow={"workable.com"})
+        self.assertEqual(sorted(s for a, s in asked if a == "workable"), ["acme-robotics", "acmerobotics"])
+        self.assertEqual(len([s for a, s in asked if a == "greenhouse"]), 7, "the others still get every spelling")
+
+    def test_every_vendor_gets_every_spelling_when_none_is_slow(self):
+        self.assertEqual(len(self.tried("Acme Robotics")), 7 * len(resolve.PROBES))
+
+
 class Addresses(unittest.TestCase):
     def test_only_gone_means_gone(self):
         import urllib.error

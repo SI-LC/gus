@@ -54,7 +54,7 @@ mark the record `status: "candidate", "fast_tracked": true`. The loop assesses i
 
 ## 3. Score and seek
 
-- Run `python3 -m radar.scan` to pick up roles from newly added boards.
+- Run `python3 -m radar.scan --new` to pick up roles from newly added boards. It asks only those: the run has already read every other board today, so never run a full scan here.
 - For every role in `data/jobs.json` with `score: null`, score it exactly as `prompts/triage.md`
   describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
   `stage` to `skipped`, unless the company's record has `favourite: true`: those stay `new` for the candidate to judge.

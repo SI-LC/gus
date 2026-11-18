@@ -21,9 +21,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
 
-from radar.boards import board_size, gem_posts, github_count, teamtailor_items, SITE_BOARDS, SOURCES
+from radar.boards import board_size, gem_posts, github_count, teamtailor_items, SITE_BOARDS, SOURCES, VENDORS
 from radar.paths import watchlist_path, DATA
-from radar.web import fetch_bytes, get_json, polite_fetch, site_rules
+from radar.web import fetch_bytes, get_json, polite_fetch, site_rules, unhurried
 from radar.store import read
 
 GUESS_DAYS = 14  # how long before a company with no board is guessed at again
@@ -62,12 +62,13 @@ CAREERS_HOSTS = re.compile(r"https://((?:careers?|jobs)\.[a-z0-9.-]+)", re.I)
 OWN_HOST_BOARDS = ("teamtailor", "successfactors")  # these run on a company's own domain, so the host itself has to be tried
 
 
-def slugs(name: str):
+def slugs(name: str, plain: bool = False):
+    """Spellings a board for this name might go by, likeliest first. plain: only the name as written, joined up or hyphenated."""
     base = re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
     words = base.split()
-    out = ["".join(words), "-".join(words), words[0] if words else base]
-    for suffix in ("hq", "ai", "inc", "labs"):
-        out.append("".join(words) + suffix)
+    out = ["".join(words), "-".join(words)]
+    if not plain:
+        out += [words[0] if words else base] + ["".join(words) + suffix for suffix in ("hq", "ai", "inc", "labs")]
     return list(dict.fromkeys(s for s in out if s))
 
 
@@ -131,10 +132,11 @@ def from_careers(url: str):
 def resolve(name: str, careers: str = None):
     """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors, Workday and Teamtailor boards
     have no address to work out from a name, and a Gem board's reply never says whose it is, so a guess there couldn't be
-    checked and might be another company's. All four are only found from a careers address: Gus never guesses at them."""
+    checked and might be another company's. All four are only found from a careers address: Gus never guesses at them.
+    A vendor Gus asks slowly gets the name as written only: most guesses are wrong, and each is one more request it turns down."""
     if careers and (hit := from_careers(careers)):
         return hit
-    tries = [(a, s) for s in slugs(name) for a in PROBES]
+    tries = [(a, s) for a in PROBES for s in slugs(name, plain=unhurried(VENDORS.get(a, "")))]
     with ThreadPoolExecutor(max_workers=8) as pool:
         hits = list(filter(None, pool.map(lambda t: try_board(*t), tries)))
     return max(hits, key=lambda h: h[2]) if hits else None

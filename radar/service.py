@@ -88,12 +88,12 @@ def _sources_on(cfg) -> bool:
 
 
 def _boards():
-    """Boards for companies that arrived with a role or a careers address, then a scan so their roles are scored this run."""
+    """Boards for companies that arrived with a role or a careers address, then a scan of those boards so their roles are scored this run."""
     from radar import resolve
     _run_modules("links")  # a role from a job site or a web search: find the employer's board and watch it
     out = resolve.auto()
     if out["added"] or out["restored"]:
-        _run_modules("scan")
+        _run_modules("scan --new")  # only the boards just added: Check roles has asked every other one this run
     n, g, r = len(out["added"]), len(out["guesses"]), len(out["restored"])
     return True, f"{n} board{'' if n == 1 else 's'} added" + (f", {r} put back in your companies" if r else "") + (f", {g} to look at in Companies" if g else "")
 
@@ -101,7 +101,7 @@ def _boards():
 def _run_modules(*modules):
     """Run Gus's own commands one after another. A failure is left to that command's log and the Health section."""
     for m in modules:
-        subprocess.run([sys.executable, "-m", f"radar.{m}"], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+        subprocess.run([sys.executable, "-m", *f"radar.{m}".split()], capture_output=True, text=True, timeout=1800, cwd=ROOT)
     return True, ""
 
 
