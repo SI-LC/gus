@@ -187,6 +187,12 @@ class BackingOff(unittest.TestCase):
         self.assertAlmostEqual(self.slept[-1], web.GENTLE["myworkdayjobs.com"], delta=0.5)
         self.assertGreaterEqual(web.GENTLE["myworkdayjobs.com"], 30)
 
+    def test_sites_that_turned_gus_away_at_the_usual_pace_are_asked_slowly_for_good(self):
+        self.assertGreaterEqual(web.pause("workable.com"), 10, "all twelve boards read at this pace after refusing at 1.5 seconds")
+        self.assertGreaterEqual(web.pause("microsoft.com"), 60, "it refused the third request at 10 seconds apart")
+        self.assertEqual(web.vendor("apply.careers.microsoft.com"), "microsoft.com")
+        self.assertEqual(web.vendor("apply.workable.com"), "workable.com")
+
     def test_the_hold_keeps_what_the_vendor_said(self):
         self.refuse(self.A, web.STRIKES)
         self.answers += [slow_down(self.A, headers={"Retry-After": "900"})] * web.STRIKES
@@ -317,6 +323,7 @@ class SlowLane(unittest.TestCase):
         with (self.dir / "watchlist.csv").open("w", newline="") as f:
             csv.writer(f).writerows([["company", "ats", "slug", "sector", "only"], *([c, "slow", c.lower(), "ai", ""] for c in slow),
                                      *([c, "quick", c.lower(), "ai", ""] for c in quick)])
+        self.said = []
         self.quick_done, self.at_once, self.most_at_once, self.stalled, lock = threading.Event(), 0, 0, False, threading.Lock()
         quick_left = [len(quick)]
 
@@ -341,10 +348,20 @@ class SlowLane(unittest.TestCase):
                         mock.patch.object(web, "unhurried", lambda who: who == "vendor.example"),
                         mock.patch.object(scan, "watchlist_path", lambda: self.dir / "watchlist.csv"),
                         mock.patch.object(matching, "load_config", lambda: {"source_hn": False}),
-                        mock.patch.object(boards, "save_looked_up", lambda a: None), mock.patch.object(scan, "DATA", self.dir)):
+                        mock.patch.object(boards, "save_looked_up", lambda a: None), mock.patch.object(scan, "DATA", self.dir),
+                        mock.patch.object(scan.doing, "say", self.said.append)):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.scan = scan
+
+    def test_the_progress_says_when_only_slow_sites_are_left(self):
+        self.scan.fetch_all()
+        self.assertEqual(len(self.said), 16, "one line for each board as it finishes, slow ones included")
+        self.assertNotIn("slowly", " ".join(self.said[:7]))
+        self.assertIn("8 of 16 done", self.said[7])
+        self.assertIn("The other 8 are on job sites Gus asks slowly", self.said[7])
+        self.assertIn("The other 1 is on a job site Gus asks slowly", self.said[14])
+        self.assertNotIn("slowly", self.said[15])
 
     def test_slow_boards_go_one_at_a_time_and_never_hold_up_the_rest(self):
         jobs, errors = self.scan.fetch_all()

@@ -8,12 +8,13 @@ Usage:
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import itertools
 import json
 import re
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 from radar import boardhealth, boards, doing, matching, web
@@ -90,11 +91,16 @@ def fetch_all(only: set = None):
             slow.setdefault(who, []).append(t)
     quick = [t for t in tasks if t not in {s for lane in slow.values() for s in lane}]
     answered = set()
-    with ThreadPoolExecutor(max_workers=6) as pool, ThreadPoolExecutor(max_workers=max(1, len(slow))) as lanes:
-        waiting_on = [lanes.submit(lambda lane=lane: [run(t) for t in lane]) for lane in slow.values()]
-        results = itertools.chain(pool.map(run, quick), (r for lane in waiting_on for r in lane.result()))
+    with ThreadPoolExecutor(max_workers=6) as pool, contextlib.ExitStack() as lanes:
+        waiting_on = []
+        for lane in slow.values():  # one worker for each slow vendor, so its boards finish in turn and each is reported as it does
+            one_at_a_time = lanes.enter_context(ThreadPoolExecutor(max_workers=1))
+            waiting_on += [one_at_a_time.submit(run, t) for t in lane]
+        results = itertools.chain(pool.map(run, quick), (f.result() for f in as_completed(waiting_on)))
         for n, ((company, ats, slug, _), found, err) in enumerate(results, 1):
-            doing.say(f"Reading job boards: {n} of {len(tasks)} done ({company}), {len(jobs) + len(found)} ads so far")
+            left = len(tasks) - n
+            rest = f". The other {left} {'is on a job site' if left == 1 else 'are on job sites'} Gus asks slowly"
+            doing.say(f"Reading job boards: {n} of {len(tasks)} done ({company}), {len(jobs) + len(found)} ads so far" + (rest if len(quick) <= n < len(tasks) else ""))
             jobs += found
             if err:
                 errors.append(err)
