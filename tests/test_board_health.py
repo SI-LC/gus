@@ -264,8 +264,8 @@ class NoRecheck(unittest.TestCase):
             self.assertEqual(companies.due()["broken_boards"], ["Bolt"])
 
 
-class CatchUp(unittest.TestCase):
-    """Boards a vendor held back in the morning are read again the same day, once its hold has run out."""
+class ThreeBoards(unittest.TestCase):
+    """A watchlist of three made-up boards, two of them on a vendor that is holding Gus back."""
 
     def setUp(self):
         import csv
@@ -292,6 +292,10 @@ class CatchUp(unittest.TestCase):
     def errors(self):
         return json.loads((self.dir / "board_errors.json").read_text())
 
+
+class CatchUp(ThreeBoards):
+    """Boards a vendor held back in the morning are read again the same day, once its hold has run out."""
+
     def test_only_the_boards_held_back_are_read_again_and_the_rest_keep_their_record(self):
         self.scan.fetch_all()
         self.assertEqual(self.scan.waiting(), {"Acme", "Cove"})
@@ -309,6 +313,69 @@ class CatchUp(unittest.TestCase):
     def test_a_board_that_broke_is_not_one_that_is_waiting(self):
         (self.dir / "board_errors.json").write_text(json.dumps({"Bolt": "ashby:bolt: HTTP Error 404: Not Found"}))
         self.assertEqual(self.scan.waiting(), set())
+
+
+class NewBoardsOnly(ThreeBoards):
+    """A run's later scans are for boards added during it: the morning's scan has already asked every other one."""
+
+    def setUp(self):
+        super().setUp()
+        self.refusing = set()
+
+    def add(self, *row):
+        import csv
+        with (self.dir / "watchlist.csv").open("a", newline="") as f:
+            csv.writer(f).writerow(row)
+
+    def test_a_later_scan_asks_only_the_boards_no_scan_has_asked(self):
+        self.scan.fetch_all()
+        self.add("Dune", "fake", "dune", "ai", "")
+        self.asked.clear()
+        self.assertEqual(self.scan.unasked(), {"Dune"})
+        self.scan.fetch_all(self.scan.unasked())
+        self.assertEqual(self.asked, ["Dune"], "the three read this morning aren't asked a second time")
+        self.assertEqual(self.scan.unasked(), set())
+
+    def test_a_board_that_moved_counts_as_new(self):
+        self.scan.fetch_all()
+        rows = (self.dir / "watchlist.csv").read_text().replace("Bolt,fake,bolt", "Bolt,fake,bolt-moved")
+        (self.dir / "watchlist.csv").write_text(rows)
+        self.assertEqual(self.scan.unasked(), {"Bolt"})
+
+    def test_with_nothing_new_no_board_is_asked(self):
+        self.scan.fetch_all()
+        self.asked.clear()
+        with mock.patch.object(self.scan.sys, "argv", ["scan", "--new"]), mock.patch("builtins.print") as said:
+            self.scan.main()
+        self.assertEqual((self.asked, said.call_args[0][0]), ([], "No new boards to read"))
+
+    def test_the_run_and_the_agent_ask_for_new_boards_only(self):
+        from radar import resolve, service
+        ran = []
+        with mock.patch.object(resolve, "auto", lambda: {"added": ["Dune"], "guesses": [], "restored": []}), \
+             mock.patch.object(service.subprocess, "run", lambda cmd, **kw: ran.append(cmd[2:])):
+            service._boards()
+        self.assertIn(["radar.scan", "--new"], ran)
+        self.assertIn("python3 -m radar.scan --new", (Path(__file__).parents[1] / "prompts" / "discover.md").read_text())
+
+
+class ScanLog(ThreeBoards):
+    """Each scan leaves a line saying when it ran, what kind it was and which boards it couldn't read."""
+
+    def test_a_scan_writes_what_it_asked_and_what_went_wrong(self):
+        with mock.patch.object(self.scan, "JOBS", self.dir / "jobs.json"), mock.patch.object(self.scan.sys, "argv", ["scan"]), \
+             mock.patch.object(self.scan.web, "remember_robots", lambda p: None), mock.patch.object(self.scan.web, "keep_robots", lambda p: None), \
+             mock.patch.object(self.scan.matching, "matches", lambda *a: False), mock.patch("builtins.print"):
+            self.scan.main()
+        log = (self.dir / "scan.log").read_text()
+        self.assertRegex(log.splitlines()[0], r"^\d{4}-\d\d-\d\dT[\d:]+\+00:00 every board: 1 of 3 read in \d+s, 0 new roles$")
+        self.assertIn("  Acme (fake:acme: Not asked: vendor.example told Gus to slow down", log)
+
+    def test_the_log_doesnt_grow_for_ever(self):
+        (self.dir / "scan.log").write_text("old\n" * (self.scan.LOG_LINES + 50))
+        self.scan.log("new")
+        lines = (self.dir / "scan.log").read_text().splitlines()
+        self.assertEqual((len(lines), lines[-1]), (self.scan.LOG_LINES, "new"))
 
 
 class SlowLane(unittest.TestCase):

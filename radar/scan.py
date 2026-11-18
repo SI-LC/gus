@@ -5,6 +5,9 @@ Usage:
     python3 -m radar.scan            # scan everything, print new roles
     python3 -m radar.scan --json     # same, as JSON
     python3 -m radar.scan --held     # only the boards a vendor held back on the last scan ("slow down"), now it may be asked
+    python3 -m radar.scan --new      # only the boards no scan has asked yet: the ones added since the last scan
+
+Each scan adds to data/scan.log when it ran, which boards it asked, how long it took and what each unread board said.
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import itertools
 import json
 import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -22,6 +26,7 @@ from radar import jobs as J
 from radar.paths import DATA, JOBS, watchlist_path
 from radar.store import locked, read
 
+LOG_LINES = 3000  # how much of data/scan.log is kept: a few weeks of scans
 MISSES_TO_CLOSE = 2  # scans in a row a role must be missing before it counts as closed
 _boards_answered: set = set()
 
@@ -51,6 +56,22 @@ def waiting() -> set:
     """Companies whose board wasn't read on the last scan because its vendor said slow down: waiting cures those, so they're
     read again the same day. A board that broke or moved isn't one of them."""
     return {name for name, failure in read(DATA / "board_errors.json").items() if web.held_back(failure)}
+
+
+def unasked() -> set:
+    """Companies whose board no scan has asked yet: added to the watchlist since the last scan, or moved to another board.
+    A run's later scans read only these. The morning's scan has asked every other board, and asking a vendor for all its
+    boards three times in one run is how it comes to say slow down."""
+    health = read(DATA / "board_health.json")
+    return {r["company"] for r in csv.DictReader(watchlist_path().open())
+            if r["ats"] in boards.SOURCES and (health.get(r["company"]) or {}).get("board") != f"{r['ats']}:{r['slug']}"}
+
+
+def log(*lines: str) -> None:
+    """Add to data/scan.log, keeping the last LOG_LINES: what the scheduler's scans said, which nothing else keeps."""
+    path = DATA / "scan.log"
+    kept = (path.read_text().splitlines() if path.exists() else []) + list(lines)
+    path.write_text("\n".join(kept[-LOG_LINES:]) + "\n")
 
 
 def fetch_all(only: set = None):
@@ -130,11 +151,17 @@ def main():
     cfg = matching.load_config()
     DATA.mkdir(exist_ok=True)
     held = waiting() if "--held" in sys.argv else None
+    fresh = unasked() if "--new" in sys.argv and held is None else None
     if held is not None and not held:
         print("No boards are waiting to be read")
         return
+    if fresh is not None and not fresh:
+        print("No new boards to read")
+        return
     web.remember_robots(DATA / "robots.json")
-    jobs, errors = fetch_all(held) if held else fetch_all()  # slow network part, outside the lock
+    began = time.monotonic()
+    only = held or fresh
+    jobs, errors = fetch_all(only) if only else fetch_all()  # slow network part, outside the lock
     web.keep_robots(DATA / "robots.json")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -163,10 +190,17 @@ def main():
         new.append(j)
       total = len(store)
 
+    asked = len(held or fresh or read(DATA / "board_health.json"))
+    not_read = [e for e in errors if not e.startswith("HN: ")]
+    what = "boards held back" if held else "new boards" if fresh else "every board"
+    log(f"{now} {what}: {asked - len(not_read)} of {asked} read in {time.monotonic() - began:.0f}s, {len(new)} new role{'' if len(new) == 1 else 's'}",
+        *(f"  {e}" for e in errors))
     if "--json" in sys.argv:
         print(json.dumps({"new": new, "errors": errors}, indent=2, ensure_ascii=False))
         return
-    if held:
+    if fresh:
+        print(f"{len(fresh)} new board{'' if len(fresh) == 1 else 's'} read: {len(new)} new role{'' if len(new) == 1 else 's'}")
+    elif held:
         left = len(waiting() & held)
         print(f"{len(held) - left} of {len(held)} boards that were told to wait are now read"
               + (f", {left} still waiting" if left else "") + f": {len(new)} new role{'' if len(new) == 1 else 's'}")

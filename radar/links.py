@@ -18,21 +18,22 @@ import csv
 import json
 import re
 import urllib.error
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from radar import ai
 from radar.companies import COMPANIES
-from radar.resolve import resolve
+from radar.resolve import GUESS_DAYS, resolve
 from radar.boards import SOURCES
 from radar.matching import load_config
-from radar.paths import watchlist_path, JOBS, ROOT
+from radar.paths import watchlist_path, DATA, JOBS, ROOT
 from radar.web import fetch_bytes
 from radar.jobs import same_company, same_title, to_board
 from radar.sources import LABEL
 from radar.store import locked, read
 
 LOOKUP_SOURCES = set(LABEL) | {"web", "email", "x"}  # found somewhere other than the employer's board
+GUESSES = DATA / "board_guesses.json"  # {company: {"checked", "board", "careers"}}: what looking for its board turned up
 PER_RUN = 40  # each company tries several boards and names, so keep a run polite
 
 
@@ -135,15 +136,37 @@ def watch(job) -> bool:
     return True
 
 
+def looked_up(careers: dict) -> dict:
+    """{company: its board, or None} for companies looked up in the last GUESS_DAYS, so a second role from one of them
+    doesn't send the same guesses to every vendor again. One whose careers address has changed since is looked up afresh."""
+    since = str(date.today() - timedelta(days=GUESS_DAYS))
+    return {name: tuple(rec["board"]) if rec.get("board") else None for name, rec in read(GUESSES).items()
+            if rec.get("checked", "") > since and rec.get("careers") == careers.get(name)}
+
+
+def remember(boards: dict, known: dict, careers: dict) -> None:
+    """Keep what this run's lookups turned up, and forget the ones too old to trust."""
+    today, since = str(date.today()), str(date.today() - timedelta(days=GUESS_DAYS))
+    with locked(GUESSES) as kept:
+        for name in [n for n, rec in kept.items() if rec.get("checked", "") <= since]:
+            del kept[name]
+        for name, hit in boards.items():
+            if name and name not in known:
+                kept[name] = {"checked": today, "board": list(hit) if hit else None, "careers": careers.get(name)}
+
+
 def main():
     todo = waiting(read(JOBS))
-    boards, found, careers = {}, {}, careers_addresses()
+    found, careers = {}, careers_addresses()
+    known = looked_up(careers)
+    boards = dict(known)
     for j in todo:  # network outside the lock
         try:
             found[j["id"]] = find(j["company"], j["title"], boards, careers)
         except Exception as e:  # one bad board shouldn't stop the rest; this role is tried again next time
             print(f"{j['company']}: {type(e).__name__}")
             found[j["id"]] = False
+    remember(boards, known, careers)
     added, now = [], datetime.now(timezone.utc).isoformat(timespec="seconds")
     with locked(JOBS) as store:
         for jid, hit in found.items():
