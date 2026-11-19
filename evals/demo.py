@@ -395,6 +395,8 @@ def fill(world: World) -> None:
     (data / "changes.jsonl").write_text("".join(json.dumps(c) + "\n" for c in changes()))
     (data / "usage.jsonl").write_text("".join(json.dumps(r) + "\n" for r in usage()))
     (data / "board_health.json").write_text(json.dumps({c[0]: {"board": f"greenhouse:{c[1]}", "read": ago(0.1)} for c in COMPANIES}))
+    (data / "board_history.json").write_text(json.dumps({ago(d)[:10]: {"boards": len(COMPANIES), "unread": [c[0] for c in COMPANIES[:1 if d in (4, 5) else 0]],
+                                                                       "no_board": 2, "no_board_watched": 1} for d in range(20, -1, -1)}))
     (data / "heartbeat.log").write_text(f"{ago(1.1)} ok\n{ago(0.1)} ok\n")
     (data / "runs").mkdir(exist_ok=True)  # yesterday's full run, so Activity has a last run to show
     (data / "runs" / f"discover-{ago(1, 7)[:19].replace(':', '-')}Z.md").write_text("# Discover\n\nA made-up run for the Gus demo.\n")

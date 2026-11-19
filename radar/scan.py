@@ -137,6 +137,7 @@ def fetch_all(only: set = None):
     (DATA / "board_errors.json").write_text(json.dumps(failed))
     boardhealth.record(asked, failed, datetime.now(timezone.utc).isoformat(timespec="seconds"), DATA / "board_health.json",
                        partial=only is not None)
+    boardhealth.keep(path=DATA / "board_health.json", companies=DATA / "companies.json")
     errors = [e if isinstance(e, str) else f"{e[0]} ({e[1]})" for e in errors]
     if only is None and matching.load_config().get("source_hn", True):
         doing.say("Reading Hacker News: Who is hiring")

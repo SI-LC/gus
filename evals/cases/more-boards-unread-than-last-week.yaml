@@ -1,0 +1,9 @@
+id: more-boards-unread-than-last-week
+requirement: When Gus stops reading a job board it could read a week ago, Activity says so, names the board and shows how many boards went unread each day.
+given: scanned with a board that says no
+check:
+  - open Activity
+  - 'see "1 new in the last week: Quillmere"'
+  - see "Job boards not read each day"
+  - see "Companies without a job board"
+judge: Without opening anything, can I tell whether Gus is missing more boards than it was a week ago, and which ones?
