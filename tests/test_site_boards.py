@@ -1637,6 +1637,36 @@ class MicrosoftCareers(SavedSearch):
         self.assertEqual((len(jobs), errors), (2, {}), "the list is newest first, so the pages read are the ones that matter")
         self.assertIn("microsoft", boards.cut_short, "and a role missing from them isn't called closed")
 
+    def test_a_page_that_is_refused_is_asked_for_once_more(self):
+        """The site turns away about one request in three whatever the pace, and says try again later."""
+        full = json.loads(sample("microsoft_search.json"))["data"]["positions"]
+        turned_away = []
+
+        def reply(url):
+            start = int(re.search(r"start=(\d+)", url)[1])
+            if start not in turned_away:
+                turned_away.append(start)
+                raise refused(url, 429)
+            return json.dumps({"data": {"count": 3, "positions": full[start:start + 2]}}).encode()
+        site = microsoft_site(reply)
+        jobs, errors = self.run_scan(site)
+        self.assertEqual((len(jobs), errors), (3, {}), "every page was refused once, the first too, and all of it is read")
+        self.assertEqual([re.search(r"start=(\d+)", u)[1] for u in self.pages(site) if "/search" in u], ["0", "0", "2", "2"])
+        self.assertNotIn("microsoft", boards.cut_short)
+
+    def test_a_page_refused_twice_running_is_left_for_tomorrow(self):
+        site = microsoft_site(lambda url: refused(url, 429))
+        _, errors = self.run_scan(site)
+        self.assertIn("asked Gus to slow down", errors["Microsoft"])
+        self.assertEqual(len([u for u in self.pages(site) if "/search" in u]), 2, "asked once more, and no more than that")
+
+    def test_a_bot_check_is_not_asked_again(self):
+        check = urllib.error.HTTPError(MICROSOFT_LIST, 429, "No", {"cf-mitigated": "challenge"}, None)
+        site = microsoft_site(lambda url: check)
+        _, errors = self.run_scan(site)
+        self.assertIn("Microsoft", errors)
+        self.assertEqual(len([u for u in self.pages(site) if "/search" in u]), 1)
+
     def test_turned_away_on_the_first_page_is_reported(self):
         _, errors = self.run_scan(microsoft_site(lambda url: refused(url, 429)))
         self.assertIn("slow down", errors["Microsoft"])
