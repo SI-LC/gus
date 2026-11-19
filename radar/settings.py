@@ -76,7 +76,7 @@ SCHEMA = [
     ("amazon_jobs_search", "Amazon Jobs search", "text", "Job sources",
      "Paste the address of a search on amazon.jobs, with the location set there: Amazon's roles, AWS included, aren't on a job board Gus can read. Read once a day, newest first, up to 500 roles. Leave empty to turn this off."),
     ("microsoft_careers_search", "Microsoft Careers search", "text", "Job sources",
-     "Paste the address of a search on apply.careers.microsoft.com, with the location set there. Read once a day, newest first, up to 100 roles, a minute apart: the site turns away anything quicker. Leave empty to turn this off."),
+     "Paste the address of a search on apply.careers.microsoft.com, with the location set there. Read once a day, newest first, up to 100 roles, a minute apart. The site turns some requests away at random, so Gus asks for a refused page once more. Leave empty to turn this off."),
     ("apple_jobs_search", "Apple Jobs search", "text", "Job sources",
      "Paste the address of a search on jobs.apple.com, with the location set there. Read once a day, newest first, up to 200 roles. Leave empty to turn this off."),
     ("sources_location", "Location", "text", "Job sources", "A town or city. Leave empty to search the whole country, which finds more roles."),

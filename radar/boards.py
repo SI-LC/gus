@@ -835,14 +835,18 @@ def microsoft_address(text: str) -> str:
 
 
 def microsoft_data(url: str) -> dict:
-    try:
-        return json.loads(web.polite_fetch(url))["data"]
-    except urllib.error.HTTPError as e:
-        if e.code == 429:
-            raise Refused("Microsoft's careers site asked Gus to slow down. The next daily read tries again") from e
-        raise
-    except (ValueError, KeyError, TypeError) as e:
-        raise Refused("The site no longer answers with job results Gus can read") from e
+    """One answer from the site. It turns away about one request in three whatever the pace, saying try again later, so a
+    refused request is made once more, after the usual pause (`web.GENTLE`). A bot check is not asked again."""
+    for attempt in (1, 2):
+        try:
+            return json.loads(web.polite_fetch(url))["data"]
+        except urllib.error.HTTPError as e:
+            if e.code != 429:
+                raise
+            if attempt == 2 or web.bot_check(e):
+                raise Refused("Microsoft's careers site asked Gus to slow down. The next daily read tries again") from e
+        except (ValueError, KeyError, TypeError) as e:
+            raise Refused("The site no longer answers with job results Gus can read") from e
 
 
 def microsoft_job(p: dict) -> dict:
