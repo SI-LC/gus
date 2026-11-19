@@ -56,6 +56,75 @@ class Unread(unittest.TestCase):
         self.assertEqual(boardhealth.note(self.path), "")
 
 
+class History(unittest.TestCase):
+    """A few boards unread is normal. What matters is whether there are more of them than a week ago."""
+    BOARDS = {"Acme": "workday:acme.wd1/jobs", "Bolt": "ashby:bolt", "Cove": "ashby:cove"}
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.path, self.companies = self.dir / "board_health.json", self.dir / "companies.json"
+        self.companies.write_text(json.dumps({"Acme": {"status": "watched", "board": "workday:acme.wd1/jobs"}, "Dune": {"status": "watched"},
+                                              "Elm": {"status": "maybe"}, "Fern": {"status": "rejected"}}))
+
+    def day(self, days_ago, failing=()):
+        now = datetime.now(timezone.utc) - timedelta(days=days_ago)
+        boardhealth.record(self.BOARDS, {n: "HTTP Error 429" for n in failing}, now.isoformat(timespec="seconds"), self.path)
+        boardhealth.keep(now, self.path, companies=self.companies)
+
+    def kept(self):
+        return json.loads((self.dir / "board_history.json").read_text())
+
+    def test_each_scan_keeps_the_day_and_a_later_one_replaces_it(self):
+        self.day(0, ["Acme", "Bolt"])
+        self.day(0, ["Acme"])
+        self.assertEqual(list(self.kept().values()), [{"boards": 3, "unread": ["Acme"], "no_board": 2, "no_board_watched": 1}])
+
+    def test_nothing_is_kept_before_the_first_scan(self):
+        boardhealth.keep(path=self.path, companies=self.companies)
+        self.assertFalse((self.dir / "board_history.json").exists())
+
+    def test_the_history_doesnt_grow_for_ever(self):
+        (self.dir / "board_history.json").write_text(json.dumps({f"2020-01-{d:02}": {} for d in range(1, 32)} | {f"2020-03-{d:02}": {} for d in range(1, 32)}
+                                                                | {f"2020-05-{d:02}": {} for d in range(1, 32)}))
+        self.day(0)
+        self.assertEqual(len(self.kept()), boardhealth.HISTORY_DAYS)
+        self.assertNotIn("2020-01-01", self.kept())
+
+    def test_the_same_boards_unread_as_a_week_ago_is_not_news(self):
+        for d in (9, 8, 7, 3, 0):
+            self.day(d, ["Acme"])
+        self.assertEqual(boardhealth.trend(path=self.path), {"late": ["Acme"], "new": [], "days": 7, "no_board_then": 2})
+        self.assertEqual(boardhealth.note(self.path), "1 job board not read for 2 days or more, none of them new in the last week")
+
+    def test_a_board_lost_since_last_week_is_named(self):
+        for d in (9, 7):
+            self.day(d, ["Acme"])
+        for d in (3, 0):
+            self.day(d, ["Acme", "Bolt"])
+        self.assertEqual(boardhealth.trend(path=self.path)["new"], ["Bolt"])
+        self.assertEqual(boardhealth.note(self.path), "2 job boards not read for 2 days or more, 1 of them new in the last week: Bolt")
+
+    def test_a_bad_morning_is_not_a_lost_board(self):
+        self.day(7)
+        self.day(1)
+        self.day(0, ["Cove"])
+        self.assertEqual(boardhealth.trend(path=self.path)["new"], [])
+        self.assertEqual(boardhealth.note(self.path), "")
+
+    def test_with_less_than_a_week_on_record_today_is_compared_with_the_first_day(self):
+        self.day(3)
+        self.day(0, ["Bolt"])
+        self.assertEqual(boardhealth.note(self.path), "1 job board not read for 2 days or more, 1 of them new in the last 3 days: Bolt")
+
+    def test_many_lost_boards_are_counted_and_only_a_few_named(self):
+        boards = {f"Co{n}": f"ashby:co{n}" for n in range(8)}
+        for d, failing in ((7, []), (3, boards), (0, boards)):
+            now = datetime.now(timezone.utc) - timedelta(days=d)
+            boardhealth.record(boards, {n: "429" for n in failing}, now.isoformat(), self.path)
+            boardhealth.keep(now, self.path, companies=self.companies)
+        self.assertTrue(boardhealth.note(self.path).endswith("8 of them new in the last week: Co0, Co1, Co2, Co3, Co4 and 3 more"))
+
+
 class Reply(io.BytesIO):
     headers = {}
 

@@ -74,6 +74,8 @@ class World:
             if refusing:
                 (self.app / "watchlist.csv").write_text(WATCHLIST + REFUSING)
                 (self.app / "data" / "board_health.json").write_text(json.dumps(refused_for_days()))
+                week_ago = str((datetime.now(timezone.utc) - timedelta(days=7)).date())  # when every board was still read
+                (self.app / "data" / "board_history.json").write_text(json.dumps({week_ago: {"boards": 2, "unread": [], "no_board": 0, "no_board_watched": 0}}))
             if job_site:
                 (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ROLE))
         tools = self.home / ".local" / "bin"

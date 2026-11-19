@@ -177,6 +177,7 @@ def full_run():
     if any(x["name"] == "Catch up on your companies" and x["status"] == "done" for x in progress["steps"]):
         s["watchlist"] = str(date.today())
         _save_schedule_state(s)
+    boardhealth.keep()  # the run may have found boards for companies that had none
     after = _counts()
     new = after["roles"] - before["roles"]
     summary = f"{new} new role{'' if new == 1 else 's'}, {after['strong']} strong in your inbox, {_moves_this_week()} moves this week"
