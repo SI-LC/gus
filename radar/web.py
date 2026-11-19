@@ -127,6 +127,7 @@ STRIKES = 3  # refusals in a row from one vendor, with no answer between them, b
 COOL_OFF = 60  # seconds the vendor is left alone the first time that happens in a run
 FIRST_HOLD = 2 * 3600  # seconds it isn't asked at all when it still says no after that: long enough to cover one run
 LONGEST_HOLD = 20 * 3600  # each hold in a row is twice the last, up to this: under a day, so the daily run always asks once
+BOT_CHECK_HOLD = 7 * 86400 - 4 * 3600  # a vendor that answers with a bot check again is asked once a week: waiting hours doesn't cure one, and asking daily may keep it in place. Just under a week, so the scan seven days on asks
 CAREFUL_DAYS = 7  # how long after a "slow down" the vendor is still asked at SLOWER_PAUSE, though it answers again
 _strikes: dict = {}  # vendor -> refusals in a row, in this process
 _cooled: set = set()  # vendors already given their cool-off in this process
@@ -212,14 +213,16 @@ def _check_hold(who: str) -> None:
 def _refused(who: str, wait, said: str = "") -> None:
     """One more "slow down" from a vendor. STRIKES in a row and it's left alone for COOL_OFF, then asked more slowly; if it
     still says no, Gus stops asking it until the hold runs out. A vendor held before this run, and not heard from since,
-    gets that one slower try at its first refusal: it has already said no, and one more no shouldn't cost another day."""
+    gets that one slower try at its first refusal: it has already said no, and one more no shouldn't cost another day.
+    A bot check is different: waiting doesn't cure it, so a vendor that answers with one again is held for BOT_CHECK_HOLD at once."""
     with _hosts_lock:
         _strikes[who] = _strikes.get(who, 0) + 1
         held_before = bool((_holds().get(who) or {}).get("times"))
         if _strikes[who] < STRIKES and not held_before:
             return
         _strikes[who] = 0
-        if who not in _cooled:
+        again = "bot check" in said and held_before  # a bot check from a vendor held before: no second try, one request is the week's
+        if who not in _cooled and not again:
             _cooled.add(who)
             _hosts[who] = max(_hosts.get(who, 0), time.monotonic() + COOL_OFF)
             return
@@ -228,7 +231,7 @@ def _refused(who: str, wait, said: str = "") -> None:
         if rec.get("until", "") > now.isoformat(timespec="seconds"):
             return  # another thread or process has just put it on hold
         times = rec.get("times", 0) + 1
-        hold = min(LONGEST_HOLD, max(FIRST_HOLD * 2 ** (times - 1), wait or 0))
+        hold = BOT_CHECK_HOLD if "bot check" in said and times > 1 else min(LONGEST_HOLD, max(FIRST_HOLD * 2 ** (times - 1), wait or 0))
         holds[who] = {"until": (now + timedelta(seconds=hold)).isoformat(timespec="seconds"), "times": times,
                       "said": now.isoformat(timespec="seconds"), "why": said, "asked_for": wait}
 
