@@ -318,6 +318,31 @@ class BackingOff(unittest.TestCase):
         self.assertNotIn("slow down", str(stopped.exception))
         self.assertFalse(web.held_back(f"workday:bolt: {stopped.exception}"), "so the board isn't read again when the hold ends")
 
+    def test_a_vendor_that_answers_with_a_bot_check_again_is_asked_once_a_week(self):
+        """Waiting an hour doesn't cure a bot check, and asking every morning may be what keeps it in place."""
+        self.hold_that_ran_out(times=1)
+        self.answers.append(slow_down(self.A, 429, {"cf-mitigated": "challenge"}))
+        with self.assertRaises(urllib.error.HTTPError):
+            web.fetch_bytes(self.A)
+        self.assertEqual(self.asked, [self.A], "one request, with no second try a minute later")
+        days = (datetime.fromisoformat(self.hold()["until"]) - datetime.now(timezone.utc)).total_seconds() / 86400
+        self.assertTrue(6.5 < days < 7, "so the scan a week on is the next to ask")
+        with self.assertRaises(web.SlowDown):
+            web.fetch_bytes(self.B)
+        self.assertEqual(self.asked, [self.A], "and no other board of the vendor's is asked meanwhile")
+
+    def test_a_first_bot_check_is_not_held_for_a_week(self):
+        for _ in range(2 * web.STRIKES):
+            self.answers.append(slow_down(self.A, 429, {"cf-mitigated": "challenge"}))
+            with self.assertRaises(urllib.error.HTTPError):
+                web.fetch_bytes(self.A)
+        self.assertLess((datetime.fromisoformat(self.hold()["until"]) - datetime.now(timezone.utc)).total_seconds(), 24 * 3600)
+
+    def test_a_vendor_that_answers_after_a_week_is_asked_every_day_again(self):
+        self.hold_that_ran_out(times=4, days_ago=7)
+        self.assertEqual(web.fetch_bytes(self.A), b"ok")
+        self.assertEqual(self.hold()["times"], 0)
+
     def test_a_bot_check_counts_as_slow_down_and_a_plain_refusal_does_not(self):
         self.assertTrue(web.told_to_slow_down(slow_down(self.A, 403, {"cf-mitigated": "challenge"})))
         self.assertFalse(web.told_to_slow_down(slow_down(self.A, 403)))
