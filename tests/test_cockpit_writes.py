@@ -73,7 +73,7 @@ class Companies(unittest.TestCase):
         self.addCleanup(lambda: [p.stop() for p in self.patches])
 
     def test_a_company_with_a_board_joins_the_watchlist_and_becomes_an_account(self):
-        with mock.patch.object(resolve, "resolve", lambda name, careers=None: ("lever", "wayve", 12)):
+        with mock.patch.object(resolve, "resolve", lambda name, careers=None, as_written=False: ("lever", "wayve", 12)):
             out = server.add_company({"name": " Wayve ", "careers": "https://wayve.ai/careers"})
         self.assertEqual((out["name"], out["board"], out["open_roles"]), ("Wayve", "lever:wayve", 12))
         rows = list(csv.DictReader(self.watchlist.open()))
@@ -82,7 +82,7 @@ class Companies(unittest.TestCase):
         self.assertEqual((c["status"], c["board"], c["source"], c["careers_url"]), ("watched", "lever:wayve", "manual", "https://wayve.ai/careers"))
 
     def test_without_a_board_it_is_still_an_account_but_not_on_the_watchlist(self):
-        with mock.patch.object(resolve, "resolve", lambda name, careers=None: None):
+        with mock.patch.object(resolve, "resolve", lambda name, careers=None, as_written=False: None):
             out = server.add_company({"name": "Quiet Co"})
         self.assertTrue(out["ok"])
         self.assertIsNone(out["board"])

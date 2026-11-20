@@ -128,6 +128,15 @@ class Guessing(unittest.TestCase):
     def test_every_vendor_gets_every_spelling_when_none_is_slow(self):
         self.assertEqual(len(self.tried("Acme Robotics")), 7 * len(resolve.PROBES))
 
+    def test_a_board_matching_one_word_of_a_name_is_a_guess_and_never_watched_unseen(self):
+        """"harbour" is some shop's board, not Harbour Stock Exchange Group's. Adding a company or a role watches a board
+        at once, so it asks for the name as written; the full run still finds the guess and shows it under Needs a look."""
+        someone_elses = lambda ats, slug: (ats, slug, 3) if (ats, slug) == ("greenhouse", "harbour") else None
+        with mock.patch.object(resolve, "try_board", someone_elses), mock.patch.object(resolve, "unhurried", lambda who: False):
+            self.assertIsNone(resolve.resolve("Harbour Stock Exchange Group", as_written=True))
+            self.assertEqual(resolve.resolve("Harbour Stock Exchange Group"), ("greenhouse", "harbour", 3))
+            self.assertEqual(resolve.resolve("Harbour", as_written=True), ("greenhouse", "harbour", 3), "a one-word name is its own whole name")
+
 
 class Addresses(unittest.TestCase):
     def test_only_gone_means_gone(self):

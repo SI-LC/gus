@@ -57,7 +57,7 @@ class AddRole(unittest.TestCase):
     def test_a_new_company_has_its_job_board_found_and_watched_in_the_same_step(self):
         self.lookup.return_value = ("lever", "quietco", 7)
         out = self.add(careers="https://quiet.example/careers")
-        self.lookup.assert_called_once_with("Quiet Co", "https://quiet.example/careers")
+        self.lookup.assert_called_once_with("Quiet Co", "https://quiet.example/careers", as_written=True)  # nobody checks this board first
         self.assertEqual((out["new_account"], out["board"], out["open_roles"]), (True, "lever:quietco", 7))
         c = json.loads(self.companies.read_text())["Quiet Co"]
         self.assertEqual((c["board"], c["careers_url"], c["status"]), ("lever:quietco", "https://quiet.example/careers", "watched"))

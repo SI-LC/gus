@@ -443,10 +443,12 @@ def add_company(body):
 
 
 def watch_company(name, careers=None):
-    """Make a company an account and watch its public job board, if it has one Gus can find. Returns (ats, slug, open roles) or None."""
+    """Make a company an account and watch its public job board, if it has one Gus can find. Returns (ats, slug, open roles) or None.
+    Nobody looks at this board before it's watched, so only its careers address or its whole name will do. A board that matches
+    part of the name is left for the full run, which offers it under Needs a look."""
     from radar import resolve
     from radar import websites
-    hit = resolve.resolve(name, careers)  # network, outside the lock
+    hit = resolve.resolve(name, careers, as_written=True)  # network, outside the lock
     if hit:
         resolve.add_board(name, hit[0], hit[1])
     site = websites.find(name, {"board": f"{hit[0]}:{hit[1]}" if hit else None, "careers_url": careers})
