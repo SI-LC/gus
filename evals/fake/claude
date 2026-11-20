@@ -39,4 +39,5 @@ if "## Roles (JSON)" in prompt:
     result = json.dumps([{"id": r["id"], "score": SAID.get(r["title"], [SCORES.get(r["title"], 5)])[0],
                           "why": SAID.get(r["title"], [0, f"Made-up reason for {r['title']}."])[1],
                           "flags": [], "talk_to": "Head of Product"} for r in roles])
-print(json.dumps({"result": result, "total_cost_usd": 0, "usage": {}}))
+model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "sonnet"
+print(json.dumps({"result": result, "total_cost_usd": 0, "usage": {}, "modelUsage": {f"claude-{model}-9-9": {"costUSD": 0}}}))
