@@ -228,7 +228,7 @@ class Schedule(unittest.TestCase):
 
 
 class FullRun(unittest.TestCase):
-    def run_with(self, *, emails=0, moves=0, watchlist_due=True, fail=None, budget_at=None):
+    def run_with(self, *, emails=0, moves=0, watchlist_due=True, fail=None, budget_at=None, email="ready"):
         from unittest import mock
         from radar import ai, service
         calls = []
@@ -245,9 +245,11 @@ class FullRun(unittest.TestCase):
         with mock.patch.multiple(service, _check_roles=step("scan"), _agent_step=step, _boards=step("boards"), _run_modules=lambda *a: step("score")(),
                                   _emails_waiting=lambda: emails, _moves_this_week=lambda: moves,
                                   _watchlist_due=lambda c, s: watchlist_due, _counts=lambda: {"roles": 0, "strong": 0},
-                                  _schedule_state=lambda: {}, _save_schedule_state=lambda s: None, load_config=lambda: {}):
+                                  _schedule_state=lambda: {}, _save_schedule_state=lambda s: None, _has_gmail_login=lambda c: email == "ready",
+                                  load_config=lambda: {"source_gmail": email != "off"}):
             service.progress.clear()
             ok, summary = service.full_run()
+        self.details = {s["name"]: s["detail"] for s in service.progress["steps"]}
         return ok, summary, calls, {s["name"]: s["status"] for s in service.progress["steps"]}
 
     def test_runs_in_order(self):
@@ -258,6 +260,14 @@ class FullRun(unittest.TestCase):
         _, _, calls, steps = self.run_with(moves=5, watchlist_due=False)
         self.assertEqual(calls, ["scan", "discover", "boards", "score"])
         self.assertEqual(steps["Pick who to contact"], "skipped")
+
+    def test_no_emails_is_only_said_when_email_is_read(self):
+        self.run_with()
+        self.assertEqual(self.details["Read emails"], "No new emails")
+        self.run_with(email="off")
+        self.assertEqual(self.details["Read emails"], "Email reading is off (Settings → Email)")
+        self.run_with(email="no login")
+        self.assertEqual(self.details["Read emails"], "No Gmail address and app password yet (Settings → Email)")
 
     def test_one_failure_doesnt_lose_the_rest(self):
         ok, _, calls, steps = self.run_with(fail="discover")
