@@ -343,6 +343,24 @@ class BackingOff(unittest.TestCase):
         self.assertEqual(web.fetch_bytes(self.A), b"ok")
         self.assertEqual(self.hold()["times"], 0)
 
+    def test_requests_to_a_slow_vendor_that_refused_one_are_kept_for_the_log(self):
+        a, b = "https://acme.wd1.myworkdayjobs.com/jobs?start=0", "https://acme.wd1.myworkdayjobs.com/jobs?start=20"
+        with mock.patch.object(web, "_asked", []):
+            web.fetch_bytes(a)
+            self.answers.append(slow_down(b))
+            with self.assertRaises(urllib.error.HTTPError):
+                web.fetch_bytes(b)
+            web.fetch_bytes(self.A)
+            lines = web.asked_lines()
+            self.assertEqual([line.split(" ", 1)[1] for line in lines], [f"{a} answered 200", f"{b} answered 429"])
+            self.assertRegex(lines[0], r"^\d\d:\d\d:\d\d ")
+            self.assertEqual(web.asked_lines(), [], "written once")
+
+    def test_a_slow_vendor_that_answered_everything_adds_nothing_to_the_log(self):
+        with mock.patch.object(web, "_asked", []):
+            web.fetch_bytes("https://acme.wd1.myworkdayjobs.com/jobs")
+            self.assertEqual(web.asked_lines(), [])
+
     def test_a_bot_check_counts_as_slow_down_and_a_plain_refusal_does_not(self):
         self.assertTrue(web.told_to_slow_down(slow_down(self.A, 403, {"cf-mitigated": "challenge"})))
         self.assertFalse(web.told_to_slow_down(slow_down(self.A, 403)))

@@ -269,6 +269,36 @@ def _fetch(req, timeout: int) -> bytes:
             time.sleep(2 * (attempt + 1))
 
 
+_asked: list = []  # (when, vendor, address, answer) for each request to a vendor Gus asks slowly, in this process
+
+
+def _ask(who: str, req, timeout: int) -> bytes:
+    """One request, noted with its answer when the vendor is one Gus asks slowly: those are the ones that turn it away, and
+    when they do, the scan's log shows what was asked, when, and what came back."""
+    def note(answer):
+        if who in GENTLE:
+            _asked.append((_utc().strftime("%H:%M:%S"), who, req.full_url[:160], answer))
+    try:
+        data = _fetch(req, timeout)
+    except urllib.error.HTTPError as e:
+        note(f"{e.code}, a bot check" if bot_check(e) else str(e.code))
+        raise
+    except (OSError, http.client.HTTPException):
+        note("no answer")
+        raise
+    note("200")
+    return data
+
+
+def asked_lines() -> list:
+    """For the scan's log, then forgotten: every request to a slow vendor that refused at least one of them this scan, in
+    the order they were made. A vendor that answered everything adds nothing."""
+    refused = {who for _, who, _, answer in _asked if answer != "200"}
+    lines = [f"{when} {address} answered {answer}" for when, who, address, answer in _asked if who in refused]
+    _asked.clear()
+    return lines
+
+
 def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict = None) -> bytes:
     """Web sources only, with a size limit, so a bad feed or a redirect can't reach local files or fill memory. A vendor that
     says "slow down" is given the short wait it asks for once; beyond that the refusal counts against it (`_refused`)."""
@@ -279,7 +309,7 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
     _check_hold(who)
     _pace(who)
     try:
-        data = _fetch(req, timeout)
+        data = _ask(who, req, timeout)
     except urllib.error.HTTPError as e:
         if not told_to_slow_down(e):
             raise
@@ -291,7 +321,7 @@ def fetch_bytes(url: str, timeout: int = 30, body: bytes = None, headers: dict =
             raise
         time.sleep(wait)
         try:
-            data = _fetch(req, timeout)
+            data = _ask(who, req, timeout)
         except urllib.error.HTTPError as again:
             if told_to_slow_down(again):
                 _refused(who, _retry_after(again), why(again))
