@@ -1015,7 +1015,8 @@ function input(f, v) {
 async function saveField(key, el) {
   const value = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
   const d = await post("/api/settings", { changes: { [key]: value } });
-  if (d) { SET = d; toast("Saved"); if (key === "ai_provider" || key === "ai_daily_limit_on" || key.startsWith("model_") || /^(source|adzuna|jsearch)/.test(key)) render(true); }
+  if (d) { SET = d; toast("Saved"); refreshState();  // so the other screens show the change without a reload
+    if (key === "ai_provider" || key === "ai_daily_limit_on" || key.startsWith("model_") || /^(source|adzuna|jsearch)/.test(key)) render(true); }
 }
 async function mcpToken(action) {
   if (action === "remove" && !confirm("Remove the token? Claude on your other devices will stop connecting.")) return;

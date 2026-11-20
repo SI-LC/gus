@@ -1,0 +1,10 @@
+id: settings-change-shows-everywhere
+requirement: When I change a setting, the other screens show it straight away, without a reload.
+given: scanned
+check:
+  - open Settings
+  - click "Limit AI spending each day"
+  - not see "Daily AI limit (USD)"
+  - open Activity
+  - see "No limit"
+judge: Do the other screens agree with what I just set, without my doing anything else?
