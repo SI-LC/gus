@@ -1,0 +1,11 @@
+id: models-say-their-version
+requirement: I can see exactly which Claude model did each job, not only "sonnet" or "opus".
+given: scanned
+check:
+  - open Settings
+  - see "Model for scoring roles"
+  - see "Last ran as Claude Sonnet 9.9"
+  - see "The newest Opus. Its version shows here once it has run."
+  - open Activity
+  - see "Claude Sonnet 9.9"
+judge: Is it clear which model and version scored my roles, and which model each job will use next?

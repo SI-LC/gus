@@ -19,7 +19,7 @@ from datetime import date
 from radar import usage
 from radar.matching import load_config
 from radar.paths import DATA, ROOT
-from radar.settings import secret
+from radar.settings import daily_limit, secret
 
 
 class BudgetReached(RuntimeError):
@@ -67,8 +67,8 @@ def login_works():
 
 
 def check_budget(cfg):
-    limit = float(cfg.get("ai_daily_budget_usd") or 0)  # 0 means no AI runs at all, never "no limit"
-    if usage.today_cost() >= limit:
+    limit = daily_limit(cfg)  # 0 means no AI runs at all; only the switch in Settings means "no limit"
+    if limit is not None and usage.today_cost() >= limit:
         flag = DATA / "budget_notified"
         today = str(date.today())
         if not flag.exists() or flag.read_text() != today:
@@ -131,7 +131,7 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         d = {}
     if d:
         u = d.get("usage") or {}
-        usage.record(kind="ai", task=task, provider=provider, model=model, cost_usd=d.get("total_cost_usd"),
+        usage.record(kind="ai", task=task, provider=provider, model=model, model_id=ran_as(d), cost_usd=d.get("total_cost_usd"),
                      input_tokens=(u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0),
                      output_tokens=u.get("output_tokens"), searches=(u.get("server_tool_use") or {}).get("web_search_requests"),
                      duration_ms=d.get("duration_ms"), ok=not d.get("is_error"))
@@ -144,6 +144,13 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
     if provider == "claude_subscription":
         login_works()
     return d.get("result") or out.stdout
+
+
+def ran_as(reply: dict) -> str | None:
+    """The exact model Claude Code says did the work: "sonnet" in Settings means whichever Sonnet is newest, and that changes.
+    A run can lean on a second, smaller model for odd jobs, so this is the one that did most of it."""
+    used = reply.get("modelUsage") or {}
+    return max(used, key=lambda m: used[m].get("costUSD") or 0) if used else None
 
 
 def _openai(prompt, cfg, task):

@@ -1,0 +1,14 @@
+id: ai-with-no-daily-limit
+requirement: I can turn the daily AI limit off, so runs never pause for cost, and the choice sticks.
+given: scanned
+check:
+  - open Settings
+  - see "Daily AI limit (USD)"
+  - click "Limit AI spending each day"
+  - not see "Daily AI limit (USD)"
+  - reload
+  - see "Limit AI spending each day"
+  - not see "Daily AI limit (USD)"
+  - open Activity
+  - see "No limit"
+judge: Is it clear that AI is still on, and that nothing caps what it uses in a day?

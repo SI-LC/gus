@@ -34,6 +34,11 @@ def rows() -> list[dict]:
     return out
 
 
+def model_versions() -> dict:
+    """Which exact model each of haiku, sonnet and opus was, the last time it ran: {"sonnet": "claude-sonnet-4-5"}."""
+    return {r["model"]: r["model_id"] for r in rows() if r.get("model") and r.get("model_id")}
+
+
 def _total(items) -> dict:
     return {"cost_usd": round(sum(r.get("cost_usd") or 0 for r in items), 4), "runs": len(items),
             "searches": sum(r.get("searches") or 0 for r in items),

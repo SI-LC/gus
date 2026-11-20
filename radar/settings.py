@@ -38,6 +38,8 @@ SCHEMA = [
      "e.g. https://api.openai.com/v1, https://openrouter.ai/api/v1, or http://localhost:11434/v1 for Ollama."),
     ("openai_model", "OpenAI-compatible model", "text", "AI", "Only used when that provider is selected."),
 
+    ("ai_daily_limit_on", "Limit AI spending each day", "bool", "AI",
+     "On pauses runs for the day once they reach the amount you set. Off means no limit: runs never pause for cost."),
     ("ai_daily_budget_usd", "Daily AI limit (USD)", "money", "AI",
      "Runs pause for the day at this much, in the equivalent API prices shown on Activity. 0 turns AI runs off: scans still find roles, but nothing is scored."),
 
@@ -204,6 +206,14 @@ ENV = {"anthropic_api_key": "ANTHROPIC_API_KEY", "x_bearer_token": "X_BEARER_TOK
 
 def load() -> dict:
     return {**read(DEFAULTS), **read(USER)}
+
+
+def daily_limit(cfg: dict | None = None) -> float | None:
+    """The most AI can use in a day, in USD. None means no limit, and 0 means AI is off."""
+    cfg = load() if cfg is None else cfg
+    if not cfg.get("ai_daily_limit_on", True):
+        return None
+    return float(cfg.get("ai_daily_budget_usd") or 0)
 
 
 def validate(key: str, value):

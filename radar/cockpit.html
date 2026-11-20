@@ -161,6 +161,8 @@ function routes(p) {
 const READ_MIN = 2;  // roughly how long it takes to read a job ad yourself: what "saved" in the status bar is counted from
 const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(".0", "") + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 const usd = v => "$" + (v < 10 ? (v || 0).toFixed(2) : Math.round(v).toLocaleString());
+// "claude-sonnet-4-5-20250929" reads as "Claude Sonnet 4.5"; anything in another shape is shown as it is
+const modelName = id => { const m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?![\d])/.exec(id || ""); return m ? `Claude ${m[1][0].toUpperCase() + m[1].slice(1)} ${m[2]}${m[3] ? "." + m[3] : ""}` : id || ""; };
 const TASKS = { quick: "First look", scoring: "Scoring roles", people: "Mapping people", agent: "Research", links: "Finding job links" };
 const sentAt = (j, p) => (j.contacts || {})[p.id] || (S.moves.find(m => m.person_id === p.id && m.status === "done") || {}).done_at;
 const stageSince = j => ((j.history || []).filter(h => h.stage === j.stage).pop() || {}).at;
@@ -333,10 +335,10 @@ function costs() {
   const u = S.usage, fact = (v, l) => `<div><span>${l}</span><b>${v}</b></div>`;
   return `<div class="section">What the AI used</div>
     <div class="facts">${fact(usd(u.ai.today.cost_usd), "Claude today")}${fact(usd(u.ai.week.cost_usd), "Claude this week")}${fact(usd(u.ai.month.cost_usd), "Claude this month")}
-      ${fact(S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.ai.month.searches, "Searches this month")}
+      ${fact(S.usage.daily_limit == null ? "No limit" : S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.ai.month.searches, "Searches this month")}
       ${fact(compact(u.ai.month.tokens || 0), "Tokens this month")}${fact(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
-    ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
+    ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model_id ? modelName(r.model_id) : r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     <p class="sub mt-3">${u.first ? `Tracking since ${esc(u.first.slice(0, 10))}. ` : "Nothing recorded yet. "}Scheduled tasks in the desktop app aren't included, and the Claude app doesn't report how much of your Pro allowance is left.</p>`;
 }
 let coTier = null;  // the tier Companies shows, one at a time as there can be hundreds: until you pick, the first that has any
@@ -861,6 +863,7 @@ const fieldsOf = (group, skip = []) => SET.schema.filter(f => f.group === group 
 const SETTINGS_TABS = [
   ["ai", "AI", () => {
     const skip = SET.values.ai_provider === "openai_compatible" ? [] : ["openai_base_url", "openai_model"];
+    if (!SET.values.ai_daily_limit_on) skip.push("ai_daily_budget_usd");  // no limit, so no amount to set
     const help = SET.values.ai_provider === "claude_subscription" ? "Uses the Claude plan you're signed in to on the computer Gus runs on, so you don't need an API key. If it has expired, sign in again here."
       : SET.values.ai_provider === "anthropic_api" ? "Gus uses this key, not a Claude login."
       : "Scoring only. Finding people and research need Claude.";
@@ -1002,7 +1005,9 @@ function input(f, v) {
   const id = "f_" + f.key, on = `onchange="saveField('${f.key}', this)"`;
   if (f.type === "bool") return `<input type="checkbox" class="switch" id="${id}" ${v ? "checked" : ""} ${on}>`;
   if (f.type === "select:provider") return `<select id="${id}" ${on}>${Object.entries(SET.providers).map(([k, l]) => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
-  if (f.type === "select:claude_model") return `<select id="${id}" ${on}>${SET.models.map(m => `<option ${m === v ? "selected" : ""}>${m}</option>`).join("")}</select>`;
+  if (f.type === "select:claude_model") { const ran = SET.model_versions[v], name = m => m[0].toUpperCase() + m.slice(1);
+    return `<div class="row"><select id="${id}" ${on}>${SET.models.map(m => `<option value="${m}" ${m === v ? "selected" : ""}>${name(m)}</option>`).join("")}</select>
+      <span class="sub">${ran ? `Last ran as ${esc(modelName(ran))}` : `The newest ${name(v)}. Its version shows here once it has run.`}</span></div>`; }
   if (f.type.startsWith("int")) { const [lo, hi] = f.type.split(":")[1].split("-"); return `<input type="number" id="${id}" min="${lo}" max="${hi}" step="1" value="${esc(v)}" ${on} class="max-w-[120px]">`; }
   if (f.type === "lines") return `<textarea id="${id}" rows="${Math.min(8, Math.max(3, String(v || "").split("\n").length + 1))}" ${on}>${esc(v)}</textarea>`;
   return `<input type="text" id="${id}" value="${esc(v)}" ${on}>`;
@@ -1010,7 +1015,7 @@ function input(f, v) {
 async function saveField(key, el) {
   const value = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
   const d = await post("/api/settings", { changes: { [key]: value } });
-  if (d) { SET = d; toast("Saved"); if (key === "ai_provider" || /^(source|adzuna|jsearch)/.test(key)) render(true); }
+  if (d) { SET = d; toast("Saved"); if (key === "ai_provider" || key === "ai_daily_limit_on" || key.startsWith("model_") || /^(source|adzuna|jsearch)/.test(key)) render(true); }
 }
 async function mcpToken(action) {
   if (action === "remove" && !confirm("Remove the token? Claude on your other devices will stop connecting.")) return;
