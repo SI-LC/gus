@@ -129,14 +129,16 @@ def from_careers(url: str):
     return None
 
 
-def resolve(name: str, careers: str = None):
+def resolve(name: str, careers: str = None, as_written: bool = False):
     """Return (ats, slug, open_jobs) for the board with the most jobs, or None. SuccessFactors, Workday and Teamtailor boards
     have no address to work out from a name, and a Gem board's reply never says whose it is, so a guess there couldn't be
     checked and might be another company's. All four are only found from a careers address: Gus never guesses at them.
-    A vendor Gus asks slowly gets the name as written only: most guesses are wrong, and each is one more request it turns down."""
+    A vendor Gus asks slowly gets the name as written only: most guesses are wrong, and each is one more request it turns down.
+    as_written: for a board that will be watched without a person looking at it first. Only the whole name counts then, because
+    a looser spelling, such as the first word of "Harbour Stock Exchange Group", can be another employer's board."""
     if careers and (hit := from_careers(careers)):
         return hit
-    tries = [(a, s) for a in PROBES for s in slugs(name, plain=unhurried(VENDORS.get(a, "")))]
+    tries = [(a, s) for a in PROBES for s in slugs(name, plain=as_written or unhurried(VENDORS.get(a, "")))]
     with ThreadPoolExecutor(max_workers=8) as pool:
         hits = list(filter(None, pool.map(lambda t: try_board(*t), tries)))
     return max(hits, key=lambda h: h[2]) if hits else None
