@@ -321,6 +321,21 @@ class Budget(unittest.TestCase):
     def test_room_left_allows_a_run(self):
         ai.check_budget({"ai_daily_budget_usd": 1000000})
 
+    def test_limit_turned_off_never_pauses_a_run(self):
+        from unittest import mock
+        with mock.patch.object(ai.usage, "today_cost", lambda: 5000.0):
+            ai.check_budget({"ai_daily_limit_on": False, "ai_daily_budget_usd": 10})
+            ai.check_budget({"ai_daily_limit_on": False, "ai_daily_budget_usd": 0})  # the amount is ignored, so AI stays on
+            with mock.patch("radar.notify.notify"), self.assertRaises(ai.BudgetReached):
+                ai.check_budget({"ai_daily_limit_on": True, "ai_daily_budget_usd": 10})
+
+
+class ModelThatRan(unittest.TestCase):
+    def test_names_the_model_that_did_most_of_the_work(self):
+        reply = {"modelUsage": {"claude-haiku-9-9": {"costUSD": 0.001}, "claude-sonnet-9-9": {"costUSD": 0.2}}}
+        self.assertEqual(ai.ran_as(reply), "claude-sonnet-9-9")
+        self.assertIsNone(ai.ran_as({}))
+
 
 class Inbox(unittest.TestCase):
     SENDERS = ["linkedin.com", "ashbyhq.com"]
