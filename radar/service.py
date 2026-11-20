@@ -114,6 +114,20 @@ def _emails_waiting():
     return sum(e.get("status") == "new" for e in read(DATA / "emails.json").values())
 
 
+def _has_gmail_login(cfg):
+    from radar.settings import secret
+    return bool((cfg.get("gmail_address") or "").strip() and secret("gmail_app_password"))
+
+
+def _emails_skip(cfg):
+    """Why the run isn't reading emails, or None to read them. "No new emails" is only true when Gus can read them."""
+    if not cfg.get("source_gmail"):
+        return "Email reading is off (Settings → Email)"
+    if not _has_gmail_login(cfg):
+        return "No Gmail address and app password yet (Settings → Email)"
+    return None if _emails_waiting() else "No new emails"
+
+
 def _moves_this_week():
     from radar.accounts import week_id
     return sum(m.get("week") == week_id() for m in read(MOVES).values())
@@ -138,7 +152,7 @@ def steps():
     return [
         ("Check roles", _check_roles, lambda: None),
         ("Job sources", _sources, lambda: None if _sources_on(cfg) else "Turned off"),
-        ("Read emails", _agent_step("inbox"), lambda: None if _emails_waiting() else "No new emails"),
+        ("Read emails", _agent_step("inbox"), lambda: _emails_skip(cfg)),
         ("Find new companies", _agent_step("discover"), lambda: None),
         ("Find job boards", _boards, lambda: None),
         ("Catch up on your companies", _agent_step("watchlist"), lambda: None if _watchlist_due(cfg, s) else f"Done in the last {every} days"),
