@@ -7,7 +7,8 @@ Usage:
     python3 -m radar.scan --held     # only the boards a vendor held back on the last scan ("slow down"), now it may be asked
     python3 -m radar.scan --new      # only the boards no scan has asked yet: the ones added since the last scan
 
-Each scan adds to data/scan.log when it ran, which boards it asked, how long it took and what each unread board said.
+Each scan adds to data/scan.log when it ran, which boards it asked, how long it took and what each unread board said,
+and each request it made to a slowly asked job site that turned one of them away.
 """
 from __future__ import annotations
 
@@ -195,7 +196,7 @@ def main():
     not_read = [e for e in errors if not e.startswith("HN: ")]
     what = "boards held back" if held else "new boards" if fresh else "every board"
     log(f"{now} {what}: {asked - len(not_read)} of {asked} read in {time.monotonic() - began:.0f}s, {len(new)} new role{'' if len(new) == 1 else 's'}",
-        *(f"  {e}" for e in errors))
+        *(f"  {e}" for e in errors), *(f"    {line}" for line in web.asked_lines()))
     if "--json" in sys.argv:
         print(json.dumps({"new": new, "errors": errors}, indent=2, ensure_ascii=False))
         return

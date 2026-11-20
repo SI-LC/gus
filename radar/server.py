@@ -124,7 +124,7 @@ def state():
         "ai": ai_state(),
         "meetings": sorted((dict(m, id=k) for k, m in read(DATA / "meetings.json", {}).items()
                             if not m.get("cancelled") and str(m.get("start", "")) >= now()[:10]), key=lambda m: str(m.get("start")))[:20],
-        "usage": {**usage.summary(), "daily_limit": float(settings.load().get("ai_daily_budget_usd") or 0)},
+        "usage": {**usage.summary(), "daily_limit": settings.daily_limit()},
         "labels": {"events": E.LABEL, "event_types": E.TYPES, "outcomes": OUTCOMES, "person_stages": PERSON_STAGES, "skip_reasons": SKIP_REASONS, "skip_reason_was": SKIP_REASON_WAS,
                    "role_stages": JOB_STAGES},
         "health": {
@@ -195,6 +195,7 @@ def settings_payload():
         "values": settings.load(),
         "providers": settings.PROVIDERS,
         "models": settings.CLAUDE_MODELS,
+        "model_versions": usage.model_versions(),
         "secret_keys": {k: {"label": l, "help": h} for k, (l, h) in settings.SECRET_KEYS.items()},
         "secrets": settings.secrets_masked(),
         "feeds": [{k: f[k] for k in ("name", "url", "kind", "enabled")} for f in all_feeds()],
@@ -258,10 +259,10 @@ def follow_ups(jobs: dict, people: dict, moves: dict, today=None) -> list:
 
 def ai_state():
     """Whether AI runs can happen right now, so the cockpit can say so instead of looking broken."""
-    limit, spent = float(settings.load().get("ai_daily_budget_usd") or 0), usage.today_cost()
+    limit, spent = settings.daily_limit(), usage.today_cost()  # a limit of None is no limit
     from radar import ai
     expired = ai.login_expired() if settings.load().get("ai_provider", "claude_subscription") == "claude_subscription" else None
-    reason = "off" if not limit else "signed_out" if expired else "limit" if spent >= limit else None
+    reason = "off" if limit == 0 else "signed_out" if expired else "limit" if limit is not None and spent >= limit else None
     return {"limit": limit, "spent": round(spent, 2), "paused": reason, "signed_out_since": (expired or {}).get("since"),
             "on_plan": settings.load().get("ai_provider", "claude_subscription") == "claude_subscription"}
 
