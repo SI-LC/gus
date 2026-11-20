@@ -1,0 +1,24 @@
+id: search-filters-the-screen
+requirement: When I type in the search box, the screen I'm on stays and shows only what matches, until I clear it.
+given: scanned
+check:
+  - open Role Inbox
+  - type "growth" into "Search"
+  - see "Role Inbox"
+  - see "Product Manager, Growth"
+  - not see "Senior Product Manager"
+  - click "Shortlist"
+  - open Pipeline
+  - see "Showing only what matches"
+  - see "Product Manager, Growth"
+  - type "anager" into "Search"
+  - see "Nothing in Pipeline matches"
+  - type "prod man" into "Search"
+  - see "Product Manager, Growth"
+  - click "Clear search"
+  - not see "Showing only what matches"
+  - open Settings
+  - type "growth" into "Search"
+  - see "Pipeline"
+  - see "Product Manager, Growth"
+judge: Do I always know the screen is filtered, by what, and how to see everything again?

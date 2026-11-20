@@ -1,11 +1,14 @@
 id: search-finds-a-role
-requirement: I can find any role, company or person from one search box, whatever screen I'm on.
+requirement: I can find any role, company or person from one search box, whatever screen I'm on, and it tells me which screen each match is on.
 given: scanned
 check:
   - open Pipeline
   - type "senior product" into "Search"
-  - see "Roles"
+  - see "Nothing in Pipeline matches"
+  - click "1 in Role Inbox"
   - see "Senior Product Manager"
+  - not see "Product Owner"
   - type "zzzz nothing" into "Search"
-  - see "No role, company or person matches"
-judge: Is it obvious where each result lives and what I can do with it?
+  - see "Nothing in Role Inbox matches"
+  - see "Nothing anywhere else either"
+judge: Is it obvious where each match lives and how to get to it?
