@@ -1,5 +1,5 @@
 id: pipeline-card-opens-role
-requirement: A role on my pipeline is a small card; clicking it shows the one next step and everything else I can do to it, and I can see my pipeline as a board, a list or by person.
+requirement: A role on my pipeline is a small card; clicking it shows the one next step, a link to its ad and everything else I can do to it, and I can see my pipeline as a board, a list or by person.
 given: scanned
 check:
   - open Role Inbox
@@ -8,6 +8,7 @@ check:
   - click "Senior Product Manager"
   - see "Start preparing"
   - see "Description"
+  - see "Open the ad"
   - click "Start preparing"
   - message says "Moved to In prep"
   - see "Mark applied"

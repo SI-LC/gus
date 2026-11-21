@@ -5,6 +5,7 @@ import json
 import os
 import sys
 
+FLAGS = {"Senior Product Manager": ["Needs a made-up licence"]}
 SCORES = {"Senior Product Manager": 9, "Product Manager, Growth": 6, "Product Owner": 3}
 try:
     with open(os.path.join(os.environ["HOME"], "scores.json")) as f:
@@ -38,6 +39,6 @@ if "## Roles (JSON)" in prompt:
     roles = json.loads(prompt[prompt.index("## Roles (JSON)\n") + 16:prompt.index("\n\nFor each role")])
     result = json.dumps([{"id": r["id"], "score": SAID.get(r["title"], [SCORES.get(r["title"], 5)])[0],
                           "why": SAID.get(r["title"], [0, f"Made-up reason for {r['title']}."])[1],
-                          "flags": [], "talk_to": "Head of Product"} for r in roles])
+                          "flags": FLAGS.get(r["title"], []), "talk_to": "Head of Product"} for r in roles])
 model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "sonnet"
 print(json.dumps({"result": result, "total_cost_usd": 0, "usage": {}, "modelUsage": {f"claude-{model}-9-9": {"costUSD": 0}}}))
