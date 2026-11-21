@@ -209,7 +209,6 @@
   button.was span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } button.was.all span { display: block; }
   button.was:hover { background: var(--color-surface); color: var(--color-ink); }
   .mv-who .tier { margin-right: 4px; } .mv.acct .acct-head { margin-top: 2px; }
-  .acct-find { flex: 1 1 200px; max-width: 320px; min-height: 36px; margin-bottom: 8px; }
   .move .why b, .why-contact b, .routes-head b { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); margin-right: 4px; }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   .acct-name { font: 600 18px var(--font-sans); letter-spacing: -.02em; }
