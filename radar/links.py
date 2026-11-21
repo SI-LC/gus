@@ -1,10 +1,12 @@
-"""Point roles from job search sources at the employer's own ad, so you don't land on a job site's login, and watch the
-employer's board once a role has been found on it.
+"""Point roles from job search sources at the employer's own ad, so you don't land on a job site's login, and read the
+employer's board once a role Gus kept has been found on it.
 
     python3 -m radar.links     # check roles that haven't been checked yet (run after each sources job and in the full run)
 
-Every role that didn't come from a board scan is checked, whatever it scored: a summary on a job site can score badly
-while the company behind it is worth watching, and finding the board is what gets its real ads read. Public job boards
+Every role that didn't come from a board scan is checked, whatever it scored, so each gets the employer's own link when
+there is one. The employer itself only arrives when Gus kept the role (scored 5 or more, not skipped): its board joins the
+watchlist, so its real ads are read at source, and the company waits as a `candidate`, in no tier, until the watchlist agent
+has researched and scored it. An employer whose role Gus skipped isn't added. Public job boards
 are free to read, so this uses no AI and none of your Adzuna or JSearch allowance. A link only changes when the same
 title is found on the company's board, and an Adzuna or JSearch role found there becomes a board role. Otherwise the role
 keeps its link and the cockpit offers a web search.
@@ -35,6 +37,7 @@ from radar.store import locked, read
 LOOKUP_SOURCES = set(LABEL) | {"web", "email", "x"}  # found somewhere other than the employer's board
 GUESSES = DATA / "board_guesses.json"  # {company: {"checked", "board", "careers"}}: what looking for its board turned up
 PER_RUN = 40  # each company tries several boards and names, so keep a run polite
+WATCH_SCORE = 5  # triage skips a role under this, and an employer is only worth a look when Gus kept its role
 
 
 JOB_SITES = re.compile(r"(^|\.)(linkedin|adzuna|indeed|glassdoor|totaljobs|reed|jobleads|jooble|bebee|jobijoba|simplyhired|talent|jobrapido|cv-library|"
@@ -136,6 +139,37 @@ def watch(job) -> bool:
     return True
 
 
+def discover(store) -> list:
+    """Employers new to Gus whose role it kept and found on their board. Each board joins the watchlist and the company
+    becomes a candidate for the watchlist agent to research: never a watched, tiered account on the strength of one ad.
+    A company already on the record is left alone, whatever its status, so one you removed stays removed; so is a board
+    already read under another name, which would only be the same company twice."""
+    rows = list(csv.DictReader(watchlist_path().open()))
+    names = {same_company(n) for n in read(COMPANIES)} | {same_company(r["company"]) for r in rows}
+    boards = {(r["ats"], r["slug"]) for r in rows}
+    new = {}
+    for j in store.values():
+        board, name = j.get("board") or {}, same_company(j.get("company"))
+        if (not board or not name or (j.get("score") or 0) < WATCH_SCORE or j.get("stage") in ("skipped", "closed") or j.get("ad_closed")
+                or name in names or (board["ats"], board["slug"]) in boards):
+            continue
+        if watch(j):
+            names.add(name)
+            boards.add((board["ats"], board["slug"]))
+            new[j["company"]] = j
+    if new:
+        with locked(COMPANIES) as companies:
+            for company, j in new.items():
+                c = companies.setdefault(company, {})
+                c.setdefault("status", "candidate")
+                c.setdefault("source", "job site role")
+                c.setdefault("signal", f"{j['title']}, scored {j['score']}, found on its board")
+                c.setdefault("added", str(date.today()))
+        from radar.companies import sync
+        sync()  # gives each its `board`
+    return list(new)
+
+
 def looked_up(careers: dict) -> dict:
     """{company: its board, or None} for companies looked up in the last GUESS_DAYS, so a second role from one of them
     doesn't send the same guesses to every vendor again. One whose careers address has changed since is looked up afresh."""
@@ -167,7 +201,7 @@ def main():
             print(f"{j['company']}: {type(e).__name__}")
             found[j["id"]] = False
     remember(boards, known, careers)
-    added, now = [], datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with locked(JOBS) as store:
         for jid, hit in found.items():
             j = store.get(jid)
@@ -179,13 +213,9 @@ def main():
                 to_board(j)  # a job site's role, found on the employer's board: from now on it's a board role
                 if hit.get("id") and hit["id"] != jid:  # so the board scan sees it, and closes it when the ad goes
                     j.setdefault("also", {})[hit["id"]] = {"url": hit["url"], "source": "board", "seen": now}
-                if watch(j):  # the board is confirmed to be theirs: from now on every role on it is read at source
-                    added.append(j["company"])
-    if added:
-        from radar.companies import sync
-        sync()
+    added = discover(read(JOBS))  # the board is confirmed to be theirs: from now on every role on it is read at source
     print(f"Checked {len(found)} roles, found {sum(bool(h) for h in found.values())} on company sites"
-          + (f", now watching {', '.join(added)}" if added else ""))
+          + (f", now reading the board of {', '.join(added)}" if added else ""))
     cfg = load_config()
     if cfg.get("links_ai_search"):
         run_ai(cfg)
