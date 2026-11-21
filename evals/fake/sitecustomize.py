@@ -12,7 +12,12 @@ QUIET = "https://boards-api.greenhouse.io/v1/boards/quillmere/jobs"  # a board t
 HOME = "https://harborlight.com/"  # its own site, which links to its board: how Gus knows the site is really theirs
 HOME_PAGE = '<html><head><title>Harborlight</title></head><body><a href="https://job-boards.greenhouse.io/harborlight">Careers</a></body></html>'
 ROLES = [(1, "Senior Product Manager", "London"), (2, "Product Manager, Growth", "London"), (3, "Product Owner", "London"),
-         (4, "Software Engineer", "London"), (5, "Product Manager", "San Francisco")]
+         (4, "Software Engineer", "London"), (5, "Product Manager", "San Francisco"), (6, "Growth Product Manager", "London")]
+# roles 2 and 6 share one advert under two titles: Gus keeps both and each says so
+GROWTH_AD = ("<p>Harborlight helps small ports plan their berths, and the growth team brings new harbour masters to it.</p>"
+             + "<p>You will own sign-up, activation and the first week, run experiments with design and engineering, talk to "
+               "harbour masters every week, decide what to measure and ship the changes that make new ports stay.</p>" * 3
+             + "<p>We work from London three days a week and we welcome applications from every background.</p>")
 
 
 def listing(n, title, place):
@@ -36,7 +41,7 @@ def reply_for(url):
         return {"jobs": [listing(*r) for r in ROLES]}
     for r in ROLES:
         if url == f"{BOARD}/{r[0]}":
-            return {**listing(*r), "content": f"<p>Own the {r[1]} roadmap at Harborlight.</p>", "offices": []}
+            return {**listing(*r), "content": GROWTH_AD if r[0] in (2, 6) else f"<p>Own the {r[1]} roadmap at Harborlight.</p>", "offices": []}
     return None
 
 
