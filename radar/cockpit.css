@@ -208,6 +208,15 @@
     background: var(--color-surface); border: 0; border-left: 2px solid var(--color-rule); border-radius: 0; box-shadow: none; cursor: pointer; }  /* the text a change replaced, 2 lines until clicked */
   button.was span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } button.was.all span { display: block; }
   button.was:hover { background: var(--color-surface); color: var(--color-ink); }
+  /* A timeline line in a dated list: when, who did what to which role and why, then the move itself */
+  .tl { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; width: 100%; min-height: 0; padding: 10px 0;
+        text-align: left; background: none; border: 0; border-radius: 0; box-shadow: none; font: inherit; }
+  button.tl { cursor: pointer; } button.tl:hover { background: none; } button.tl:hover .tl-what b { text-decoration: underline; text-underline-offset: 3px; }
+  .tl time, .tl-move { font: 12px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tl time { color: var(--color-muted); } .tl-move { color: var(--color-ink); } .tl-move span { color: var(--color-muted); }
+  .tl-what { font-size: 14px; color: var(--color-ink); overflow-wrap: anywhere; } .tl-what span { color: var(--color-muted); } .tl-what b { font-weight: 600; }
+  .tl-what a.link { font: inherit; font-weight: 600; color: inherit; }  /* a link, so a long title wraps with the sentence */
+  .tl + button.was { width: auto; margin: -2px 0 12px 56px; } .tl + .mv-body { padding-left: 56px; }
   .mv-who .tier { margin-right: 4px; } .mv.acct .acct-head { margin-top: 2px; }
   .move .why b, .why-contact b, .routes-head b { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); margin-right: 4px; }
   .acct-head, .move-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
@@ -348,6 +357,7 @@
   .toast button:hover { background: var(--color-on-accent); border-color: var(--color-on-accent); color: var(--color-accent); }
 
   @media (max-width: 760px) {
+    .tl-move { grid-column: 2; white-space: normal; }
     .app { grid-template-columns: minmax(0, 1fr); }
     html, body { overflow-x: hidden; }
     nav { position: fixed; bottom: 0; top: auto; left: 0; right: 0; height: auto; z-index: 5; flex-direction: row; justify-content: space-around; gap: 0;

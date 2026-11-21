@@ -188,15 +188,15 @@
 
   <div class="section">A dated list</div>
   <h3 class="day">Today</h3>
-  <article class="mv"><div class="mv-row"><span class="mv-who"><b><button class="link">Senior Product Manager</button></b> <span>Northwind</span></span>
-    <span class="mv-because">Claude moved it from Applied to Skipped: <b>the ad has closed</b> · 14:02</span></div></article>
-  <article class="mv"><div class="mv-row"><span class="mv-who"><b><button class="link">Product Lead</button></b> <span>Example Labs</span></span>
-    <span class="mv-because">Claude replaced your note: <b>added the recruiter's name</b> · 11:40</span></div>
+  <article class="mv"><div class="tl"><time>14:02</time><span class="tl-what">Claude moved <a class="link" href="#">Senior Product Manager</a> <span>Northwind</span> · <b>the ad has closed</b></span>
+    <span class="tl-move"><span>Applied →</span> Skipped</span></div></article>
+  <article class="mv"><div class="tl"><time>11:40</time><span class="tl-what">Claude replaced your note on <a class="link" href="#">Product Lead</a> <span>Example Labs</span> · <b>added the recruiter's name</b></span>
+    <span class="tl-move"><span>Note</span></span></div>
     <button class="was" aria-expanded="false"><span>Spoke to the hiring manager at the meetup. Wants someone who has run a payments roadmap; follow up after the Series C news.</span></button></article>
   <h3 class="day">Yesterday</h3>
-  <article class="mv"><button class="mv-row"><span class="mv-who"><b>Triage skipped 12 roles</b> <span>scoring under 5</span></span>
-    <span class="mv-because">Last at 07:15</span><span class="mv-tog">Open</span></button></article>
-  <p class="kit-use sub kit-gap">A <code>.day</code> heading over each day, newest first, then one <code>.mv</code> line for each thing that happened: what it happened to, then who did it and, in bold, why. Many of one kind (a scan's skips) are one line that opens. <code>.was</code> holds the text a change replaced, 2 lines until it's clicked.</p>
+  <article class="mv"><button class="tl"><time>07:15</time><span class="tl-what"><b>Triage skipped 12 roles</b> <span>scoring under 5</span></span>
+    <span class="tl-move"><span>Open</span></span></button></article>
+  <p class="kit-use sub kit-gap">A <code>.day</code> heading over each day, newest first, then one <code>.tl</code> line for each thing that happened: the time, who did what to which role and, in bold, why, then in <code>.tl-move</code> the move itself, from and to. Many of one kind (a scan's skips) are one line that opens. <code>.was</code> holds the text a change replaced, 2 lines until it's clicked.</p>
 
   <div class="section">Filters and tabs</div>
   <div class="tabs chips-row" role="group" aria-label="Show">
