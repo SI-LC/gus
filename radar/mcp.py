@@ -103,6 +103,20 @@ def limit_of(a, default, most=200) -> int:
         return default
 
 
+def page(key: str, rows: list, a, default: int) -> dict:
+    """One answer's worth of a list: `limit` rows starting after the first `offset`. The whole list never has to fit in one answer,
+    so when there's more it says how to ask for the rest."""
+    n = limit_of(a, default)
+    try:
+        start = max(0, int(a.get("offset") or 0))
+    except (TypeError, ValueError):
+        start = 0
+    out = {key: rows[start:start + n], "total": len(rows), "about_this_text": UNTRUSTED}
+    if start + n < len(rows):
+        out["more"] = f"Showing {start + 1} to {start + n} of {len(rows)}. Ask again with offset {start + n} for the next ones."
+    return out
+
+
 # ---- roles ----
 
 ROLE_ROW = ["company", "title", "location", "url", "score", "why", "flags", "stage", "source", "first_seen", "note", "folder", "skip_reason"]
@@ -122,8 +136,8 @@ def list_roles(a):
         return {"error": f"No such company: {a['company']}"}  # a company Gus knows with no roles here is an empty list
     roles.sort(key=lambda j: str(j.get("first_seen") or ""), reverse=True)  # newest first among equal scores
     roles.sort(key=lambda j: (j.get("score") is None, -(j.get("score") or 0)))
-    n = limit_of(a, 30)
-    return {"roles": [record("role", j, keep=ROLE_ROW) for j in roles[:n]], "total": len(roles), "about_this_text": UNTRUSTED}
+    out = page("roles", roles, a, 30)
+    return {**out, "roles": [record("role", j, keep=ROLE_ROW) for j in out["roles"]]}
 
 
 def no_role(a) -> dict:
@@ -165,13 +179,12 @@ def list_changes(a):
     if a.get("who") and a["who"] not in changes.ACTORS:
         return {"error": f"who should be {', '.join(changes.ACTORS)}, not {a['who']}"}
     found = changes.find(a.get("since"), a.get("until"), a.get("who"), a.get("role_id"), JOBS)
-    n = limit_of(a, 200)
-    rows = [{"change_id": c.get("id"), "at": c.get("at"), "role_id": c.get("role"), "company": c.get("company"), "title": c.get("title"),
+    out = page("changes", found, a, 200)
+    out["changes"] = [{"change_id": c.get("id"), "at": c.get("at"), "role_id": c.get("role"), "company": c.get("company"), "title": c.get("title"),
              "field": c.get("field"), "old": c.get("old"), "new": c.get("new"), "who": c.get("actor"), "reason": c.get("reason")}
-            for c in changes.named(found[:n], read(JOBS, {}))]
-    out = {"changes": rows, "total": len(found), "about_this_text": UNTRUSTED}
-    if len(found) > n:
-        out["more"] = f"Showing the newest {n} of {len(found)}. Narrow it with since, until, who or role_id."
+            for c in changes.named(out["changes"], read(JOBS, {}))]
+    if "more" in out:
+        out["more"] += " Or narrow it with since, until, who or role_id."
     return out
 
 
@@ -190,7 +203,7 @@ def list_companies(a):
                      "fresh_events": sum(e["fresh"] for e in A.events(name, stored=stored)),
                      "last_contacted": str(touched) if touched else None})
     rows.sort(key=lambda c: (c["tier"], -c["fresh_events"], -(c.get("fit") or 0)))
-    return {"companies": rows[:limit_of(a, 60)], "total": len(rows), "about_this_text": UNTRUSTED}
+    return page("companies", rows, a, 60)
 
 
 def get_company(a):
@@ -245,7 +258,8 @@ def list_events(a):
     ev = [E.decorate(dict(e, id=eid)) for eid, e in read(A.EVENTS, {}).items()
           if not e.get("closed") and (not name or e.get("account") == name)]
     ev.sort(key=lambda e: (not e["fresh"], -e["strength"], e["age_days"] if e["age_days"] is not None else 999))
-    return {"events": [record("event", e) for e in ev[:limit_of(a, 50)]], "total": len(ev), "about_this_text": UNTRUSTED}
+    out = page("events", ev, a, 50)
+    return {**out, "events": [record("event", e) for e in out["events"]]}
 
 
 def bad_link(a) -> str | None:
@@ -295,7 +309,7 @@ def list_people(a):
     rows = _people(lambda p: (not name or p.get("company") == name) and (not a.get("stage") or p.get("stage", "mapped") == a["stage"]))
     for p in rows:
         p.pop("history", None)
-    return {"people": rows[:limit_of(a, 100)], "total": len(rows), "about_this_text": UNTRUSTED}
+    return page("people", rows, a, 100)
 
 
 def create_person(a):
@@ -375,7 +389,8 @@ def _s(description, **more):
     return {"type": "string", "description": description, **more}
 
 
-LIMIT = {"type": "integer", "description": "The most to return."}
+LIMIT = {"type": "integer", "description": "The most to return, up to 200."}
+OFFSET = {"type": "integer", "description": "How many to pass over first. With a list longer than limit, ask again with the offset its `more` gives."}
 COMPANY = _s("The company's name.")
 STAGE = {"anyOf": [{"type": "string", "enum": JOB_STAGES}, {"type": "array", "items": {"type": "string", "enum": JOB_STAGES}}],
          "description": "One stage or several. Left out, every stage but skipped and closed."}
@@ -384,7 +399,7 @@ STAGE = {"anyOf": [{"type": "string", "enum": JOB_STAGES}, {"type": "array", "it
 TOOLS = {
     "list_roles": ("Roles Gus has found, best score first, without their descriptions. \"What's new\" is stage \"new\"; the pipeline is "
                    "shortlisted, preparing, applied and interviewing.",
-                   {"stage": STAGE, "company": COMPANY, "query": _s("Words to find in the company or title."), "limit": LIMIT}, [], list_roles),
+                   {"stage": STAGE, "company": COMPANY, "query": _s("Words to find in the company or title."), "limit": LIMIT, "offset": OFFSET}, [], list_roles),
     "get_role": ("One role in full, with its description, history and the people contacted about it.",
                  {"role_id": _s("From list_roles.")}, ["role_id"], get_role),
     "create_role": ("Add a role the user found elsewhere, such as one a recruiter sent. It is scored like any other and starts shortlisted. "
@@ -406,10 +421,10 @@ TOOLS = {
                      "old text is in old.",
                      {"since": _s("From this day or time (2026-11-14 or 2026-11-14T09:00:00Z). Left out, the last 24 hours."),
                       "until": _s("Up to this day or time, not including it."), "who": _s("Only changes by this one.", enum=list(changes.ACTORS)),
-                      "role_id": _s("Only changes to this role, from list_roles."), "limit": {**LIMIT, "description": "The most to return. Left out, 200."}},
+                      "role_id": _s("Only changes to this role, from list_roles."), "limit": {**LIMIT, "description": "The most to return. Left out, 200."}, "offset": OFFSET},
                      [], list_changes),
     "list_companies": ("The companies the user targets, by tier, with how many fresh events each has.",
-                       {"tier": _s("Only this tier.", enum=["A", "B", "C"]), "query": _s("Words to find in the name or product."), "limit": LIMIT},
+                       {"tier": _s("Only this tier.", enum=["A", "B", "C"]), "query": _s("Words to find in the name or product."), "limit": LIMIT, "offset": OFFSET},
                        [], list_companies),
     "get_company": ("One company: Gus's research on it, what has happened there, the people mapped there and its open roles.",
                     {"company": COMPANY}, ["company"], get_company),
@@ -421,7 +436,7 @@ TOOLS = {
                        ["company"], update_company),
     "list_events": ("What has happened at the user's companies, freshest and strongest first: funding, a new leader, a post about hiring, a strong "
                     "role. \"What's firing\" is this list.",
-                    {"company": COMPANY, "limit": LIMIT}, [], list_events),
+                    {"company": COMPANY, "limit": LIMIT, "offset": OFFSET}, [], list_events),
     "create_event": ("Record news Gus missed at a company. It needs a link and a real date.",
                      {"company": COMPANY, "type": _s("What kind of news.", enum=E.TYPES), "summary": _s("One line on what happened."),
                       "url": _s("A link to the news."), "date": _s("When it happened, YYYY-MM-DD.")}, ["company", "type", "url", "date"], create_event),
@@ -429,7 +444,7 @@ TOOLS = {
                      {"event_id": _s("From list_events."), "type": _s("What kind of news.", enum=E.TYPES), "summary": _s("One line on what happened."),
                       "date": _s("YYYY-MM-DD."), "dismissed": {"type": "boolean"}}, ["event_id"], update_event),
     "list_people": ("The people mapped at the user's companies, with the evidence for each and how close they are to the user.",
-                    {"company": COMPANY, "stage": _s("Only people at this stage.", enum=PERSON_STAGES), "limit": LIMIT}, [], list_people),
+                    {"company": COMPANY, "stage": _s("Only people at this stage.", enum=PERSON_STAGES), "limit": LIMIT, "offset": OFFSET}, [], list_people),
     "create_person": ("Record a person by hand, such as a recruiter who got in touch. Their company must already be one of the user's companies.",
                       {"name": _s("Their name."), "company": COMPANY, "role": _s("Their job title."), "url": _s("Their public profile."),
                        "kind": _s("Why they matter.", enum=PERSON_KINDS), "evidence": _s("How the user knows they are there.")},
