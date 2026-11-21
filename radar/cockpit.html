@@ -236,14 +236,16 @@ function rolePanel(j) {  // everything you do to one role, a click away from its
   return `<div class="panel-back" onclick="closeRole()"></div>
     <aside class="panel" id="role-panel" role="dialog" aria-label="${esc(j.title)} at ${esc(j.company)}">
       <div class="panel-head"><span class="co">${coName(j)}</span><button class="link" onclick="closeRole()">Close</button></div>
-      <div class="title">${roleTitle(j, j.url)}</div>
-      <div class="sub">${[esc(j.location || ""), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`, j.score != null ? `Fit ${j.score} of 10` : ""].filter(Boolean).join(" · ")}</div>
+      <div class="panel-top">${scoreBlock(j)}<div><div class="title">${roleTitle(j, j.url)}</div>
+        <div class="sub">${rolePills(j)}</div></div></div>
+      <div class="sub mt-2">${[sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`].filter(Boolean).join(" · ")}</div>
       ${j.ad_closed || j.readvertised ? `<div class="mt-2">${j.ad_closed ? `<span class="pill due">Ad closed</span>` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
       ${j.why ? `<p class="why">${esc(j.why)}</p>` : ""}
+      ${roleFlags(j)}${alsoIn(S.jobs.filter(o => o.id !== j.id && j.co && j.tk && o.co === j.co && o.tk === j.tk && o.stage !== "closed" && !o.ad_closed))}
       <div class="actions">${nx ? `<button class="primary" onclick="setStage(${id}, '${nx[0]}')">${nx[1]}</button>` : ""}
         <select onchange="if (this.value) setStage(${id}, this.value)" aria-label="Move to another stage"><option value="">Move to…</option>
           ${[...PIPE, "skipped"].filter(st => st !== j.stage).map(st => `<option value="${st}">${LABEL[st] || "Skipped"}</option>`).join("")}</select></div>
-      <div class="actions"><button onclick="roleDetails(${id})">${j.source === "manual" ? "Details" : "Description"}</button>${j.folder
+      <div class="actions"><button onclick="roleDetails(${id})">${j.source === "manual" ? "Details" : "Description"}</button>${adLink(j)}${j.folder
         ? (/^https?:\/\//i.test(j.folder) ? `<a class="link" href="${link(j.folder)}" target="_blank" rel="noopener">Open folder</a>` : l("Copy folder path", `copyPath(${jsq(j.folder)})`)) + l("Change folder", `setFolder(${id}, ${jsq(j.folder)})`)
         : l("Add folder", `setFolder(${id}, '')`)}</div>
       <div class="section">People${who.length ? " · " + who.length : ""}</div>
@@ -264,7 +266,7 @@ async function roleDetails(id) {  // the description isn't in the page's data, s
        <span class="sub">Change the description and Gus scores it again on the next check.</span></div>`
     : `<div class="title">${roleTitle(j, j.url)}</div><div class="sub">${esc(j.location || "")}</div>
        <div class="jd">${j.description ? esc(j.description) : `<span class="sub">${j.pruned ? "The description was cleared to save space once this role closed." : "No description saved."}</span>`}</div>
-       <div class="actions"><button onclick="$('role-dlg').close()">Close</button></div>`);
+       <div class="actions"><button onclick="$('role-dlg').close()">Close</button>${adLink(j)}</div>`);
   d.showModal();
 }
 async function saveRole(id) {
@@ -440,6 +442,8 @@ async function boardGuess(name, accept) {
   if (d) { toast(accept ? "Watching its board. Roles arrive on the next check." : "Noted. Gus won't offer that board again."); load(); }
 }
 const roleTitle = (j, href) => /^https?:\/\//i.test(String(href || "")) ? `<a href="${link(href)}" target="_blank" rel="noopener">${esc(j.title)}</a>` : esc(j.title);  // a role you added by hand may have no ad to open
+const adLink = j => !/^https?:\/\//i.test(String(j.url || "")) ? ""  // said in words, as a title doesn't look like something to click
+  : `<a class="link" href="${link(j.url)}" target="_blank" rel="noopener">${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? esc(linkGoes(j).replace("Via", "Open on")) : "Open the ad"}</a>`;
 const PURSUING = ["interviewing", "applied", "preparing", "shortlisted"];  // furthest along first
 function alreadyHere(j) {  // the role you're furthest along with at this company, if there is one
   const mine = S.jobs.filter(o => o.id !== j.id && j.co && o.co === j.co && PURSUING.includes(o.stage))
@@ -478,15 +482,18 @@ async function setMany(ids, stage, msg, ask = stage === "skipped") {  // one dec
   if (ask) askWhy(ids, msg); else toast(msg);
   render();
 }
+const scoreBlock = j => `<div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>`;
+const rolePills = j => `<span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""}`;
+const roleFlags = j => (j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("");
 function roleCard(j, actions, extra = "") {
   return `<article class="card role band-${band(j.score)}" data-id="${esc(j.id)}">
-    <div class="s-${band(j.score)}" title="Fit score"><div class="score">${j.score ?? "–"}<small>/10</small></div><div class="bar"><i style="width:${(j.score || 0) * 10}%"></i></div></div>
+    ${scoreBlock(j)}
     <div>
       <div class="co">${coName(j)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
-      <div class="sub"><span class="pill">${esc(j.where)}</span>${j.source === "manual" ? ` <span class="pill">Added by you</span>` : ""}${j.role_type && j.role_type !== S.kind_default ? ` <span class="pill warm">${esc(j.role_type)}</span>` : ""}${SOURCE_LABEL[j.source] ? ` <span class="pill">${SOURCE_LABEL[j.source]}</span> <span class="pill ${j.link_kind === "company" ? "warm" : ""}">${esc(linkGoes(j))}</span>` : ""} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
+      <div class="sub">${rolePills(j)} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : "Gus scores it on the next check."}</span>`}</p>
-      ${(j.flags || []).map(f => `<span class="flag">${esc(f)}</span>`).join("")}${extra}
+      ${roleFlags(j)}${extra}
     </div>
     <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button class="link" onclick="watchCompany(${jsq(j.id)})">Add to your companies</button>` : ""}</div></article>`;
 }
