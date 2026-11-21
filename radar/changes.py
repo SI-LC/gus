@@ -2,7 +2,7 @@
 
 Who made each change and why, with the value before and after, so an overwritten note is never lost and "what changed
 since yesterday?" is one read. Only the decisions on a role are logged (its stage, the reason for skipping it, its note,
-its folder and a link you or Claude changed), not what its ad says or a link Gus found for it. Lines are appended beside jobs.json while it is locked, by the code that changes it:
+its folder and a link, title or location you or Claude changed), not what its ad says or what Gus found for it. Lines are appended beside jobs.json while it is locked, by the code that changes it:
 `server.update_job` (you in the cockpit, Claude over MCP) and triage's automatic skip. See docs/objects.md.
 """
 from __future__ import annotations
