@@ -1,0 +1,13 @@
+id: correct-a-job-site-roles-title
+requirement: When a job site got a role's title wrong, I can have Claude correct it, and I can see what it was called before.
+given: scanned with a role only a job site has
+check:
+  - open Role Inbox
+  - see "Product Manager, Platform"
+  - Claude renames "Product Manager, Platform" to "Staff Product Manager (Platform Team)", saying "the company's own ad calls it this"
+  - reload
+  - see "Staff Product Manager (Platform Team)"
+  - open Activity
+  - see "Claude changed its title from Product Manager, Platform"
+  - see "the company's own ad calls it this"
+judge: Can I tell the title was corrected, what it was before, and who changed it and why?

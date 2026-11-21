@@ -218,6 +218,28 @@ class Tools(World):
         self.assertEqual((jobs["gh:acme:2"]["url"], jobs["gh:acme:2"]["stage"]), ("https://x/2", "shortlisted"))
         self.assertEqual((jobs["jsearch:9"]["url"], jobs["jsearch:9"]["stage"]), ("https://www.jobleads.com/gb/job/9", "shortlisted"))
 
+    def test_a_job_site_roles_title_location_and_description_can_be_corrected(self):
+        self.writes()
+        self.job_site_role(location="Greater London", description="A summary.", why="ok", flags=["x"])
+        out = mcp.call("update_role", {"role_id": "jsearch:9", "title": "  Staff PM  (Platform) ", "location": "London", "description": "The real ad.",
+                                       "reason": "the company's own ad says so"})
+        self.assertEqual(out["role"]["title"], "Staff PM (Platform)")
+        j = self.stored("jobs")["jsearch:9"]
+        self.assertEqual((j["title"], j["location"], j["description"], j["score"], j["flags"], j["stage"], j["source"], j["url"]),
+                         ("Staff PM (Platform)", "London", "The real ad.", None, [], "shortlisted", "jsearch", "https://www.jobleads.com/gb/job/9"))
+        logged = {c["field"]: (c["old"], c["new"], c["who"]) for c in mcp.call("list_changes", {"role_id": "jsearch:9"})["changes"]}
+        self.assertEqual(logged, {"title": ("Platform PM", "Staff PM (Platform)", "claude"), "location": ("Greater London", "London", "claude")})
+
+    def test_a_board_roles_details_follow_its_ad(self):
+        self.writes()
+        self.job_site_role()
+        for change in ({"title": "Chief PM"}, {"location": "Paris"}, {"description": "New words."}, {"title": "Chief PM", "stage": "applied"}):
+            out = mcp.call("update_role", {"role_id": "gh:acme:2", **change, "reason": "x"})
+            self.assertIn("own board", out["error"])
+        self.assertIn("title", mcp.call("update_role", {"role_id": "jsearch:9", "title": "  ", "reason": "x"})["error"])
+        jobs = self.stored("jobs")
+        self.assertEqual((jobs["gh:acme:2"]["title"], jobs["gh:acme:2"]["stage"], jobs["jsearch:9"]["title"]), ("Group PM", "shortlisted", "Platform PM"))
+
     def test_applying_to_a_role_records_the_date(self):
         self.writes()
         out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "applied", "note": "Sent Tuesday", "reason": "the user applied"})

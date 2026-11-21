@@ -846,6 +846,7 @@ function chgLine(c, all) {
     what = `${who} ${!c.old ? "added a note" : !c.new ? "removed your note" : "replaced your note"}`;
     if (c.old) was = `<button class="was${chgOpen.has(c.id) ? " all" : ""}" aria-expanded="${chgOpen.has(c.id)}" title="The note before" onclick="toggleChg(${jsq(c.id)})"><span>${esc(c.old)}</span></button>`;
   } else if (c.field === "url") what = `${who} changed its link`;
+  else if (c.field === "title" || c.field === "location") what = `${who} changed its ${c.field}${c.old ? ` from ${esc(c.old)}` : ""}`;
   else what = c.new ? `${who} set its folder to ${esc(c.new)}` : `${who} cleared its folder`;
   return `<article class="mv"><div class="mv-row"><span class="mv-who">${chgRole(c)}</span><span class="mv-because">${what}${why}${at}</span></div>${was}</article>`;
 }

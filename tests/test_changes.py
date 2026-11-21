@@ -99,7 +99,7 @@ class Schema(unittest.TestCase):
     def test_the_log_is_checked_line_by_line(self):
         d = Path(tempfile.mkdtemp())
         good = changes.diff("a", {}, {"note": "x"}, "claude", "asked")
-        lines = [json.dumps(c) for c in good] + ["not json", json.dumps({**good[0], "field": "title"}),
+        lines = [json.dumps(c) for c in good] + ["not json", json.dumps({**good[0], "field": "score"}),
                                                  json.dumps({**good[0], "actor": "robot"}), json.dumps({k: v for k, v in good[0].items() if k != "reason"})]
         (d / "changes.jsonl").write_text("\n".join(lines) + "\n")
         errs = schema.check(d)["changes"]

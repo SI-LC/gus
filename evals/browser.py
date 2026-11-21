@@ -74,6 +74,8 @@ def step(page, text):
         page.locator("#toast.on", has_text=m[1]).wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'Claude moves "(.+)" to (\w+), saying "(.+)"', text):  # over MCP, as Claude in a chat would
         claude_changes(page, m[1], m[3], stage=m[2])
+    elif m := re.fullmatch(r'Claude renames "(.+)" to "(.+)", saying "(.+)"', text):
+        claude_changes(page, m[1], m[3], title=m[2])
     elif m := re.fullmatch(r'Claude points "(.+)" at "(.+)", saying "(.+)"', text):
         claude_changes(page, m[1], m[3], url=m[2])
     elif text == "reload":
@@ -83,7 +85,7 @@ def step(page, text):
         raise ValueError(f"Unknown step: {text}")
 
 
-def claude_changes(page, title, reason, **change):
+def claude_changes(page, role, reason, **change):
     """Turn on "Let Claude make changes", find the role by its title and change it through /mcp, with a reason."""
     base = "/".join(page.url.split("/")[:3])
     page.request.post(f"{base}/api/settings", data={"changes": {"mcp_allow_writes": True}})
@@ -95,10 +97,10 @@ def claude_changes(page, title, reason, **change):
         assert "error" not in out, f"{name}: {out['error']}"
         return out
 
-    roles = [r for r in tool("list_roles", {"query": title, "stage": ["new", "shortlisted", "preparing", "applied",
+    roles = [r for r in tool("list_roles", {"query": role, "stage": ["new", "shortlisted", "preparing", "applied",
                                                                     "interviewing", "closed", "skipped"]})["roles"]
-             if r.get("title") == title]
-    assert roles, f'Claude can\'t find "{title}"'
+             if r.get("title") == role]
+    assert roles, f'Claude can\'t find "{role}"'
     tool("update_role", {"role_id": roles[0]["role_id"], **change, "reason": reason})
 
 

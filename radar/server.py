@@ -556,8 +556,6 @@ def point_at(j, url):
     it had stays in `source_url`, as when radar.links finds the employer's ad, and a link that isn't a job site's shows as
     the company's, so nothing searches for another. No scan rewrites a link. Returns what's wrong, or None."""
     url = str(url or "").strip()
-    if j.get("source") in (None, "board"):
-        return "This role is read from the company's own board, so its link is already the company's ad"
     if not re.match(r"https?://\S+$", url):
         return "The link needs to start with http"
     if url != j.get("url"):
@@ -579,16 +577,19 @@ def edit_job(j, body):
     if reason and (body.get("stage") if body.get("stage") in JOB_STAGES else j.get("stage")) != "skipped":
         return {"error": "Only a role you skipped can have a reason for skipping it"}
     by_hand = j.get("source") == "manual"
-    if not by_hand and any(k in body for k in (*DETAILS, "description")):  # what the ad says: yours to correct only on a role you added
-        return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
-    if not by_hand and "url" in body:  # where its link goes: yours to change on any role not read from the employer's board
-        if problem := point_at(j, body["url"]):
-            return {"error": problem}
-    if by_hand and any(k in body for k in (*DETAILS, "url", "description")):
+    if any(k in body for k in (*DETAILS, "url", "description")):
+        # What the ad says is yours to correct on a role you added, or one found second-hand (a job site, the web, email),
+        # where the copy can be wrong. No scan rewrites these. A role read from the employer's board is their ad as written.
+        if j.get("source") in (None, "board"):
+            return {"error": "This role is read from the company's own board, so it follows the company's ad and can't be edited"}
         edits = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
         if "title" in edits and not edits["title"]:
             return {"error": "Needs a title"}
-        if "url" in body:
+        if "url" in body and not by_hand:  # where its link goes: the link it had is kept
+            if not re.match(r"https?://\S+$", str(body["url"] or "").strip()):
+                return {"error": "The link needs to start with http"}
+            point_at(j, body["url"])
+        elif "url" in body:
             edits["url"] = str(body["url"] or "").strip()
             if edits["url"] and not re.match(r"https?://\S+$", edits["url"]):
                 return {"error": "The link needs to start with http"}

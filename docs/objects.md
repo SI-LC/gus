@@ -47,7 +47,9 @@ scanned from the next scan on. With no board found it's still an account, and th
 but it's yours: a score under 5 doesn't skip it and no scan closes it. A role Gus already has is refused, with its id.
 Its `title`, `location`, `url` and `description` can be corrected afterwards (POST `/api/job` with its `id`, or "Details"
 on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as
-they were. A role from any other source keeps what its ad says.
+they were. The same four can be corrected on a role found second-hand (a job site, the web, email, X, Hacker News), where
+the copy can be wrong: by Claude, with `update_role`. A changed `url` there keeps the old link in `source_url`. A role
+read from the employer's own board (`source: board`) keeps what its ad says.
 
 POST `/api/job` also sets any role's `stage`, `note` and `folder`, and a skipped role's `skip_reason`. GET `/api/job?id=<id>` returns one role in full,
 `description` included, which `/api/state` leaves out.
@@ -173,13 +175,13 @@ The log of changes to your roles: one JSON object per line, appended, never edit
 | `id` | `chg_<YYYYMMDDTHHMMSS>_<4 hex>`, sortable |
 | `at` | When, ISO time, UTC |
 | `role` | The role's id in `jobs.json` |
-| `field` | `stage`, `skip_reason`, `note`, `folder` or `url` (a link you or Claude changed, not one Gus found) |
+| `field` | `stage`, `skip_reason`, `note`, `folder`, or `url`, `title` or `location` (as you or Claude changed them, not as Gus found them) |
 | `old`, `new` | The value before and after; `null` when there was none. A replaced note keeps its full old text here |
 | `actor` | `you` (the cockpit), `claude` (MCP) or `triage` (the automatic skip of a role scoring under 5) |
 | `reason` | Why, in a sentence. Always there from Claude, whose `update_role` needs one; `scored N/10` from triage |
 
 Only `server.update_job` and triage's skip write it, while holding the jobs lock. What the ad says (description,
-`last_seen`, the title, location and description of a role you added by hand) isn't logged. A role's `history` stays what you did to its stage: triage's
+`last_seen`) isn't logged, nor is a description you or Claude replaced: the role is scored again instead. A role's `history` stays what you did to its stage: triage's
 skip is in the log, not in `history`. Activity shows the last 7 days (`/api/changes`), and Claude reads it with
 `list_changes`.
 
