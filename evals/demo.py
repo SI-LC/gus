@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from evals.world import SETTINGS, World
 from radar.accounts import week_id
 from radar.events import slug
+from radar.jobs import mark_same_adverts
 
 PORT = 8585
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
@@ -239,8 +240,17 @@ def role_id(n, company) -> str:
     return f"gh:{board_slug(company)}:{n}"
 
 
+SHARED_ADVERT = {"Senior Product Manager, Platform", "Product Manager, Growth"}  # one advert under two titles, so each says "Same advert as"
+
+
 def advert(company, title, place) -> str:
     made = next(c[4] for c in COMPANIES if c[0] == company)
+    if title in SHARED_ADVERT:
+        return (f"{company} makes {made[0].lower()}{made[1:]}. We're hiring product managers in {place}. You'll own the roadmap for your "
+                "area, work with engineering and design every day, talk to customers every week and decide what we build next. "
+                "You'll set the measures that tell us whether a launch worked, write the plan the team builds from and say no to "
+                "the things that don't matter yet. We work from the office three days a week and welcome applications from "
+                "every background. This is a made-up advert for the Gus demo, used for more than one role.")
     return (f"{company} makes {made[0].lower()}{made[1:]}. We're hiring a {title} in {place}. You'll own the roadmap for your area, "
             "work with engineering and design every day, talk to customers every week and decide what we build next. "
             "This is a made-up advert for the Gus demo.")
@@ -265,6 +275,7 @@ def jobs() -> dict:
                     "description": advert(company, title, place), "text_kind": "posting", "source": "board", "score": score, "why": why,
                     "flags": [], "first_seen": ago(seen), "last_seen": ago(0.1), "stage": moved[-1][0] if moved else "new",
                     "history": [{"stage": s, "at": ago(d, 10)} for s, d in moved], **extra}
+    mark_same_adverts(out)
     return out
 
 

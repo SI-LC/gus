@@ -1,0 +1,12 @@
+id: same-advert-note
+requirement: When two roles at a company share one advert under different titles, Gus keeps both, and each says which role it shares the advert with.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Product Manager, Growth"
+  - see "Same advert as"
+  - see "Growth Product Manager"
+  - click "Growth Product Manager"
+  - see "Same advert as"
+  - see "Product Manager, Growth"
+judge: Can I tell that the two may be one job, see where the other one stands, and get to it in one click, without either being hidden?

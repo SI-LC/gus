@@ -336,3 +336,32 @@ class TwoTitlesAreTwoRoles(unittest.TestCase):
                  "lever:acme:5": role("lever:acme:5", title="Technical PM, France", location="Paris", stage="new", description="Req ID: R700"),
                  "gh:acme:6": role("gh:acme:6", title="Closed copy", location="London", stage="new", ad_closed="x", ref="R700")}
         self.assertEqual(sorted(sorted(g) for g in J.groups(store)), [["sr:acme:9", "wd:acme:4"]])
+
+
+class RolesThatShareAnAdvert(unittest.TestCase):
+    """Each says which roles it shares its advert with, so you can tell whether it's one vacancy listed twice. Nothing is merged."""
+
+    def marked(self, **others):
+        store = {"mtp:jobs:1": role("mtp:jobs:1", title="Product Manager - Data", location="London", stage="skipped", description=advert()), **others}
+        J.mark_same_adverts(store)
+        return {i: j.get("same_advert") for i, j in store.items()}
+
+    def copy(self, jid="mtp:jobs:2", **more):
+        return role(jid, **{"title": "Product Manager - AI", "location": "London", "stage": "new", "description": advert(), **more})
+
+    def test_each_names_the_others_on_one_board_or_two_and_all_stay(self):
+        self.assertEqual(self.marked(**{"mtp:jobs:2": self.copy(), "gh:acme:3": self.copy("gh:acme:3", description=advert() + " Apply with a CV.")}),
+                         {"mtp:jobs:1": ["mtp:jobs:2", "gh:acme:3"], "mtp:jobs:2": ["mtp:jobs:1", "gh:acme:3"], "gh:acme:3": ["mtp:jobs:1", "mtp:jobs:2"]})
+
+    def test_another_role_city_or_company_a_closed_ad_or_short_text_is_not_named(self):
+        for other in (self.copy(description=advert("fraud detection and chargebacks")), self.copy(location="Berlin"), self.copy(company="Other"),
+                      self.copy(ad_closed="2026-11-01"), self.copy(stage="closed"), self.copy(description="Own the roadmap. " * 5)):
+            self.assertEqual(self.marked(**{"mtp:jobs:2": other}), {"mtp:jobs:1": None, "mtp:jobs:2": None})
+
+    def test_the_employers_numbers_say_they_are_two_vacancies(self):
+        self.assertEqual(self.marked(**{"mtp:jobs:2": self.copy(description=advert() + " Job ref: R200"), "mtp:jobs:3": self.copy("mtp:jobs:3", description=advert() + " Job ref: R300")})["mtp:jobs:2"], ["mtp:jobs:1"])
+
+    def test_a_note_that_no_longer_holds_goes_at_the_next_scan(self):
+        store = {"mtp:jobs:1": role("mtp:jobs:1", stage="new", description=advert(), same_advert=["mtp:jobs:9"])}
+        J.mark_same_adverts(store)
+        self.assertNotIn("same_advert", store["mtp:jobs:1"])

@@ -119,7 +119,7 @@ def page(key: str, rows: list, a, default: int) -> dict:
 
 # ---- roles ----
 
-ROLE_ROW = ["company", "title", "location", "url", "score", "why", "flags", "stage", "source", "first_seen", "note", "folder", "skip_reason"]
+ROLE_ROW = ["company", "title", "location", "url", "score", "why", "flags", "stage", "source", "first_seen", "note", "folder", "skip_reason", "same_advert"]
 
 
 def list_roles(a):
