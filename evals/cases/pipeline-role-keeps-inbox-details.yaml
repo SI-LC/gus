@@ -1,0 +1,13 @@
+id: pipeline-role-keeps-inbox-details
+requirement: What the Role Inbox told me about a role, its fit score, where it is and anything Gus warned me about, is still there when I open the role in my pipeline.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Needs a made-up licence"
+  - click "Shortlist"
+  - open Pipeline
+  - click "Senior Product Manager"
+  - see "Start preparing"
+  - see "Needs a made-up licence"
+  - see "Open the ad"
+judge: Opening a role in my pipeline, do I learn as much about it as its Role Inbox card told me, without hunting?
