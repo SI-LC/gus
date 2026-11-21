@@ -10,6 +10,6 @@ check:
   - see "Company site"
   - not see "Via JobLeads"
   - open Activity
-  - see "Claude changed its link"
+  - see "Claude changed the link for"
   - see "you asked for the company's own page"
 judge: Can I tell the link now goes to the company, and who changed it and why?

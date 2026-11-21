@@ -839,22 +839,23 @@ const chgDay = iso => {
   return day(d) === day(t) ? "Today" : day(d) === day(new Date(t - DAY)) ? "Yesterday" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 };
 const chgTime = iso => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const chgRole = c => c.title ? `<b><button class="link" onclick="openChanged(${jsq(c.role)})">${esc(c.title)}</button></b> <span>${esc(c.company || "")}</span>`
-  : `<b>A role no longer in Gus</b>`;
+const chgRole = c => c.title ? `<a class="link" href="#pipeline" onclick="event.preventDefault();openChanged(${jsq(c.role)})">${esc(c.title)}</a> <span>${esc(c.company || "")}</span>`
+  : `a role no longer in Gus`;
 const skipName = r => r ? esc((S.labels.skip_reasons[r] || S.labels.skip_reasons[(S.labels.skip_reason_was || {})[r]] || r).toLowerCase()) : "";  // an older reason by its new name
-function chgLine(c, all) {
-  const who = WHO[c.actor] || "Someone", why = c.reason ? `: <b>${esc(c.reason)}</b>` : "", at = ` · ${chgTime(c.at)}`;
-  let what, was = "";
+function chgLine(c, all) {  // one line of the timeline: when, who did what to which role and why, then the move itself
+  const who = WHO[c.actor] || "Someone", role = chgRole(c), why = c.reason ? ` · <b>${esc(c.reason)}</b>` : "";
+  let what, move, was = "";
   if (c.field === "stage") {
     const r = all.find(o => o.role === c.role && o.at === c.at && o.field === "skip_reason" && o.new);
-    what = `${who} moved it from ${esc(STAGE_NAME[c.old] || c.old || "nowhere")} to ${esc(STAGE_NAME[c.new] || c.new)}${r ? ` (${skipName(r.new)})` : ""}`;
-  } else if (c.field === "skip_reason") what = `${who} said why it was skipped: ${skipName(c.new)}`;
+    what = `${who} moved ${role}${r ? ` <span>· ${skipName(r.new)}</span>` : ""}`;
+    move = `<span>${esc(STAGE_NAME[c.old] || c.old || "Nowhere")} →</span> ${esc(STAGE_NAME[c.new] || c.new)}`;
+  } else if (c.field === "skip_reason") { what = `${who} said why ${role} was skipped`; move = skipName(c.new); }
   else if (c.field === "note") {
-    what = `${who} ${!c.old ? "added a note" : !c.new ? "removed your note" : "replaced your note"}`;
+    what = `${who} ${!c.old ? "added a note to" : !c.new ? "removed your note from" : "replaced your note on"} ${role}`; move = "<span>Note</span>";
     if (c.old) was = `<button class="was${chgOpen.has(c.id) ? " all" : ""}" aria-expanded="${chgOpen.has(c.id)}" title="The note before" onclick="toggleChg(${jsq(c.id)})"><span>${esc(c.old)}</span></button>`;
-  } else if (c.field === "url") what = `${who} changed its link`;
-  else what = c.new ? `${who} set its folder to ${esc(c.new)}` : `${who} cleared its folder`;
-  return `<article class="mv"><div class="mv-row"><span class="mv-who">${chgRole(c)}</span><span class="mv-because">${what}${why}${at}</span></div>${was}</article>`;
+  } else if (c.field === "url") { what = `${who} changed the link for ${role}`; move = "<span>Link</span>"; }
+  else { what = c.new ? `${who} set the folder for ${role} <span>· ${esc(c.new)}</span>` : `${who} cleared the folder for ${role}`; move = "<span>Folder</span>"; }
+  return `<article class="mv"><div class="tl"><time datetime="${esc(c.at)}">${chgTime(c.at)}</time><span class="tl-what">${what}${why}</span><span class="tl-move">${move}</span></div>${was}</article>`;
 }
 function whatChanged() {
   if (!CHG || Date.now() - chgAt > 30000) loadChanges();
@@ -871,10 +872,10 @@ function whatChanged() {
       if (c.actor !== "triage") return chgLine(c, all);
       if (grouped) return "";
       grouped = true;
-      return `<article class="mv${open ? " open" : ""}"><button class="mv-row" onclick="toggleChg(${jsq(k)})" aria-expanded="${open}">
-        <span class="mv-who"><b>Triage skipped ${skips.length} role${skips.length === 1 ? "" : "s"}</b> <span>scoring under 5</span></span>
-        <span class="mv-because">Last at ${chgTime(skips[0].at)}</span><span class="mv-tog">${open ? "Close" : "Open"}</span></button>
-        ${open ? `<div class="mv-body">${skips.map(c => `<div class="follow">${chgRole(c)} <span class="sub">· ${esc(c.reason || "")}</span></div>`).join("")}</div>` : ""}</article>`;
+      return `<article class="mv${open ? " open" : ""}"><button class="tl" onclick="toggleChg(${jsq(k)})" aria-expanded="${open}">
+        <time datetime="${esc(skips[0].at)}">${chgTime(skips[0].at)}</time><span class="tl-what"><b>Triage skipped ${skips.length} role${skips.length === 1 ? "" : "s"}</b> <span>scoring under 5</span></span>
+        <span class="tl-move"><span>${open ? "Close" : "Open"}</span></span></button>
+        ${open ? `<div class="mv-body">${skips.map(c => `<div class="follow tl-what">${chgRole(c)} <span>· ${esc(c.reason || "")}</span></div>`).join("")}</div>` : ""}</article>`;
     }).join("");
     return `<h3 class="day">${d}</h3>${lines}`;
   }).join("") + (CHG.total > all.length ? `<p class="sub">Showing the newest ${all.length} of ${CHG.total} changes this week.</p>` : "");
