@@ -15,7 +15,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from radar import accounts as A, events as E, jobs as J, mcp, network, server, settings
+from radar import accounts as A, events as E, jobs as J, links, mcp, network, server, settings
 
 MATRIX = {"list_roles", "get_role", "create_role", "update_role", "list_changes",
           "list_companies", "get_company", "create_company", "update_company",
@@ -178,6 +178,45 @@ class Tools(World):
         out = mcp.call("update_role", {"role_id": "gh:acme:2", "stage": "applied"})
         self.assertIn("read-only", out["error"])
         self.assertEqual(self.stored("jobs")["gh:acme:2"]["stage"], "shortlisted")
+
+    def job_site_role(self, **more):
+        jobs = self.stored("jobs")
+        jobs["jsearch:9"] = {"id": "jsearch:9", "company": "Acme", "title": "Platform PM", "url": "https://www.jobleads.com/gb/job/9", "via": "JobLeads",
+                             "source": "jsearch", "stage": "shortlisted", "score": 5, "link_checked": "2026-01-01", **more}
+        self.files["jobs"].write_text(json.dumps(jobs))
+
+    def test_a_job_site_roles_link_can_be_pointed_at_the_companys_own_page(self):
+        self.writes()
+        self.job_site_role()
+        out = mcp.call("update_role", {"role_id": "jsearch:9", "url": " https://acme.example/careers#open ", "reason": "the user wants the company's page"})
+        self.assertEqual(out["role"]["url"], "https://acme.example/careers#open")
+        j = self.stored("jobs")["jsearch:9"]
+        self.assertEqual((j["url"], j["source_url"], j["link_kind"], j["source"], j["stage"]),
+                         ("https://acme.example/careers#open", "https://www.jobleads.com/gb/job/9", "company", "jsearch", "shortlisted"))
+        self.assertFalse(links.ai_waiting(self.stored("jobs"), {"links_ai_min_score": 1}))  # nothing searches for another link
+        change = mcp.call("list_changes", {"role_id": "jsearch:9"})["changes"][0]
+        self.assertEqual((change["field"], change["old"], change["new"], change["who"]),
+                         ("url", "https://www.jobleads.com/gb/job/9", "https://acme.example/careers#open", "claude"))
+        mcp.call("update_role", {"role_id": "jsearch:9", "url": "https://acme.example/jobs/9", "reason": "the ad itself"})
+        self.assertEqual(self.stored("jobs")["jsearch:9"]["source_url"], "https://www.jobleads.com/gb/job/9")  # the first link is the one kept
+
+    def test_a_link_that_is_another_job_site_is_not_called_the_companys(self):
+        self.writes()
+        self.job_site_role(link_kind="company")
+        mcp.call("update_role", {"role_id": "jsearch:9", "url": "https://uk.indeed.com/viewjob?jk=9", "reason": "the user prefers Indeed"})
+        j = self.stored("jobs")["jsearch:9"]
+        self.assertEqual((j["url"], j.get("link_kind")), ("https://uk.indeed.com/viewjob?jk=9", None))
+
+    def test_a_link_is_refused_on_a_board_role_or_when_it_is_not_a_link(self):
+        self.writes()
+        self.job_site_role()
+        for role, url, word in (("gh:acme:2", "https://acme.example/careers", "own board"), ("jsearch:9", "poly.ai/careers", "http"),
+                                ("jsearch:9", "", "http")):
+            out = mcp.call("update_role", {"role_id": role, "url": url, "stage": "applied", "reason": "x"})
+            self.assertIn(word, out["error"])
+        jobs = self.stored("jobs")
+        self.assertEqual((jobs["gh:acme:2"]["url"], jobs["gh:acme:2"]["stage"]), ("https://x/2", "shortlisted"))
+        self.assertEqual((jobs["jsearch:9"]["url"], jobs["jsearch:9"]["stage"]), ("https://www.jobleads.com/gb/job/9", "shortlisted"))
 
     def test_applying_to_a_role_records_the_date(self):
         self.writes()

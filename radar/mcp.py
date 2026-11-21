@@ -157,8 +157,8 @@ def create_role(a):
 
 
 def update_role(a):
-    if not any(k in a for k in ("stage", "note", "skip_reason")):
-        return {"error": "Give a stage, a note or a skip_reason. reason alone changes nothing: it only says why you're making the change."}
+    if not any(k in a for k in ("stage", "note", "skip_reason", "url")):
+        return {"error": "Give a stage, a note, a skip_reason or a url. reason alone changes nothing: it only says why you're making the change."}
     if "stage" in a and a["stage"] not in JOB_STAGES:
         return {"error": f"No such stage: {a['stage']}. The stages are {', '.join(JOB_STAGES)}"}
     j = read(JOBS, {}).get(a.get("role_id"))
@@ -167,7 +167,7 @@ def update_role(a):
     if a.get("skip_reason") and a.get("stage", j.get("stage")) != "skipped":
         return {"error": f"skip_reason only goes on a skipped role, and this one is {a.get('stage') or j.get('stage', 'new')}. "
                          "To skip it, send stage \"skipped\" in the same call."}
-    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason") if k in a}},
+    return result(server.update_job({"id": a.get("role_id"), **{k: a[k] for k in ("stage", "note", "skip_reason", "url") if k in a}},
                                     actor="claude", why=" ".join(str(a["reason"]).split())[:300]))
 
 
@@ -408,14 +408,17 @@ TOOLS = {
                      "url": _s("A link to the ad, if there is one."), "location": _s("Where the role is."),
                      "stage": _s("Where it starts.", enum=server.START_STAGES), "note": _s("The user's own note."),
                      "careers_url": _s("The company's careers page, which finds its board more surely.")}, ["company", "title"], create_role),
-    "update_role": ("Move a role to another stage, set the user's note on it, or record why the user skipped it. \"Applied to <role>\" is stage \"applied\": the date is recorded.",
+    "update_role": ("Move a role to another stage, set the user's note on it, record why the user skipped it, or change where its link goes. "
+                    "\"Applied to <role>\" is stage \"applied\": the date is recorded.",
                     {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note."),
+                     "url": _s("A new link for the role, such as the company's own ad in place of a job site's listing. The old link is "
+                               "kept. Not for a role read from the company's own board (source \"board\"), whose link is already theirs."),
                      "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role. "
                                        "It doesn't stand in for reason: send both.", enum=list(SKIP_REASONS)),
                      "reason": _s("Why you're making this change, in one short sentence, such as \"the ad has closed\". Required on every "
                                   "call, as well as skip_reason when you send that: the user sees it in Activity, beside the change.")},
                     ["role_id", "reason"], update_role),
-    "list_changes": ("What changed on the user's roles, newest first: each change to a stage, a reason for skipping, a note or a folder, with "
+    "list_changes": ("What changed on the user's roles, newest first: each change to a stage, a reason for skipping, a note, a folder or a link, with "
                      "the value before and after, who made it (you: the user in the cockpit, claude, or triage, which skips roles scoring "
                      "under 5) and why. \"What changed since yesterday?\" is this with no arguments: the last 24 hours. A replaced note's "
                      "old text is in old.",

@@ -1,8 +1,8 @@
 """The log of changes to your roles: data/changes.jsonl, one change to one field per line, newest last, never edited.
 
 Who made each change and why, with the value before and after, so an overwritten note is never lost and "what changed
-since yesterday?" is one read. Only the decisions on a role are logged (its stage, the reason for skipping it, its note
-and its folder), not what its ad says. Lines are appended beside jobs.json while it is locked, by the code that changes it:
+since yesterday?" is one read. Only the decisions on a role are logged (its stage, the reason for skipping it, its note,
+its folder and a link you or Claude changed), not what its ad says or a link Gus found for it. Lines are appended beside jobs.json while it is locked, by the code that changes it:
 `server.update_job` (you in the cockpit, Claude over MCP) and triage's automatic skip. See docs/objects.md.
 """
 from __future__ import annotations
