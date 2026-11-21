@@ -21,7 +21,7 @@ CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
 RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
 PLACES = {"status bar": "#ticker", "progress": "#progress", "message": "#toast.on"}
-GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site", "scanned with a board that says no", "demo")
+GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned after a job site", "scanned with a role only a job site has", "scanned with a board that says no", "demo")
 
 
 def step(page, text):
@@ -73,7 +73,9 @@ def step(page, text):
     elif m := re.fullmatch(r'message says "(.+)"', text):
         page.locator("#toast.on", has_text=m[1]).wait_for(timeout=WAIT_MS)
     elif m := re.fullmatch(r'Claude moves "(.+)" to (\w+), saying "(.+)"', text):  # over MCP, as Claude in a chat would
-        claude_moves(page, *m.groups())
+        claude_changes(page, m[1], m[3], stage=m[2])
+    elif m := re.fullmatch(r'Claude points "(.+)" at "(.+)", saying "(.+)"', text):
+        claude_changes(page, m[1], m[3], url=m[2])
     elif text == "reload":
         page.reload()
         page.locator("#main h1").first.wait_for(timeout=WAIT_MS)
@@ -81,8 +83,8 @@ def step(page, text):
         raise ValueError(f"Unknown step: {text}")
 
 
-def claude_moves(page, title, stage, reason):
-    """Turn on "Let Claude make changes", find the role by its title and move it through /mcp, with a reason."""
+def claude_changes(page, title, reason, **change):
+    """Turn on "Let Claude make changes", find the role by its title and change it through /mcp, with a reason."""
     base = "/".join(page.url.split("/")[:3])
     page.request.post(f"{base}/api/settings", data={"changes": {"mcp_allow_writes": True}})
 
@@ -97,7 +99,7 @@ def claude_moves(page, title, stage, reason):
                                                                     "interviewing", "closed", "skipped"]})["roles"]
              if r.get("title") == title]
     assert roles, f'Claude can\'t find "{title}"'
-    tool("update_role", {"role_id": roles[0]["role_id"], "stage": stage, "reason": reason})
+    tool("update_role", {"role_id": roles[0]["role_id"], **change, "reason": reason})
 
 
 def scan_once(givens) -> dict:
@@ -105,7 +107,8 @@ def scan_once(givens) -> dict:
     boards always comes out the same. The scans run at the same time, each in its own folder: a scan is mostly Gus
     pausing between requests, so four take as long as one."""
     def scan(given):
-        world = World(signed_out="signed out" in given, job_site="job site" in given, refusing="says no" in given)
+        world = World(signed_out="signed out" in given, job_site="after a job site" in given, refusing="says no" in given,
+                      job_site_only="only a job site" in given)
         world.scan()
         return world
 

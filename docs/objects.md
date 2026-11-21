@@ -27,7 +27,7 @@ copy furthest along and moving its events and moves across.
 | `score_before_salary` | When a stated salary lowered the score |
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand). An `adzuna` or `jsearch` role that Gus then finds on the employer's own board (a scan absorbs the board's ad, or `radar.links` finds it there) becomes `board`, keeping its id |
 | `found_via` | Where a role that's now `board` was first found (`adzuna` or `jsearch`) |
-| `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page: the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
+| `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page, by `radar.links` or by you or Claude (`update_role` with a `url`, on any role that isn't `board`): the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
 | `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role |
@@ -172,13 +172,13 @@ The log of changes to your roles: one JSON object per line, appended, never edit
 | `id` | `chg_<YYYYMMDDTHHMMSS>_<4 hex>`, sortable |
 | `at` | When, ISO time, UTC |
 | `role` | The role's id in `jobs.json` |
-| `field` | `stage`, `skip_reason`, `note` or `folder` |
+| `field` | `stage`, `skip_reason`, `note`, `folder` or `url` (a link you or Claude changed, not one Gus found) |
 | `old`, `new` | The value before and after; `null` when there was none. A replaced note keeps its full old text here |
 | `actor` | `you` (the cockpit), `claude` (MCP) or `triage` (the automatic skip of a role scoring under 5) |
 | `reason` | Why, in a sentence. Always there from Claude, whose `update_role` needs one; `scored N/10` from triage |
 
 Only `server.update_job` and triage's skip write it, while holding the jobs lock. What the ad says (description,
-`last_seen`, a role you added by hand's details) isn't logged. A role's `history` stays what you did to its stage: triage's
+`last_seen`, the title, location and description of a role you added by hand) isn't logged. A role's `history` stays what you did to its stage: triage's
 skip is in the log, not in `history`. Activity shows the last 7 days (`/api/changes`), and Claude reads it with
 `list_changes`.
 

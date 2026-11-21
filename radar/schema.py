@@ -103,7 +103,7 @@ def check_record(name: str, key: str, rec, companies: dict, people: dict, events
     return errs
 
 
-CHANGE_FIELDS = ["stage", "skip_reason", "note", "folder"]
+CHANGE_FIELDS = ["stage", "skip_reason", "note", "folder", "url"]
 CHANGE_ACTORS = ["you", "claude", "triage"]
 
 
