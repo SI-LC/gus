@@ -108,7 +108,10 @@ class Saving(unittest.TestCase):
             self.addCleanup(p.stop)
 
     def saved(self):
-        return json.loads(self.jobs.read_text())["jsearch:1"]
+        return self.saved_as("jsearch:1")
+
+    def saved_as(self, jid):
+        return json.loads(self.jobs.read_text())[jid]
 
     def test_keeps_the_old_link_and_marks_the_new_one(self):
         self.jobs.write_text(json.dumps({"jsearch:1": role()}))
@@ -131,12 +134,56 @@ class Saving(unittest.TestCase):
             links.main()
         self.assertEqual(json.loads(self.jobs.read_text())["web:1"]["source"], "web")
 
-    def test_a_found_board_is_watched_and_reaches_the_companies_screen(self):
-        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=4, stage="skipped")}))
-        with mock.patch.object(links, "find", return_value={"url": "https://acme.example/1", "ats": "ashby", "slug": "acme"}):
+    HIT = {"url": "https://acme.example/1", "ats": "ashby", "slug": "acme"}
+
+    def account(self, name="Acme Ltd"):
+        return json.loads(self.companies.read_text()).get(name) if self.companies.exists() else None
+
+    def test_the_employer_of_a_role_gus_kept_waits_as_a_candidate_with_its_board_read(self):
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=7)}))
+        with mock.patch.object(links, "find", return_value=self.HIT):
             links.main()
         self.assertIn("Acme Ltd,ashby,acme,discovered", self.list.read_text())
-        self.assertEqual(json.loads(self.companies.read_text())["Acme Ltd"]["board"], "ashby:acme")
+        c = self.account()
+        self.assertEqual((c["status"], c["board"], c["source"]), ("candidate", "ashby:acme", "job site role"))
+        self.assertIn("Senior Product Manager", c["signal"])
+        from radar.accounts import tier
+        self.assertEqual(tier(c), "-", "not in a tier until it has been researched")
+
+    def test_the_employer_of_a_role_gus_skipped_isnt_added(self):
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=4, stage="skipped")}))
+        with mock.patch.object(links, "find", return_value=self.HIT):
+            links.main()
+        self.assertNotIn("Acme", self.list.read_text())
+        self.assertIsNone(self.account())
+        self.assertEqual(self.saved_as("web:1")["link_kind"], "company", "the role still gets the employer's own link")
+
+    def test_a_role_scored_after_its_board_was_found_still_brings_its_employer(self):
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", score=None)}))
+        with mock.patch.object(links, "find", return_value=self.HIT):
+            links.main()
+            self.assertIsNone(self.account())
+            store = json.loads(self.jobs.read_text())
+            store["web:1"]["score"] = 8
+            self.jobs.write_text(json.dumps(store))
+            links.main()
+        self.assertEqual(self.account()["status"], "candidate")
+
+    def test_a_company_you_removed_isnt_added_again(self):
+        self.companies.write_text(json.dumps({"Acme": {"status": "rejected", "vetoed": True}}))
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web")}))
+        with mock.patch.object(links, "find", return_value=self.HIT):
+            links.main()
+        self.assertNotIn("acme", self.list.read_text())
+        self.assertIsNone(self.account())
+
+    def test_a_board_already_read_under_another_name_isnt_added_twice(self):
+        self.list.write_text("company,ats,slug,sector\nAcme,ashby,acme,ai\n")
+        self.jobs.write_text(json.dumps({"web:1": role(id="web:1", source="web", company="Acme Technology Group")}))
+        with mock.patch.object(links, "find", return_value=self.HIT):
+            links.main()
+        self.assertEqual(self.list.read_text().count("ashby,acme"), 1)
+        self.assertIsNone(self.account("Acme Technology Group"))
 
     def test_a_known_careers_address_is_used_before_guessing(self):
         self.companies.write_text(json.dumps({"Acme Ltd": {"status": "candidate", "careers_url": "https://acme.example/careers"},

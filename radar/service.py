@@ -90,7 +90,7 @@ def _sources_on(cfg) -> bool:
 def _boards():
     """Boards for companies that arrived with a role or a careers address, then a scan of those boards so their roles are scored this run."""
     from radar import resolve
-    _run_modules("links")  # a role from a job site or a web search: find the employer's board and watch it
+    _run_modules("links")  # a role from a job site or a web search: find the employer's board and, if Gus kept the role, read it
     out = resolve.auto()
     if out["added"] or out["restored"]:
         _run_modules("scan --new")  # only the boards just added: Check roles has asked every other one this run
