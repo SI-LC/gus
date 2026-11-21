@@ -15,10 +15,8 @@ careers site, `mtp:jobs:…` for Mind the Product's jobs board, `getro:<board ho
 pulled from the inbox, `manual:<company>:<hash of the title>` for a role you added by hand. One ad is one record however many places list it: before
 adding a role, every writer asks `radar.jobs.find_match` whether Gus has it already (by id, by address without tracking
 tags, by company and title among live roles found through another source, or, where the titles differ, by the employer's
-vacancy number or the advert's text) and, if so, records the sighting under
-`also` instead. Two ads from one company in the same place whose descriptions are nine-tenths the same (compared by runs
-of five words, and only when each has 80 words or more) are one role whatever their titles, on one board or two: a second
-role at the company shares only its opening and closing paragraphs, which is far less. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
+vacancy number) and, if so, records the sighting under
+`also` instead. The advert's wording never makes two ads one role: employers reuse one advert for different roles and change only the title. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
 copy furthest along and moving its events and moves across.
 
 | Field | Meaning |
@@ -33,7 +31,7 @@ copy furthest along and moving its events and moves across.
 | `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page: the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
-| `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role. Where the board gives none, a labelled number in the advert ("Job ref: R100", "Requisition ID: 204") is read as the number each time roles are compared, and isn't saved. The same number from two different boards, in the same place, is one role whatever the two titles say; two different numbers are two roles even when the adverts read the same |
+| `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role. Where the board gives none, a labelled number in the advert ("Job ref: R100", "Requisition ID: 204") is read as the number each time roles are compared, and isn't saved. The same number from two different boards, in the same place, is one role whatever the two titles say |
 | `readvertised` | When a new ad appeared for a role you're pursuing (shortlisted to interviewing): the same company, title and place on the board its old ad was on, or after that ad closed. The new ad is recorded under `also`, not added as a new role |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |

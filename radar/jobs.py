@@ -17,7 +17,6 @@ import json
 import re
 import sys
 from datetime import datetime, timezone
-from functools import lru_cache
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from radar.matching import load_config, matches
@@ -88,33 +87,11 @@ def numbered_apart(a: dict, b: dict) -> bool:
     return bool(ref_of(a) and ref_of(b)) and ref_of(a) != ref_of(b)
 
 
-AD_WORDS, AD_RUN, AD_ALIKE = 80, 5, 0.9  # shorter text is too alike to compare; adverts are compared by their runs of five words
-
-
-@lru_cache(maxsize=4096)
-def runs_in(text: str) -> frozenset:
-    words = re.findall(r"[a-z0-9]+", text.lower())
-    return frozenset(zip(*(words[i:] for i in range(AD_RUN)))) if len(words) >= AD_WORDS else frozenset()
-
-
-def ad_runs(j: dict) -> frozenset:
-    """Every run of five words in the advert, or nothing when it's too short to tell one advert from another."""
-    return runs_in(str(j.get("description") or ""))
-
-
-def same_text(a: frozenset, b: frozenset) -> bool:
-    """Nine in ten of the two adverts' runs of words are shared: one advert, perhaps lightly edited. Two roles at one company
-    share its opening and closing paragraphs and little else, which is far short of this."""
-    return bool(a and b) and len(a & b) >= AD_ALIKE * len(a | b)
-
-
-def same_ad(a: dict, b: dict, a_id: str, b_id: str, a_runs: frozenset, b_runs: frozenset) -> bool:
-    """One vacancy whatever the two titles say: the same place, and either the employer's number is on both, from two
-    different boards (on one board a number can cover several ads), or the adverts read the same. Never when the employer
-    numbers them apart."""
-    if numbered_apart(a, b) or not same_place(a, b):
-        return False
-    return (same_vacancy(a, b) and board_of(a_id) != board_of(b_id)) or same_text(a_runs, b_runs)
+def same_ad(a: dict, b: dict, a_id: str, b_id: str) -> bool:
+    """One vacancy whatever the two titles say: the employer's number is on both, from two different boards (on one board a
+    number can cover several ads), in the same place. Never by the advert's wording: employers reuse one advert for
+    different roles and change only the title."""
+    return same_vacancy(a, b) and board_of(a_id) != board_of(b_id) and same_place(a, b)
 
 
 PURSUING = ("shortlisted", "preparing", "applied", "interviewing")  # you've chosen it and haven't finished with it
@@ -151,14 +128,13 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
     the company: first a role you're pursuing in the same place, which is that role advertised again unless the
     employer's own vacancy numbers say otherwise; then among roles whose ad is still open, the same title found somewhere
     other than this one's own board, or on it under the same vacancy number. Where the titles differ, the same vacancy
-    number from another board or the same advert text, in the same place, is still that role (`same_ad`)."""
+    number from another board, in the same place, is still that role (`same_ad`)."""
     alias = aliases(store) if alias is None else alias
     rid = role.get("id")
     if rid in alias:
         return alias[rid]
     url = same_url(role.get("url"))
     key = role_key(role)
-    runs = ad_runs(role)
     by_key = yours = None
     for jid, j in store.items():
         if url and (same_url(j.get("url")) == url or any(same_url(a.get("url")) == url for a in (j.get("also") or {}).values())):
@@ -169,7 +145,7 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
         if theirs[0] != key[0]:
             continue
         titled = bool(key[1]) and theirs[1] == key[1]
-        alike = same_ad(j, role, jid, rid, ad_runs(j), runs)
+        alike = same_ad(j, role, jid, rid)
         if yours is None and j.get("stage") in PURSUING and ((titled and same_place(j, role) and not numbered_apart(j, role)) or alike):
             yours = jid
         if by_key is None and still_open(j) and ((titled and (board_of(jid) != board_of(rid) or same_vacancy(j, role))) or alike):
@@ -240,8 +216,8 @@ def rank(j: dict) -> tuple:
 
 def groups(store: dict) -> list[list[str]]:
     """Ids that are one role: the same address, or the same company and title on different boards, or on one board under
-    the same vacancy number, among live roles; or, whatever the titles, the same vacancy number from two boards or the same
-    advert text in the same place (`same_ad`), among roles whose ad is still open."""
+    the same vacancy number, among live roles; or, whatever the titles, the same vacancy number from two boards in the same
+    place (`same_ad`), among roles whose ad is still open."""
     parent = {jid: jid for jid in store}
 
     def find(x):
@@ -264,7 +240,7 @@ def groups(store: dict) -> list[list[str]]:
         key = role_key(j)
         if is_live(j) and key[0] and key[1]:
             by_key.setdefault(key, []).append(jid)
-        if still_open(j) and key[0] and (ref_of(j) or ad_runs(j)):
+        if still_open(j) and key[0] and ref_of(j):
             by_company.setdefault(key[0], []).append(jid)
     for ids in by_key.values():
         boards = [board_of(i) for i in ids]
@@ -276,10 +252,9 @@ def groups(store: dict) -> list[list[str]]:
             if ref_of(store[i]):
                 union(i, reposted.setdefault((board_of(i), ref_of(store[i])), i))
     for ids in by_company.values():
-        runs = {i: ad_runs(store[i]) for i in ids}
         for n, a in enumerate(ids):
             for b in ids[n + 1:]:
-                if find(a) != find(b) and same_ad(store[a], store[b], a, b, runs[a], runs[b]):
+                if find(a) != find(b) and same_ad(store[a], store[b], a, b):
                     union(a, b)
     out = {}
     for jid in store:
