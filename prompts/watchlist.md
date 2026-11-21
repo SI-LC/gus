@@ -56,9 +56,10 @@ Then by score:
   Set `added` to today.
 - **5–6 → maybe.** Recheck in 30 days (`recheck_after`).
 - **under 5 → rejected**, with `fit_why`. Recheck in 90 days.
-- A candidate that arrived with a board (`source: job site role`: Gus found one of its roles there) keeps that board only at
-  7+. At 5–6 or under 5, remove its line from `watchlist.csv` and its `board`.
-- A watched company that drops below 5 → set it to rejected and remove its line from `watchlist.csv`.
+- A watched company that drops below 5 → set it to rejected.
+- **A low score never stops a board being read.** A company that already has a line in `watchlist.csv` keeps it, and its
+  `board`, at any score, as maybe or rejected too: the score decides its tier and whether Gus plans moves there, not whether
+  the candidate sees its roles. Only the candidate removes a board, by removing the company (`vetoed`).
 - **The candidate's own choices are never dropped.** An account with `favourite: true` or `tier_locked: true` stays `watched` and
   keeps its line in `watchlist.csv` whatever it scores: the candidate chose it, and a low score today says nothing about the
   role it posts tomorrow. Record `fit` and `fit_why` as usual, and list it in the report as "kept, scored <n>".
