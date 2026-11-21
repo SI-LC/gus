@@ -846,7 +846,8 @@ function chgLine(c, all) {  // one line of the timeline: when, who did what to w
   else if (c.field === "note") {
     what = `${who} ${!c.old ? "added a note to" : !c.new ? "removed your note from" : "replaced your note on"} ${role}`; move = "<span>Note</span>";
     if (c.old) was = `<button class="was${chgOpen.has(c.id) ? " all" : ""}" aria-expanded="${chgOpen.has(c.id)}" title="The note before" onclick="toggleChg(${jsq(c.id)})"><span>${esc(c.old)}</span></button>`;
-  } else { what = c.new ? `${who} set the folder for ${role} <span>· ${esc(c.new)}</span>` : `${who} cleared the folder for ${role}`; move = "<span>Folder</span>"; }
+  } else if (c.field === "url") { what = `${who} changed the link for ${role}`; move = "<span>Link</span>"; }
+  else { what = c.new ? `${who} set the folder for ${role} <span>· ${esc(c.new)}</span>` : `${who} cleared the folder for ${role}`; move = "<span>Folder</span>"; }
   return `<article class="mv"><div class="tl"><time datetime="${esc(c.at)}">${chgTime(c.at)}</time><span class="tl-what">${what}${why}</span><span class="tl-move">${move}</span></div>${was}</article>`;
 }
 function whatChanged() {

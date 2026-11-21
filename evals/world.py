@@ -35,6 +35,12 @@ JOB_SITE_ROLE = {"adzuna:1002": {"id": "adzuna:1002", "company": "Harborlight", 
                                  "text_kind": "summary", "description": "A made-up job site summary.", "stage": "new", "score": 6,
                                  "why": "Made-up reason for Product Manager, Growth.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
                                  "last_seen": "2026-01-01T09:00:00+00:00"}}
+# A role only a job site has: its company has no board Gus reads, so its link stays the job site's
+JOB_SITE_ONLY_ROLE = {"jsearch:2001": {"id": "jsearch:2001", "company": "Tidewater Labs", "title": "Product Manager, Platform", "location": "London",
+                                       "url": "https://www.jobleads.com/gb/job/2001", "via": "JobLeads", "posted": "2026-01-01", "source": "jsearch",
+                                       "text_kind": "summary", "description": "A made-up job site summary.", "stage": "new", "score": 6,
+                                       "why": "Made-up reason for Product Manager, Platform.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
+                                       "last_seen": "2026-01-01T09:00:00+00:00", "link_checked": "2026-01-01"}}
 # A second company whose board has answered "slow down" since three days ago
 REFUSING = "Quillmere,greenhouse,quillmere,software\n"
 
@@ -54,7 +60,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False):
+    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False, job_site_only=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -78,6 +84,8 @@ class World:
                 (self.app / "data" / "board_history.json").write_text(json.dumps({week_ago: {"boards": 2, "unread": [], "no_board": 0, "no_board_watched": 0}}))
             if job_site:
                 (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ROLE))
+            if job_site_only:
+                (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ONLY_ROLE))
         tools = self.home / ".local" / "bin"
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):

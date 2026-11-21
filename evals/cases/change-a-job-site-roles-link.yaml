@@ -1,0 +1,15 @@
+id: change-a-job-site-roles-link
+requirement: When a role's link goes to a job site, I can have Claude point it at the company's own page, and I can see that it was changed.
+given: scanned with a role only a job site has
+check:
+  - open Role Inbox
+  - see "Product Manager, Platform"
+  - see "Via JobLeads"
+  - Claude points "Product Manager, Platform" at "https://tidewaterlabs.example/careers", saying "you asked for the company's own page"
+  - reload
+  - see "Company site"
+  - not see "Via JobLeads"
+  - open Activity
+  - see "Claude changed the link for"
+  - see "you asked for the company's own page"
+judge: Can I tell the link now goes to the company, and who changed it and why?

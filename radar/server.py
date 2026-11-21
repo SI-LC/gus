@@ -551,6 +551,26 @@ def recent_changes(days=7, most=2000):
     return {"changes": changes.named(found[:most], read(JOBS, {})), "total": len(found)}
 
 
+def point_at(j, url):
+    """Send a role found away from the employer's board to the page you'd rather open, usually the employer's own. The link
+    it had stays in `source_url`, as when radar.links finds the employer's ad, and a link that isn't a job site's shows as
+    the company's, so nothing searches for another. No scan rewrites a link. Returns what's wrong, or None."""
+    url = str(url or "").strip()
+    if j.get("source") in (None, "board"):
+        return "This role is read from the company's own board, so its link is already the company's ad"
+    if not re.match(r"https?://\S+$", url):
+        return "The link needs to start with http"
+    if url != j.get("url"):
+        if j.get("url"):
+            j.setdefault("source_url", j["url"])
+        j["url"] = url
+    if links.JOB_SITES.search(urlparse(url).hostname or ""):
+        j.pop("link_kind", None)
+    else:
+        j["link_kind"] = "company"
+    return None
+
+
 def edit_job(j, body):
     """What update_job does to the role itself, with its checks. Saved by update_job, refusals included."""
     reason = body.get("skip_reason") or None
@@ -558,9 +578,13 @@ def edit_job(j, body):
         return {"error": f"No such reason: {reason}. The reasons are {', '.join(SKIP_REASONS)}"}
     if reason and (body.get("stage") if body.get("stage") in JOB_STAGES else j.get("stage")) != "skipped":
         return {"error": "Only a role you skipped can have a reason for skipping it"}
-    if any(k in body for k in (*DETAILS, "url", "description")):  # what the ad says: yours to correct only on a role you added
-        if j.get("source") != "manual":
-            return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
+    by_hand = j.get("source") == "manual"
+    if not by_hand and any(k in body for k in (*DETAILS, "description")):  # what the ad says: yours to correct only on a role you added
+        return {"error": "Only a role you added by hand can be edited: this one follows its ad"}
+    if not by_hand and "url" in body:  # where its link goes: yours to change on any role not read from the employer's board
+        if problem := point_at(j, body["url"]):
+            return {"error": problem}
+    if by_hand and any(k in body for k in (*DETAILS, "url", "description")):
         edits = {k: " ".join(str(body[k] or "").split())[:n] for k, n in DETAILS.items() if k in body}
         if "title" in edits and not edits["title"]:
             return {"error": "Needs a title"}

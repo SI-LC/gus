@@ -15,10 +15,8 @@ careers site, `mtp:jobs:…` for Mind the Product's jobs board, `getro:<board ho
 pulled from the inbox, `manual:<company>:<hash of the title>` for a role you added by hand. One ad is one record however many places list it: before
 adding a role, every writer asks `radar.jobs.find_match` whether Gus has it already (by id, by address without tracking
 tags, by company and title among live roles found through another source, or, where the titles differ, by the employer's
-vacancy number or the advert's text) and, if so, records the sighting under
-`also` instead. Two ads from one company in the same place whose descriptions are nine-tenths the same (compared by runs
-of five words, and only when each has 80 words or more) are one role whatever their titles, on one board or two: a second
-role at the company shares only its opening and closing paragraphs, which is far less. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
+vacancy number) and, if so, records the sighting under
+`also` instead. The advert's wording never makes two ads one role: employers reuse one advert for different roles and change only the title. `python3 -m radar.jobs dedupe` shows duplicates that got in before; `--apply` merges them, keeping the
 copy furthest along and moving its events and moves across.
 
 | Field | Meaning |
@@ -30,10 +28,10 @@ copy furthest along and moving its events and moves across.
 | `score_before_salary` | When a stated salary lowered the score |
 | `source` | `board`, `hn`, `email`, `x`, `web`, `adzuna`, `jsearch`, `manual` (added by hand). An `adzuna` or `jsearch` role that Gus then finds on the employer's own board (a scan absorbs the board's ad, or `radar.links` finds it there) becomes `board`, keeping its id |
 | `found_via` | Where a role that's now `board` was first found (`adzuna` or `jsearch`) |
-| `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page: the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
+| `source_url`, `link_kind`, `board` | When `url` was changed to the employer's own page, by `radar.links` or by you or Claude (`update_role` with a `url`, on any role that isn't `board`): the link it had before, `company`, and the board it's on (`{ats, slug}`, when `radar.links` found it on one) |
 | `text_kind` | What `description` is: `posting` (the employer's own ad) or `summary` (a job site's précis, which scores less reliably) |
 | `first_seen`, `last_seen`, `missed`, `ad_closed` | Still on the board? Two scans without it and it's closed (never a `manual` role) |
-| `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role. Where the board gives none, a labelled number in the advert ("Job ref: R100", "Requisition ID: 204") is read as the number each time roles are compared, and isn't saved. The same number from two different boards, in the same place, is one role whatever the two titles say; two different numbers are two roles even when the adverts read the same |
+| `ref` | The employer's own number for the vacancy, where the board gives one (SmartRecruiters). An ad re-posted on the same board gets a new id and keeps this, so the same title under the same number is the same role. Where the board gives none, a labelled number in the advert ("Job ref: R100", "Requisition ID: 204") is read as the number each time roles are compared, and isn't saved. The same number from two different boards, in the same place, is one role whatever the two titles say |
 | `readvertised` | When a new ad appeared for a role you're pursuing (shortlisted to interviewing): the same company, title and place on the board its old ad was on, or after that ad closed. The new ad is recorded under `also`, not added as a new role |
 | `also` | `{other id: {url, source, seen}}`: the same ad as listed elsewhere. A role stays live while any of its ids is on a board |
 | `note`, `folder` | Yours: a note and where the application files are |
@@ -70,7 +68,7 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `source`, `signal` | How the company was found: which agent or source, and the one-line signal that surfaced it |
 | `reassess` | Set when a new signal names a watched company (the signal carries `company`); cleared when the agent reassesses it |
 | `product`, `stage`, `london` (its presence in your target locations: the name is from Gus's first search), `headcount`, `customers`, `investors`, `product_leaders`, `careers_url` | Research. `careers_url_broken` when the address no longer opens |
-| `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed |
+| `board`, `board_broken` | `<ats>:<slug>` from the watchlist; set when the last scan of it failed. A board stays on the watchlist whatever the company scores, as `maybe` or `rejected` too: only removing the company (`vetoed`) stops it being read |
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
 | `careers_checked` | When an agent last read the careers page of a company with no board, looking for a board or for roles |
 | `website`, `website_locked`, `website_broken`, `website_checked` | The company's own site, which its name in the cockpit opens. Kept only once its homepage (or the sitemap its robots.txt lists) links to the company's board or careers address, or, with neither, its page title carries the company's name: `radar.websites`, up to 50 companies a scan, each looked at again after 30 days. `website_locked` when you set or cleared it on the company's card: Gus never replaces it. `website_broken` when it no longer opens |
@@ -175,13 +173,13 @@ The log of changes to your roles: one JSON object per line, appended, never edit
 | `id` | `chg_<YYYYMMDDTHHMMSS>_<4 hex>`, sortable |
 | `at` | When, ISO time, UTC |
 | `role` | The role's id in `jobs.json` |
-| `field` | `stage`, `skip_reason`, `note` or `folder` |
+| `field` | `stage`, `skip_reason`, `note`, `folder` or `url` (a link you or Claude changed, not one Gus found) |
 | `old`, `new` | The value before and after; `null` when there was none. A replaced note keeps its full old text here |
 | `actor` | `you` (the cockpit), `claude` (MCP) or `triage` (the automatic skip of a role scoring under 5) |
 | `reason` | Why, in a sentence. Always there from Claude, whose `update_role` needs one; `scored N/10` from triage |
 
 Only `server.update_job` and triage's skip write it, while holding the jobs lock. What the ad says (description,
-`last_seen`, a role you added by hand's details) isn't logged. A role's `history` stays what you did to its stage: triage's
+`last_seen`, the title, location and description of a role you added by hand) isn't logged. A role's `history` stays what you did to its stage: triage's
 skip is in the log, not in `history`. Activity shows the last 7 days (`/api/changes`), and Claude reads it with
 `list_changes`.
 
