@@ -294,3 +294,74 @@ class AdvertisedAgain(unittest.TestCase):
         J.absorb(mine, {**self.again, "ref": "R1"}, "2026-11-12T08:00:00")
         self.assertNotIn("readvertised", mine)
 
+
+
+def advert(about="partner API access, security and webhooks", closing="Apply with a CV."):
+    """A made-up advert long enough to compare: the company's opening, what the role is about, the company's closing."""
+    return ("Acme builds the best way to move parcels around the world, for everyone, everywhere. " * 3
+            + f"As the product manager for {about} you will own the roadmap, work closely with engineering and design, talk to "
+              f"customers every week, set the measures of success for {about} and ship improvements that customers notice. " * 4
+            + "We are proud to have a truly international team and we celebrate our differences. " * 3 + closing)
+
+
+class TheSameAdvertUnderTwoTitles(unittest.TestCase):
+    """One vacancy listed twice with different titles is one role: by the employer's number where an advert shows one, else by its text."""
+
+    def setUp(self):
+        self.have = role("getro:vc.example:1", title="Senior Technical Product Manager - API Experience & Security", location="London, UK",
+                         stage="new", description=advert())
+        self.store = {"getro:vc.example:1": self.have}
+        self.found = role("getro:vc.example:2", title="Senior Product Manager - API Experience & Security - Acme Platform",
+                          location="London, UK", description=advert())
+
+    def test_the_same_text_on_one_board_is_one_role(self):
+        self.assertEqual(J.find_match(self.store, self.found), "getro:vc.example:1")
+
+    def test_a_lightly_edited_copy_is_still_that_role(self):
+        self.found["description"] = advert(closing="Apply with a CV and a short note.")
+        self.assertEqual(J.find_match(self.store, self.found), "getro:vc.example:1")
+
+    def test_another_role_at_the_company_shares_only_the_company_paragraphs(self):
+        self.found["description"] = advert(about="fraud detection and chargebacks")
+        self.assertIsNone(J.find_match(self.store, self.found))
+
+    def test_the_same_text_in_another_city_or_at_another_company_is_another_role(self):
+        self.assertIsNone(J.find_match(self.store, {**self.found, "location": "Berlin"}))
+        self.assertIsNone(J.find_match(self.store, {**self.found, "company": "Other"}))
+
+    def test_short_text_is_too_alike_to_compare(self):
+        self.have["description"] = self.found["description"] = "Own the roadmap for our platform. " * 5
+        self.assertIsNone(J.find_match(self.store, self.found))
+
+    def test_a_role_you_skipped_or_are_pursuing_takes_the_copy_and_a_closed_ad_doesnt(self):
+        for stage in ("skipped", "shortlisted", "applied"):
+            self.have["stage"] = stage
+            self.assertEqual(J.find_match(self.store, self.found), "getro:vc.example:1", stage)
+        self.have.update(stage="new", ad_closed="2026-11-01")
+        self.assertIsNone(J.find_match(self.store, self.found))
+
+    def test_the_employers_numbers_overrule_the_text(self):
+        self.have["ref"], self.found["ref"] = "R100", "R200"
+        self.assertIsNone(J.find_match(self.store, self.found))
+
+    def test_a_number_shown_in_the_advert_is_the_employers_number(self):
+        for text, ref in (("Job ref: R10239. Own the roadmap.", "R10239"), ("Requisition ID: jr-204", "JR-204"), ("Reference #4501/A", "4501/A"),
+                          ("Two references: required. Ref: see the 2026 report. Our req for 12 people.", "")):
+            self.assertEqual(J.ref_of({"description": text}), ref, text)
+        self.assertEqual(J.ref_of({"ref": "R1", "description": "Job ref: R2"}), "R1")  # the board's own answer comes first
+
+    def test_the_same_number_from_another_board_is_that_role_whatever_the_title(self):
+        store = {"sr:acme:1": role("sr:acme:1", title="Senior Technical Product Manager", location="London, gb", stage="new", ref="R100")}
+        copy = role("getro:vc.example:2", title="Senior PM, Platform", location="", description="Short ad. Job ref: r100")
+        self.assertEqual(J.find_match(store, copy), "sr:acme:1")
+        self.assertIsNone(J.find_match(store, {**copy, "location": "Dublin"}))  # one number can cover an ad in each city
+        self.assertIsNone(J.find_match(store, {**copy, "description": "Short ad. Job ref: R200"}))
+
+    def test_dedupe_groups_copies_already_saved_even_ones_you_skipped(self):
+        self.have["stage"] = "skipped"
+        store = {**self.store, "getro:vc.example:2": {**self.found, "stage": "skipped"},
+                 "getro:vc.example:3": role("getro:vc.example:3", title="Fraud PM", location="London, UK", stage="new", description=advert("fraud detection")),
+                 "sr:acme:9": role("sr:acme:9", title="Senior TPM", location="London", stage="new", ref="R700"),
+                 "wd:acme:4": role("wd:acme:4", title="Technical PM, Senior", location="London", stage="new", description="Req ID: R700"),
+                 "gh:acme:5": role("gh:acme:5", title="Old copy", location="London, UK", stage="new", ad_closed="x", description=advert())}
+        self.assertEqual(sorted(sorted(g) for g in J.groups(store)), [["getro:vc.example:1", "getro:vc.example:2"], ["sr:acme:9", "wd:acme:4"]])

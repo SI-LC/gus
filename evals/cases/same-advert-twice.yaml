@@ -1,0 +1,10 @@
+id: same-advert-twice
+requirement: When a company lists one vacancy twice under two titles, with the same advert, I see one role, not two.
+given: scanned
+check:
+  - open Role Inbox
+  - see "Product Manager, Growth"
+  - not see "Growth Product Manager"
+  - reload
+  - not see "Growth Product Manager"
+judge: Is every role in the inbox a different vacancy, so I never weigh the same job twice?
