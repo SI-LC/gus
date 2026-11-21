@@ -67,9 +67,31 @@ def role_key(j: dict) -> tuple:
     return ONE_EMPLOYER.get(company, company), same_title(j.get("title"))
 
 
+REF_IN_AD = re.compile(r"\b(?:ref(?:erence)?|req(?:uisition)?)\b\.?(?:\s*(?:number|no|id|code)\b\.?)?\s*[:#]\s*(?=[\w/-]*\d)([A-Za-z0-9][\w/-]{2,19})", re.I)
+
+
+def ref_of(j: dict) -> str:
+    """The employer's own number for the vacancy: the one its board gives, or one the advert shows ("Job ref: R100"). Only a
+    labelled number counts, as an advert is full of other numbers."""
+    ref = j.get("ref") or ((m := REF_IN_AD.search(str(j.get("description") or ""))) and m[1]) or ""
+    return str(ref).strip().upper()
+
+
 def same_vacancy(a: dict, b: dict) -> bool:
     """The employer's own number for the vacancy is on both: an ad taken down and put up again gets a new id and keeps it."""
-    return bool(a.get("ref")) and a.get("ref") == b.get("ref")
+    return bool(ref_of(a)) and ref_of(a) == ref_of(b)
+
+
+def numbered_apart(a: dict, b: dict) -> bool:
+    """Both carry the employer's number and the numbers differ: the employer says they're two vacancies."""
+    return bool(ref_of(a) and ref_of(b)) and ref_of(a) != ref_of(b)
+
+
+def same_ad(a: dict, b: dict, a_id: str, b_id: str) -> bool:
+    """One vacancy whatever the two titles say: the employer's number is on both, from two different boards (on one board a
+    number can cover several ads), in the same place. Never by the advert's wording: employers reuse one advert for
+    different roles and change only the title."""
+    return same_vacancy(a, b) and board_of(a_id) != board_of(b_id) and same_place(a, b)
 
 
 PURSUING = ("shortlisted", "preparing", "applied", "interviewing")  # you've chosen it and haven't finished with it
@@ -102,10 +124,11 @@ def aliases(store: dict) -> dict:
 
 
 def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None:
-    """The id of the stored role this one is, or None. By id (or an id it was absorbed under), then by address, then by
-    company and title: first a role you're pursuing in the same place, which is that role advertised again unless the
-    employer's own vacancy numbers say otherwise; then among roles whose ad is still open, found somewhere other than this one's own
-    board, or on it under the same vacancy number."""
+    """The id of the stored role this one is, or None. By id (or an id it was absorbed under), then by address, then within
+    the company: first a role you're pursuing in the same place, which is that role advertised again unless the
+    employer's own vacancy numbers say otherwise; then among roles whose ad is still open, the same title found somewhere
+    other than this one's own board, or on it under the same vacancy number. Where the titles differ, the same vacancy
+    number from another board, in the same place, is still that role (`same_ad`)."""
     alias = aliases(store) if alias is None else alias
     rid = role.get("id")
     if rid in alias:
@@ -116,12 +139,16 @@ def find_match(store: dict, role: dict, alias: dict | None = None) -> str | None
     for jid, j in store.items():
         if url and (same_url(j.get("url")) == url or any(same_url(a.get("url")) == url for a in (j.get("also") or {}).values())):
             return jid
-        if not (key[0] and key[1]) or role_key(j) != key:
+        if not key[0] or (yours is not None and by_key is not None):
             continue
-        numbered_apart = j.get("ref") and role.get("ref") and j["ref"] != role["ref"]  # the employer says it's another vacancy
-        if yours is None and j.get("stage") in PURSUING and same_place(j, role) and not numbered_apart:
+        theirs = role_key(j)
+        if theirs[0] != key[0]:
+            continue
+        titled = bool(key[1]) and theirs[1] == key[1]
+        alike = same_ad(j, role, jid, rid)
+        if yours is None and j.get("stage") in PURSUING and ((titled and same_place(j, role) and not numbered_apart(j, role)) or alike):
             yours = jid
-        if by_key is None and still_open(j) and (board_of(jid) != board_of(rid) or same_vacancy(j, role)):
+        if by_key is None and still_open(j) and ((titled and (board_of(jid) != board_of(rid) or same_vacancy(j, role))) or alike):
             by_key = jid
     return yours or by_key
 
@@ -189,7 +216,8 @@ def rank(j: dict) -> tuple:
 
 def groups(store: dict) -> list[list[str]]:
     """Ids that are one role: the same address, or the same company and title on different boards, or on one board under
-    the same vacancy number, among live roles."""
+    the same vacancy number, among live roles; or, whatever the titles, the same vacancy number from two boards in the same
+    place (`same_ad`), among roles whose ad is still open."""
     parent = {jid: jid for jid in store}
 
     def find(x):
@@ -201,7 +229,7 @@ def groups(store: dict) -> list[list[str]]:
     def union(a, b):
         parent[find(a)] = find(b)
 
-    by_url, by_key = {}, {}
+    by_url, by_key, by_company = {}, {}, {}
     for jid, j in store.items():
         for u in [j.get("url")] + [a.get("url") for a in (j.get("also") or {}).values()]:
             u = same_url(u)
@@ -212,6 +240,8 @@ def groups(store: dict) -> list[list[str]]:
         key = role_key(j)
         if is_live(j) and key[0] and key[1]:
             by_key.setdefault(key, []).append(jid)
+        if still_open(j) and key[0] and ref_of(j):
+            by_company.setdefault(key[0], []).append(jid)
     for ids in by_key.values():
         boards = [board_of(i) for i in ids]
         if len(set(boards)) == len(boards):  # a title two live roles share on one board is two roles: too ambiguous to merge by title
@@ -219,8 +249,13 @@ def groups(store: dict) -> list[list[str]]:
                 union(ids[0], other)
         reposted = {}
         for i in ids:
-            if store[i].get("ref"):
-                union(i, reposted.setdefault((board_of(i), store[i]["ref"]), i))
+            if ref_of(store[i]):
+                union(i, reposted.setdefault((board_of(i), ref_of(store[i])), i))
+    for ids in by_company.values():
+        for n, a in enumerate(ids):
+            for b in ids[n + 1:]:
+                if find(a) != find(b) and same_ad(store[a], store[b], a, b):
+                    union(a, b)
     out = {}
     for jid in store:
         out.setdefault(find(jid), []).append(jid)

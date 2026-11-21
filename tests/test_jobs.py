@@ -294,3 +294,45 @@ class AdvertisedAgain(unittest.TestCase):
         J.absorb(mine, {**self.again, "ref": "R1"}, "2026-11-12T08:00:00")
         self.assertNotIn("readvertised", mine)
 
+
+
+def advert(about="partner API access, security and webhooks"):
+    """A made-up advert: the company's opening, what the role is about, the company's closing."""
+    return ("Acme builds the best way to move parcels around the world, for everyone, everywhere. " * 3
+            + f"As the product manager for {about} you will own the roadmap, work closely with engineering and design, talk to "
+              f"customers every week, set the measures of success for {about} and ship improvements that customers notice. " * 4
+            + "We are proud to have a truly international team and we celebrate our differences. " * 3)
+
+
+class TwoTitlesAreTwoRoles(unittest.TestCase):
+    """Employers reuse one advert for different roles and change only the title, so the wording never makes two ads one role.
+    Only the employer's own number for the vacancy does, where an advert shows one."""
+
+    def test_the_same_advert_under_two_titles_stays_two_roles(self):
+        for stage in ("new", "skipped", "applied"):
+            store = {"mtp:jobs:1": role("mtp:jobs:1", title="Product Manager - Data", location="London", stage=stage, description=advert())}
+            for jid in ("mtp:jobs:2", "gh:acme:2"):  # on the same board or another
+                self.assertIsNone(J.find_match(store, role(jid, title="Product Manager - AI", location="London", description=advert())), (stage, jid))
+            store["mtp:jobs:2"] = role("mtp:jobs:2", title="Product Manager - AI", location="London", stage="new", description=advert())
+            self.assertEqual(J.groups(store), [])
+
+    def test_a_number_shown_in_the_advert_is_the_employers_number(self):
+        for text, ref in (("Job ref: R10239. Own the roadmap.", "R10239"), ("Requisition ID: jr-204", "JR-204"), ("Reference #4501/A", "4501/A"),
+                          ("Two references: required. Ref: see the 2026 report. Our req for 12 people.", "")):
+            self.assertEqual(J.ref_of({"description": text}), ref, text)
+        self.assertEqual(J.ref_of({"ref": "R1", "description": "Job ref: R2"}), "R1")  # the board's own answer comes first
+
+    def test_the_same_number_from_another_board_is_that_role_whatever_the_title(self):
+        store = {"sr:acme:1": role("sr:acme:1", title="Senior Technical Product Manager", location="London, gb", stage="new", ref="R100")}
+        copy = role("getro:vc.example:2", title="Senior PM, Platform", location="", description="Short ad. Job ref: r100")
+        self.assertEqual(J.find_match(store, copy), "sr:acme:1")
+        self.assertIsNone(J.find_match(store, {**copy, "location": "Dublin"}))  # one number can cover an ad in each city
+        self.assertIsNone(J.find_match(store, {**copy, "description": "Short ad. Job ref: R200"}))
+        self.assertIsNone(J.find_match(store, {**copy, "id": "sr:acme:2"}))  # and several ads on its own board
+
+    def test_dedupe_groups_saved_copies_by_number_across_boards(self):
+        store = {"sr:acme:9": role("sr:acme:9", title="Senior TPM", location="London", stage="skipped", ref="R700"),
+                 "wd:acme:4": role("wd:acme:4", title="Technical PM, Senior", location="London", stage="new", description="Req ID: R700"),
+                 "lever:acme:5": role("lever:acme:5", title="Technical PM, France", location="Paris", stage="new", description="Req ID: R700"),
+                 "gh:acme:6": role("gh:acme:6", title="Closed copy", location="London", stage="new", ad_closed="x", ref="R700")}
+        self.assertEqual(sorted(sorted(g) for g in J.groups(store)), [["sr:acme:9", "wd:acme:4"]])
