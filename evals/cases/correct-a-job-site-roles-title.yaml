@@ -8,6 +8,7 @@ check:
   - reload
   - see "Staff Product Manager (Platform Team)"
   - open Activity
-  - see "Claude changed its title from Product Manager, Platform"
+  - see "Claude changed the title of"
+  - see "was Product Manager, Platform"
   - see "the company's own ad calls it this"
 judge: Can I tell the title was corrected, what it was before, and who changed it and why?

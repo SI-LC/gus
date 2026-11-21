@@ -190,6 +190,7 @@ def main():
         j.update(first_seen=now, last_seen=now, stage="new", score=None, why=None, source="hn" if hn else "board")
         store[j["id"]] = j
         new.append(j)
+      J.mark_same_adverts(store)  # roles that share one advert say so; they're never merged for it
       total = len(store)
 
     asked = len(held or fresh or read(DATA / "board_health.json"))

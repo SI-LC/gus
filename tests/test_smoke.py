@@ -137,7 +137,7 @@ class FullRun(unittest.TestCase):
         self.assertEqual(self.world.crashes(), {})
 
     def test_2_only_matching_roles_are_kept(self):
-        self.assertEqual(set(self.roles()), {"Senior Product Manager", "Product Manager, Growth", "Product Owner"})
+        self.assertEqual(set(self.roles()), {"Senior Product Manager", "Product Manager, Growth", "Product Owner", "Growth Product Manager"})
 
     def test_3_scores_and_reasons_reach_the_cockpit(self):
         best = self.roles()["Senior Product Manager"]
@@ -147,11 +147,16 @@ class FullRun(unittest.TestCase):
         self.assertEqual(self.roles()["Product Owner"]["stage"], "skipped")
         self.assertEqual(self.roles()["Product Manager, Growth"]["stage"], "new")
 
+    def test_4b_two_roles_that_share_an_advert_are_both_kept_and_each_names_the_other(self):
+        a, b = self.roles()["Product Manager, Growth"], self.roles()["Growth Product Manager"]
+        self.assertEqual((a["same_advert"], b["same_advert"]), ([b["id"]], [a["id"]]))
+        self.assertNotIn("same_advert", self.roles()["Senior Product Manager"])
+
     def test_5_a_second_scan_adds_nothing_and_uses_no_ai_on_roles(self):
         calls = self.world.ai_calls()
         self.assertEqual(self.world.scan().returncode, 0)
         self.assertEqual(self.world.crashes(), {})
-        self.assertEqual(len(self.roles()), 3)
+        self.assertEqual(len(self.roles()), 4)
         self.assertEqual(self.world.ai_calls(), calls)
 
     def test_5b_a_role_elsewhere_is_only_looked_up_once(self):

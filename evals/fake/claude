@@ -6,7 +6,7 @@ import os
 import sys
 
 FLAGS = {"Senior Product Manager": ["Needs a made-up licence"]}
-SCORES = {"Senior Product Manager": 9, "Product Manager, Growth": 6, "Product Owner": 3}
+SCORES = {"Senior Product Manager": 9, "Product Manager, Growth": 6, "Product Owner": 3, "Growth Product Manager": 2}
 try:
     with open(os.path.join(os.environ["HOME"], "scores.json")) as f:
         SAID = json.load(f)  # {title: [score, why]}

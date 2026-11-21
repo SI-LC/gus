@@ -1,5 +1,5 @@
 id: see-what-changed
-requirement: I can see what changed on my roles this week, who changed it and why, newest first.
+requirement: I can see what changed on my roles this week as a dated log, newest first. Each line says when, who did what and why, and shows the move itself.
 given: scanned
 check:
   - Claude moves "Senior Product Manager" to applied, saying "you applied on Friday"
@@ -10,8 +10,11 @@ check:
   - see "Claude moved"
   - see "applied"
   - see "skipped"
+  - see "New → Applied"
+  - see "Applied → Skipped"
+  - not see "moved it from"
   - see "ad closed"
   - '"ad closed" appears before "you applied on Friday"'
   - '"Job boards" appears before "Claude moved"'
   - '"Claude moved" appears before "Claude today"'
-judge: Can I tell at a glance what changed today, who did it and why, without opening each role?
+judge: Does this read as a log of things that happened, so I can tell at a glance when each change was made, who made it, what moved where and why, without opening each role?

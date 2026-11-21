@@ -17,6 +17,7 @@ import json
 import re
 import sys
 from datetime import datetime, timezone
+from functools import lru_cache
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from radar.matching import load_config, matches
@@ -85,6 +86,40 @@ def same_vacancy(a: dict, b: dict) -> bool:
 def numbered_apart(a: dict, b: dict) -> bool:
     """Both carry the employer's number and the numbers differ: the employer says they're two vacancies."""
     return bool(ref_of(a) and ref_of(b)) and ref_of(a) != ref_of(b)
+
+
+AD_WORDS, AD_RUN, AD_ALIKE = 80, 5, 0.9  # shorter text is too alike to compare; adverts are compared by their runs of five words
+
+
+@lru_cache(maxsize=4096)
+def ad_runs(text: str) -> frozenset:
+    """Every run of five words in an advert, or nothing when it's too short to tell one advert from another."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return frozenset(zip(*(words[i:] for i in range(AD_RUN)))) if len(words) >= AD_WORDS else frozenset()
+
+
+def same_text(a: dict, b: dict) -> bool:
+    """Nine in ten of the two adverts' runs of words are shared: one advert, perhaps lightly edited. Two roles that share
+    only the company's opening and closing paragraphs are far short of this."""
+    x, y = (ad_runs(str(j.get("description") or "")) for j in (a, b))
+    return bool(x and y) and len(x & y) >= AD_ALIKE * len(x | y)
+
+
+def mark_same_adverts(store: dict) -> None:
+    """Sets `same_advert` on every role whose advert reads the same as another's at the company, in the same place, among
+    roles whose ad is still open: the ids of those others. It may be one vacancy listed twice, or one advert reused for
+    different roles, which only you can tell, so the roles are never merged for it."""
+    by_company = {}
+    for jid, j in store.items():
+        j.pop("same_advert", None)
+        if still_open(j) and (company := role_key(j)[0]) and ad_runs(str(j.get("description") or "")):
+            by_company.setdefault(company, []).append(jid)
+    for ids in by_company.values():
+        for n, a in enumerate(ids):
+            for b in ids[n + 1:]:
+                if same_place(store[a], store[b]) and not numbered_apart(store[a], store[b]) and same_text(store[a], store[b]):
+                    store[a].setdefault("same_advert", []).append(b)
+                    store[b].setdefault("same_advert", []).append(a)
 
 
 def same_ad(a: dict, b: dict, a_id: str, b_id: str) -> bool:
