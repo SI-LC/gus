@@ -80,7 +80,9 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 What happened at the account lives in `data/events.json`, below. An older record's inline `events` and `pending_signals` are
 migrated off it by the next scan.
 
-Accounts come from `watchlist.csv` (`companies sync`), the watchlist agent, or you: `python3 -m radar.resolve --add` or the
+Accounts come from `watchlist.csv` (`companies sync`), the watchlist agent, a role from a job site that Gus kept (scored 5+)
+and found on the employer's board (`radar.links`: a `candidate` with `source: job site role`, its board read from then on, in
+no tier until the agent scores it), or you: `python3 -m radar.resolve --add` or the
 Companies page in the cockpit (POST `/api/company/add` with `name` and an optional `careers` address). Both look for its
 public job board first. From the Companies page a company with no board found is still an account (`source: manual`, no
 `board`) until one turns up; `radar.resolve --add` only adds one whose board it found.
