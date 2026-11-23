@@ -1,0 +1,11 @@
+id: pipeline-marks-my-place
+requirement: On Pipeline, a role in the place I put first in Settings is marked with that place, on the board and in the list, so I can pick out the roles with an office where I want one.
+given: scanned
+check:
+  - open Role Inbox
+  - click "Shortlist"
+  - open Pipeline
+  - see "London"
+  - pick "List"
+  - see "London"
+judge: Without opening a role, can I tell which ones are in my place and which aren't?
