@@ -3,6 +3,7 @@
 data/usage.jsonl has one line per call. On a Claude subscription `cost_usd` is what the
 run would have cost at API prices: a measure of how hard it uses your allowance, not a charge.
 Runs that don't go through radar/ai.py (desktop app scheduled tasks) aren't recorded.
+A line of kind `limit` is a day Claude turned a run away because your plan's allowance was used up, with what it said.
 """
 from __future__ import annotations
 
@@ -71,6 +72,7 @@ def summary() -> dict:
               "posts_month": sum(r.get("posts") or 0 for r in since(x, month_start))},
         "by_task": {k: _total(v) for k, v in sorted(by_task.items())},
         "days": days,
-        "recent": all_rows[-12:][::-1],
+        "limit_days": len({r["at"][:10] for r in since([r for r in all_rows if r.get("kind") == "limit"], month_start)}),
+        "recent": [r for r in all_rows if r.get("kind") != "limit"][-12:][::-1],
         "first": all_rows[0]["at"] if all_rows else None,
     }

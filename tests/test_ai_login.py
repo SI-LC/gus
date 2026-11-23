@@ -21,9 +21,11 @@ class LoginExpiry(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.flag = Path(folder.name) / "login_expired"
-        patches = [mock.patch.object(ai, "EXPIRED_FLAG", self.flag),
+        self.limit = Path(folder.name) / "limit_reached"
+        self.used = []
+        patches = [mock.patch.object(ai, "EXPIRED_FLAG", self.flag), mock.patch.object(ai, "LIMIT_FLAG", self.limit),
                    mock.patch.object(ai, "load_config", lambda: {"ai_provider": "claude_subscription", "ai_daily_budget_usd": 100}),
-                   mock.patch.object(ai.usage, "record", lambda **k: None),
+                   mock.patch.object(ai.usage, "record", lambda **k: self.used.append(k)),
                    mock.patch.object(ai.usage, "today_cost", lambda: 0),
                    mock.patch("radar.notify.cockpit_url", lambda: "https://gus.example")]
         for p in patches:
@@ -35,6 +37,34 @@ class LoginExpiry(unittest.TestCase):
     def run_claude(self, reply):
         with mock.patch.object(subprocess, "run", return_value=reply):
             return ai.run("hello", task="scoring")
+
+    def test_claudes_own_limit_is_said_in_claudes_words_once_a_day_and_clears_when_a_run_works(self):
+        """Without this a plan with its allowance used up looked like any failed run: nothing scored and nothing said."""
+        said = "You've hit your weekly limit · resets Mon 12:00am"
+        for _ in range(2):
+            with self.assertRaises(ai.LimitReached) as caught:
+                self.run_claude(claude(returncode=1, result=said, is_error=True))
+        self.assertIn(said, str(caught.exception))
+        self.assertIsInstance(caught.exception, ai.BudgetReached, "whatever stops for the daily limit stops for this")
+        self.assertEqual(json.loads(self.limit.read_text())["says"], said)
+        self.assertEqual(self.notify.call_count, 1)
+        title, _, message = self.notify.call_args.args[:3]
+        self.assertEqual(title, "Claude's limit is reached")
+        self.assertIn(said, message)
+        self.assertEqual(self.notify.call_args.kwargs["click"], "https://gus.example/#health")
+        self.assertEqual([u["says"] for u in self.used if u.get("kind") == "limit"], [said], "one day reached is one line in the record")
+        self.assertEqual(ai.limit_reached()["says"], said)
+        self.run_claude(claude())
+        self.assertIsNone(ai.limit_reached())
+
+    def test_every_limit_message_claude_code_documents_is_recognised_and_other_failures_are_not(self):
+        for said in ("You've hit your session limit · resets 3:45pm", "You've hit your Opus limit · resets 3:45pm",
+                     "You've hit your monthly spend limit", "spend limit reached", "Credit balance is too low"):
+            with self.assertRaises(ai.LimitReached, msg=said):
+                self.run_claude(claude(returncode=1, result=said, is_error=True))
+        with self.assertRaises(RuntimeError) as caught:
+            self.run_claude(claude(returncode=1, result="API Error: 500 server error", is_error=True))
+        self.assertNotIsInstance(caught.exception, ai.LimitReached)
 
     def test_an_expired_login_is_recorded_and_pushed_once_a_day(self):
         with self.assertRaises(ai.LoginExpired) as caught:

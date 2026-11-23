@@ -1,0 +1,12 @@
+id: claude-limit-reached
+requirement: When Claude says my plan's allowance is used up, every screen tells me what Claude said, and Activity shows how often it has happened.
+given: scanned, limit reached
+check:
+  - banner says "Claude's limit is reached"
+  - banner says "weekly limit"
+  - open Activity
+  - see "Claude's limit was reached"
+  - see "Days Claude's limit was reached this month"
+  - open Settings
+  - see "You've hit your weekly limit"
+judge: Would I know scoring had stopped because of my Claude plan, not something broken, and could I tell whether it keeps happening?

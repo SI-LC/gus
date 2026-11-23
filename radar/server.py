@@ -262,8 +262,10 @@ def ai_state():
     limit, spent = settings.daily_limit(), usage.today_cost()  # a limit of None is no limit
     from radar import ai
     expired = ai.login_expired() if settings.load().get("ai_provider", "claude_subscription") == "claude_subscription" else None
-    reason = "off" if limit == 0 else "signed_out" if expired else "limit" if limit is not None and spent >= limit else None
+    plan = ai.limit_reached()  # Claude's own limit, on your plan or your API credit: not the one you set here
+    reason = "off" if limit == 0 else "signed_out" if expired else "plan_limit" if plan else "limit" if limit is not None and spent >= limit else None
     return {"limit": limit, "spent": round(spent, 2), "paused": reason, "signed_out_since": (expired or {}).get("since"),
+            "plan_limit": {"since": plan.get("since"), "says": plan.get("says")} if plan else None,
             "on_plan": settings.load().get("ai_provider", "claude_subscription") == "claude_subscription"}
 
 
