@@ -30,6 +30,11 @@ class LoginExpired(RuntimeError):
     """The Claude sign-in Gus uses has expired; nothing that needs AI works until you sign in again from the cockpit."""
 
 
+class LimitReached(BudgetReached):
+    """Claude says the allowance on your plan (or your API credit) is used up. Like Gus's own daily limit, nothing that needs
+    AI works until it resets, so everything that stops for one stops for the other."""
+
+
 SIGN_IN = "Sign in again in Settings, AI."
 EXPIRED_FLAG = DATA / "login_expired"  # {"since": ..., "notified": date}: there while the last Claude run failed for want of a login
 _EXPIRED = re.compile(r"oauth|authenticat|logged in|log in|/login|session expired", re.I)
@@ -62,6 +67,47 @@ def login_works():
     """A Claude run (or a fresh sign-in) worked, so the warning comes down."""
     try:
         EXPIRED_FLAG.unlink()
+    except OSError:
+        pass
+
+
+# What Claude Code says when a plan's allowance or an account's credit runs out (code.claude.com/docs/en/errors):
+# "You've hit your session limit · resets 3:45pm", "...weekly limit", "...Opus limit", "...monthly spend limit",
+# "spend limit reached", "Credit balance is too low".
+LIMIT_FLAG = DATA / "limit_reached"  # {"since", "says", "notified"}: there while the last Claude run was turned away for a limit
+_LIMIT = re.compile(r"hit your [\w' ]*limit|spend limit reached|usage limit reached|credit balance is too low", re.I)
+
+
+def limit_reached() -> dict | None:
+    """When Claude last turned a run away because a limit was reached, and what it said, or None when AI last worked."""
+    try:
+        return json.loads(LIMIT_FLAG.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _limit_hit(detail: str) -> LimitReached:
+    """Record that Claude's limit is reached, in Claude's own words, and push once a day until a run works again."""
+    from datetime import datetime
+    from radar.notify import notify, cockpit_url
+    says = " ".join(detail.split())[:160]
+    state, today = limit_reached(), str(date.today())
+    if not state or state.get("day") != today:  # one line a day in the record, however many runs are turned away
+        usage.record(kind="limit", says=says)
+    state = {**(state or {"since": datetime.now().astimezone().isoformat(timespec="seconds")}), "says": says, "day": today}
+    if state.get("notified") != today:
+        state["notified"] = today
+        here = f"{cockpit_url().rstrip('/')}/#health" if cockpit_url() else ""
+        notify("Claude's limit is reached", "", f"Claude says: {says}. New roles won't be scored until it resets. Gus tries again on each run.", click=here)
+    LIMIT_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    LIMIT_FLAG.write_text(json.dumps(state))
+    return LimitReached(f"Claude's limit is reached. Claude says: {says}")
+
+
+def limit_lifted():
+    """A Claude run worked, so the warning comes down."""
+    try:
+        LIMIT_FLAG.unlink()
     except OSError:
         pass
 
@@ -133,17 +179,26 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         u = d.get("usage") or {}
         usage.record(kind="ai", task=task, provider=provider, model=model, model_id=ran_as(d), cost_usd=d.get("total_cost_usd"),
                      input_tokens=(u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0),
-                     output_tokens=u.get("output_tokens"), searches=(u.get("server_tool_use") or {}).get("web_search_requests"),
+                     output_tokens=u.get("output_tokens"), searches=searches(d), turns=d.get("num_turns"),
                      duration_ms=d.get("duration_ms"), ok=not d.get("is_error"))
     if out.returncode != 0 or d.get("is_error"):
         detail = (d.get("result") or out.stderr or out.stdout).strip()[:300]
         if provider == "claude_subscription" and _EXPIRED.search(detail):
             raise _login_failed(detail)
+        if _LIMIT.search(detail):
+            raise _limit_hit(detail)
         hint = " (if it says you're not logged in, sign in again from Settings → AI)" if provider == "claude_subscription" else " (check Settings → AI)"
         raise RuntimeError(f"Claude Code failed{hint}: {detail}")
     if provider == "claude_subscription":
         login_works()
+    limit_lifted()
     return d.get("result") or out.stdout
+
+
+def searches(reply: dict) -> int:
+    """Web searches a run made. Claude Code counts them per model and leaves the run's own `server_tool_use` at 0."""
+    per_model = sum(m.get("webSearchRequests") or 0 for m in (reply.get("modelUsage") or {}).values())
+    return per_model or ((reply.get("usage") or {}).get("server_tool_use") or {}).get("web_search_requests") or 0
 
 
 def ran_as(reply: dict) -> str | None:

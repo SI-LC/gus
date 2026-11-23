@@ -60,7 +60,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False, job_site_only=False):
+    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False, job_site_only=False, limit_reached=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -96,6 +96,8 @@ class World:
             self.env.pop(key, None)
         if signed_out:
             (self.home / "signed-out").touch()
+        if limit_reached:
+            (self.home / "limit-reached").touch()
         self.server = None
         self.url = ""
 

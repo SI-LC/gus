@@ -262,8 +262,10 @@ def ai_state():
     limit, spent = settings.daily_limit(), usage.today_cost()  # a limit of None is no limit
     from radar import ai
     expired = ai.login_expired() if settings.load().get("ai_provider", "claude_subscription") == "claude_subscription" else None
-    reason = "off" if limit == 0 else "signed_out" if expired else "limit" if limit is not None and spent >= limit else None
+    plan = ai.limit_reached()  # Claude's own limit, on your plan or your API credit: not the one you set here
+    reason = "off" if limit == 0 else "signed_out" if expired else "plan_limit" if plan else "limit" if limit is not None and spent >= limit else None
     return {"limit": limit, "spent": round(spent, 2), "paused": reason, "signed_out_since": (expired or {}).get("since"),
+            "plan_limit": {"since": plan.get("since"), "says": plan.get("says")} if plan else None,
             "on_plan": settings.load().get("ai_provider", "claude_subscription") == "claude_subscription"}
 
 
@@ -563,11 +565,12 @@ def score_again(ids):
         return {"error": f"That's {len(ids)} roles. Gus scores up to {MOST_AGAIN} again at a time"}
     if bare := [store[i] for i in ids if store[i].get("pruned")]:
         return {"error": f"{bare[0].get('title')} at {bare[0].get('company')} closed a while ago and its description was cleared, so there's nothing to score"}
-    paused = ai_state()["paused"]
-    if paused:
+    ai = ai_state()
+    if ai["paused"]:
         return {"error": {"off": "AI is off, so nothing can be scored. Turn it on in Settings, AI",
                           "signed_out": "The Claude sign-in has expired, so nothing can be scored. Sign in again in Settings, AI",
-                          "limit": "Today's AI limit is used up, so scoring resumes tomorrow"}[paused]}
+                          "plan_limit": f"Claude's limit is reached, so nothing can be scored. Claude says: {(ai.get('plan_limit') or {}).get('says')}",
+                          "limit": "Today's AI limit is used up, so scoring resumes tomorrow"}.get(ai["paused"], "AI is paused, so nothing can be scored")}
     service.score(ids)
     return {"ok": True, "roles": len(ids)}
 

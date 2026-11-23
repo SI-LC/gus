@@ -372,7 +372,7 @@ function costs() {
   const u = S.usage, fact = (v, l) => `<div><span>${l}</span><b>${v}</b></div>`;
   return `<div class="section">What the AI used</div>
     <div class="facts">${fact(usd(u.ai.today.cost_usd), "Claude today")}${fact(usd(u.ai.week.cost_usd), "Claude this week")}${fact(usd(u.ai.month.cost_usd), "Claude this month")}
-      ${fact(S.usage.daily_limit == null ? "No limit" : S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.ai.month.searches, "Searches this month")}
+      ${fact(S.usage.daily_limit == null ? "No limit" : S.usage.daily_limit ? usd(S.usage.daily_limit) : "AI off", "Daily limit")}${fact(u.ai.month.runs, "Runs this month")}${fact(u.limit_days || 0, "Days Claude's limit was reached this month")}${fact(u.ai.month.searches, "Searches this month")}
       ${fact(compact(u.ai.month.tokens || 0), "Tokens this month")}${fact(usd(u.x.month.cost_usd), "X this month (est.)")}</div>
     ${Object.keys(u.by_task).length ? `<div class="section">This month by task</div><table>${Object.entries(u.by_task).map(([k, v]) => `<tr><td><b>${esc(TASKS[k] || k)}</b></td><td>${v.runs} runs</td><td>${v.searches} searches</td><td>${usd(v.cost_usd)}</td></tr>`).join("")}</table>` : ""}
     ${u.recent.length ? `<div class="section">Latest</div><table>${u.recent.map(r => `<tr><td class="sub">${ago(r.at)}</td><td>${esc(r.kind === "x" ? "X" : TASKS[r.task] || r.task)}</td><td class="hide-sm sub">${esc(r.model_id ? modelName(r.model_id) : r.model || (r.posts + " posts"))}</td><td>${r.cost_usd == null ? "–" : usd(r.cost_usd)}</td></tr>`).join("")}</table>` : ""}
@@ -503,7 +503,7 @@ function roleCard(j, actions, extra = "") {
       <div class="co">${coName(j)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
       <div class="sub">${rolePills(j)} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
-      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : S.ai && S.ai.paused ? "Not scored: AI is paused." : (S.running || []).includes("score") ? "Gus is scoring it now." : "Gus scores it on the next check."}</span>`}</p>
+      <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : planLimit() ? "Not scored: Claude's limit is reached." : S.ai && S.ai.paused ? "Not scored: AI is paused." : (S.running || []).includes("score") ? "Gus is scoring it now." : "Gus scores it on the next check."}</span>`}</p>
       ${roleFlags(j)}${sameAdvert(j)}${extra}
     </div>
     <div class="actions">${actions}${SOURCE_LABEL[j.source] && j.link_kind !== "company" ? `<a class="btn-link" href="${link(j.url)}" target="_blank" rel="noopener">${esc(linkGoes(j).replace("Via", "Open on"))}</a>` : ""}${j.can_watch ? `<button class="link" onclick="watchCompany(${jsq(j.id)})">Add to your companies</button>` : ""}</div></article>`;
@@ -795,7 +795,8 @@ const V = {
     const { read, saved, month } = gusDid(), worth = u.ai.month.cost_usd + u.x.month.cost_usd;
     const big = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
     const row = (kind, name, text) => `<div class="src"><span class="pill ${kind}">${name}</span><span class="sub">${text}</span></div>`;  // kind: done is working, warm wants a look, due is broken, none is off
-    const ai = signedOut() ? row("due", "AI", `Sign-in expired ${ago(S.ai.signed_out_since)}`) : S.ai.paused ? row("warm", "AI", "Paused: today's limit is reached") : row("done", "AI", "Ready");
+    const ai = signedOut() ? row("due", "AI", `Sign-in expired ${ago(S.ai.signed_out_since)}`)
+      : planLimit() ? row("due", "AI", `Claude's limit was reached ${ago(S.ai.plan_limit.since)}. Claude says: ${esc(S.ai.plan_limit.says)}. Gus tries again on each run.`) : S.ai.paused ? row("warm", "AI", "Paused: today's limit is reached") : row("done", "AI", "Ready");
     return `<h1>Activity</h1>
       <div class="big">${big(read.toLocaleString(), `role${read === 1 ? "" : "s"} read and scored in ${month}`)}${big("~" + saved, `of reading saved, at about ${READ_MIN} minutes a role`)}
         ${big(usd(worth), S.ai.on_plan ? `API value in ${month}, covered by your Claude plan` : `spent on AI in ${month}`)}</div>
@@ -907,7 +908,7 @@ const SETTINGS_TABS = [
     return `<section class="group"><h2>AI connection</h2>${fieldRow(SET.schema.find(f => f.key === "ai_provider"))}
       ${key ? secretField([key, SET.secret_keys[key]]) : ""}
       <div class="field"><label>Connection</label><div class="row"><button onclick="testAI()">Test connection</button>${SET.values.ai_provider === "claude_subscription" ? `<button onclick="signIn('ai-login')">Sign in with Claude</button>` : ""}<span id="ai-test" class="sub"></span></div>
-      <div id="ai-login">${signedOut() ? `<p class="bad">Your Claude sign-in has expired. Sign in again to carry on.</p>` : ""}</div><div class="help">${help}</div></div></section>
+      <div id="ai-login">${signedOut() ? `<p class="bad">Your Claude sign-in has expired. Sign in again to carry on.</p>` : planLimit() ? `<p class="bad">Claude says: ${esc(S.ai.plan_limit.says)}. This is Claude's own limit, not the daily limit below. Gus tries again on each run.</p>` : ""}</div><div class="help">${help}</div></div></section>
       <section class="group"><h2>Models and limits</h2>${fieldsOf("AI", [...skip, "ai_provider"])}</section>`;
   }],
   ["matching", "Matching", () => `<section class="group"><h2>What counts as a match</h2>${fieldsOf("Matching")}</section>`],
@@ -1096,15 +1097,17 @@ const themeField = () => `<div class="field"><label>Theme</label>
   <div class="help">System follows your device. This is saved in this browser, so each device keeps its own.</div></div>`;
 const unscored = () => S.jobs.filter(j => j.score == null).length;
 const signedOut = () => !!(S.ai && S.ai.paused === "signed_out");
+const planLimit = () => !!(S.ai && S.ai.paused === "plan_limit" && S.ai.plan_limit);  // Claude's own limit, not the daily one set here
 function aiMessage() {
   if (!S.ai || !S.ai.paused) return "";
   if (signedOut()) return `Your Claude sign-in expired ${ago(S.ai.signed_out_since)}, so new roles aren't being scored.`;
+  if (planLimit()) return `Claude's limit is reached, so new roles aren't being scored. Claude says: ${S.ai.plan_limit.says}.`;
   return S.ai.paused === "off" ? "AI is off, so new roles aren't being scored." : `Today's AI limit of ${usd(S.ai.limit)} is used up, so scoring resumes tomorrow.`;
 }
 function drawBanner() {
   const m = aiMessage(), el = $("banner"), n = unscored();
   el.hidden = !m;
-  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} role${n === 1 ? " is" : "s are"} waiting. ` : ""}<a href="#settings/ai">${signedOut() ? "Sign in with Claude" : S.ai.paused === "off" ? "Turn AI on" : "Change the limit"}</a>`;
+  if (m) el.innerHTML = `<b>${esc(m)}</b> ${n ? `${n} role${n === 1 ? " is" : "s are"} waiting. ` : ""}<a href="${planLimit() ? "#health" : "#settings/ai"}">${signedOut() ? "Sign in with Claude" : planLimit() ? "See what Gus used" : S.ai.paused === "off" ? "Turn AI on" : "Change the limit"}</a>`;
 }
 function drawTicker() {
   drawBanner();

@@ -131,6 +131,10 @@ class AddRole(unittest.TestCase):
             self.assertIn("description was cleared", server.score_again(["gh:acme:1"])["error"])
         with mock.patch.object(server, "ai_state", return_value={"paused": "limit"}):
             self.assertIn("limit", server.score_again(["gh:acme:9"])["error"])  # said now, not found out later
+        with mock.patch.object(server, "ai_state", return_value={"paused": "plan_limit", "plan_limit": {"says": "resets at 3pm"}}):
+            self.assertIn("Claude says: resets at 3pm", server.score_again(["gh:acme:9"])["error"])
+        with mock.patch.object(server, "ai_state", return_value={"paused": "something new"}):
+            self.assertIn("AI is paused", server.score_again(["gh:acme:9"])["error"])  # a reason added later is still a refusal, not a crash
         self.scoring.assert_not_called()
 
     def test_a_skip_can_say_why_and_the_reason_goes_when_the_role_comes_back(self):

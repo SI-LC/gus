@@ -9,10 +9,12 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 
 ## 1. Harvest: find companies and roles from every source
 
-a. **Signals** in `data/signals.json` with `status: "new"`: newsletters, funding news, HN job posts, Reddit, X and
-   Bluesky, from whichever feeds the candidate has turned on. For each one,
-   work out the company or role behind it, then set `status` to `processed` (or `ignored`) and add `company`, `job_id` and
-   `event_id` for whatever it turned out to be.
+a. **Signals**: the new ones are in the brief under `signals`: newsletters, funding news, HN job posts, Reddit, X and
+   Bluesky, from whichever feeds the candidate has turned on. Each is there in full, so don't search
+   `data/signals.json` for them. For each one,
+   work out the company or role behind it. When you've been through them, mark them all in one call:
+   `python3 -m radar.signals mark '[{"id": "<signal id>", "status": "processed", "company": "<account>", "job_id": "<role id>"}, {"id": "...", "status": "ignored"}]'`,
+   with `company` and `job_id` for whatever each turned out to be. Every signal in the brief gets `processed` or `ignored`.
    Signals of kind `jobs` can list many roles in one post, with links in brackets. Go through every listing and follow up only target
    roles open to the candidate's locations. If a remote role doesn't state its region, check before adding it.
 b. **Board sweep** (web search, every run): find target roles in the candidate's locations on *any* company's board, not
@@ -30,27 +32,32 @@ e. **Established companies**: funding news only finds young companies, so also l
    who the candidate's watched companies compete with, who recently bought or sold a company in those domains, and listed software
    companies. Open each one's careers page and record its `careers_url`. Big companies often run their own careers site, so these
    won't turn up in the board sweep.
-f. **Lookalikes**: for the 3 best-scoring roles in `data/jobs.json`, name 2 similar companies
+f. **Lookalikes**: for the 3 best-scoring roles (`best_roles` in the brief), name 2 similar companies
    with a presence in a target location that aren't watched yet.
 
 ## 1b. Events
-When a signal concerns an account in `data/companies.json` (funding, a new local office, a new leader in the candidate's area,
-a launch in the candidate's area, or someone posting about hiring), record it in `data/events.json`, keyed
-`<account slug>:<type>:<YYYY-MM-DD>` (add `-2`, `-3` if that day already has one):
-`{"account": "<name as in companies.json>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary", "url",
-"date": "YYYY-MM-DD", "source": "signal:<signal id>"}`. Only with a link and a real date, and never twice for the same link at the same
-account. `source` is `signal:<signal id>` when a signal led you to it and `agent` when you found it yourself, by a web search say: no
-other value. `london_office` is an old name: it means a new office in any of the candidate's target locations. Put the new event's id on the signal as `event_id`. Roles are added automatically (a role scoring 7+ becomes a
-`role_posted` event); don't record them. These events are what weekly moves are built on.
+When a signal concerns an account Gus has (funding, a new local office, a new leader in the candidate's area,
+a launch in the candidate's area, or someone posting about hiring), record it as an event. Record all of a run's events in
+one call, never by editing `data/events.json`:
+`python3 -m radar.events add-many '[{"account": "<company>", "type": "funding|london_office|leader_hire|launch|post_hiring|mention", "summary": "one line", "url": "...", "date": "YYYY-MM-DD", "source": "signal:<signal id>"}]'`.
+It answers each event's id, or why it wasn't recorded, in the same order. Only with a link and a real date. The same link
+at the same account is one event, however often it's sent. `source` is `signal:<signal id>` when a signal led you to it and
+`agent` when you found it yourself, by a web search say: no other value. With a signal as the source, the command puts the
+event's id on that signal for you. `london_office` is an old name: it means a new office in any of the candidate's target
+locations. Roles are added automatically (a role scoring 7+ becomes a `role_posted` event); don't record them. These events
+are what weekly moves are built on.
 
 ## 2. Companies
 Company research and fit assessment belong to the watchlist loop (`prompts/watchlist.md`).
-Here, add any new company you came across to `data/companies.json` as
-`{"status": "candidate", "source", "signal", "careers_url"}`, with `careers_url` whenever you can find one: the run's next step reads
+To find out whether Gus already has the companies you came across, ask about them together:
+`python3 -m radar.companies known "<Company>" "<Company>" ...` answers how Gus has each one, or `null` when it's new. Never
+re-add one it says the candidate removed. Add the new ones in one call, never by editing `data/companies.json`:
+`python3 -m radar.companies set '{"<Company>": {"source": "...", "signal": "...", "careers_url": "..."}}'` (a new company
+starts as a candidate), with `careers_url` whenever you can find one: the run's next step reads
 the board behind it automatically, and it's the only way a company with its own careers site gets one. Open the address before
 you record it; a dead or guessed address wastes the step. **Fast path**: if it has a live target role in a target location that
 looks like a 7+, run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` now so the role isn't missed, and
-mark the record `status: "candidate", "fast_tracked": true`. The loop assesses it properly later.
+include `"fast_tracked": true` on its record. The loop assesses it properly later.
 
 ## 3. Score and seek
 
@@ -58,7 +65,8 @@ mark the record `status: "candidate", "fast_tracked": true`. The loop assesses i
 - For every role in `data/jobs.json` with `score: null`, score it exactly as `prompts/triage.md`
   describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
   `stage` to `skipped`, unless the company's record has `favourite: true`: those stay `new` for the candidate to judge.
-- For A/B accounts with a fresh event and fewer than 2 people mapped, run `python3 -m radar.people "<Company>"` (at most 3 per run).
+- `people_wanted` in the brief lists A and B accounts with fresh news and fewer than 2 people mapped. Run
+  `python3 -m radar.people "<Company>"` for each (it lists at most 3).
 
 ## 4. Report
 
