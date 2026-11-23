@@ -6,6 +6,8 @@ that scored ROLE_EVENT_SCORE or more, or from you. Every one needs a link and a 
 
     python3 -m radar.events sync          # housekeeping: role events from jobs, migrate older shapes
     python3 -m radar.events add ACCOUNT TYPE SUMMARY URL DATE   # record one event, checked before it's saved
+    python3 -m radar.events add-many '[{"account": "Acme", "type": "funding", "summary": "...", "url": "https://...", "date": "2026-11-01", "source": "signal:<id>"}]'
+                                          # how an agent records what it found: a whole list, each one checked
     python3 -m radar.events alert         # push fresh hiring news at A/B accounts to your phone, once each
     python3 -m radar.events list "Acme"   # an account's events, fresh first
 
@@ -91,6 +93,33 @@ def add(account: str, type_: str, summary: str, url: str, when: str, source: str
         events.setdefault(eid, {"account": account, "type": type_, "summary": (summary or "").strip()[:300], "url": url,
                                "date": str(parse_date(when)), "source": source, "added": str(today())})
     return eid
+
+
+def add_many(items: list[dict]) -> list[str]:
+    """Record a list of events an agent found. Answers, in the same order, each one's id or why it wasn't recorded.
+    `source` is `agent`, or `signal:<signal id>`, and then that signal is pointed at its event."""
+    from radar.companies import find
+    companies, out = read(COMPANIES, {}), []
+    for item in items if isinstance(items, list) else []:
+        item = item if isinstance(item, dict) else {}
+        account, source = find(item.get("account"), companies), str(item.get("source") or "agent")
+        if not account:
+            out.append(f"not recorded: {item.get('account')!r} isn't in companies.json. Add the company first")
+            continue
+        if source != "agent" and not source.startswith("signal:"):
+            out.append("not recorded: source must be `agent` or `signal:<signal id>`")
+            continue
+        try:
+            eid = add(account, item.get("type"), item.get("summary"), item.get("url"), item.get("date"), source)
+        except ValueError as e:
+            out.append(f"not recorded: {e}")
+            continue
+        out.append(eid)
+        if source.startswith("signal:"):
+            with locked(SIGNALS) as signals:
+                if source[7:] in signals:
+                    signals[source[7:]]["event_id"] = eid
+    return out
 
 
 def decorate(e: dict) -> dict:
@@ -213,6 +242,12 @@ def main():
     elif cmd == "list":
         for e in for_account(sys.argv[2], read(EVENTS, {})):
             print(f"{'●' if e['fresh'] else '○'} {e['date']}  {e['type']:<14} {e.get('summary', '')[:70]}  {e['url']}")
+    elif cmd == "add-many":
+        try:
+            items = json.loads(sys.argv[2])
+        except (IndexError, ValueError):
+            sys.exit("add-many takes one JSON list of events")
+        print(json.dumps(add_many(items), ensure_ascii=False))
     elif cmd == "add":
         import argparse
         ap = argparse.ArgumentParser(prog="radar.events add")

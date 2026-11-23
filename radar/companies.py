@@ -10,6 +10,11 @@ Usage:
     python3 -m radar.companies health             # flag watched companies whose board keeps failing
     python3 -m radar.companies due                # list what the agent should (re)assess
     python3 -m radar.companies veto "Spotify"     # remove from watchlist, never re-add
+
+How an agent reads and changes records, several at a time, so a run doesn't search the file or edit it line by line:
+    python3 -m radar.companies known "Acme" "Newco"          # does Gus have each one, and as what
+    python3 -m radar.companies show "Acme" "Newco"           # their records
+    python3 -m radar.companies set '{"Acme": {"fit": 8, "fit_why": "...", "status": "watched"}, "Newco": {"source": "..."}}'
 """
 from __future__ import annotations
 
@@ -20,14 +25,17 @@ import sys
 from datetime import date, timedelta
 
 from radar import web
+from radar.jobs import same_company
 from radar.paths import COMPANIES, DATA, SIGNALS, watchlist_path
-from radar.store import read
+from radar.store import locked, read
 
 BOARD_ERRORS = DATA / "board_errors.json"
 STALE_DAYS = 30
 NEIGHBOUR_DAYS = 28
 CAREERS_DAYS = 3  # how often an agent reads the careers page of a watched company that has no board
 CAREERS_PER_RUN = 8  # companies an agent reads that way per run, the candidate's own choices first
+YOURS = ["favourite", "vetoed", "tier_locked", "website_locked", "board_guess_rejected"]  # only the candidate sets these
+REMOVED = "removed by the candidate, never re-add"
 
 
 def load():
@@ -127,6 +135,69 @@ def due():
     return out
 
 
+def find(name, c: dict) -> str | None:
+    """A company as Gus spells it, however it was typed."""
+    name = str(name or "").strip()
+    return next((n for n in c if n.lower() == name.lower()), None) or \
+        next((n for n in c if same_company(n) and same_company(n) == same_company(name)), None)
+
+
+def known(names: list[str]) -> dict:
+    """For each name: how Gus has it ("Acme: watched, tier A"), or None when it's new."""
+    c, out = load(), {}
+    for name in names:
+        real = find(name, c)
+        rec = c.get(real) or {}
+        out[name] = None if not real else f"{real}: {REMOVED}" if rec.get("vetoed") else \
+            f"{real}: {rec.get('status', 'candidate')}" + (f", tier {rec['tier']}" if rec.get("tier") else "")
+    return out
+
+
+def show(names: list[str]) -> dict:
+    c = load()
+    return {name: c.get(find(name, c)) for name in names}
+
+
+def set_many(updates: dict) -> dict:
+    """Add companies and change fields on several records at once. A value of null clears a field. Answers {name: "added",
+    "saved" or why not}. The candidate's own choices stay as they are: a removed company is never touched, a favourite
+    or a locked tier keeps its status and tier, and the fields in YOURS can't be set."""
+    from radar.schema import check_record
+    out = {}
+    with locked(COMPANIES) as c:
+        for name, fields in (updates if isinstance(updates, dict) else {}).items():
+            if not isinstance(fields, dict) or not str(name).strip():
+                out[name] = "not saved: give each company an object of fields"
+                continue
+            real = find(name, c)
+            rec = dict(c.get(real) or {})
+            if rec.get("vetoed"):
+                out[name] = f"not saved: {REMOVED}"
+                continue
+            kept = [k for k in fields if k in YOURS]
+            if rec.get("tier_locked") and "tier" in fields and fields["tier"] != rec.get("tier"):
+                kept.append("tier")
+            if (rec.get("favourite") or rec.get("tier_locked")) and fields.get("status", "watched") != "watched":
+                kept.append("status")
+            before = rec.get("fit")
+            for k, v in fields.items():
+                if k in kept:
+                    continue
+                if v is None:
+                    rec.pop(k, None)
+                else:
+                    rec[k] = v
+            rec.setdefault("status", "candidate")
+            if before is not None and rec.get("fit") != before and "previous_fit" not in fields:
+                rec["previous_fit"] = before
+            if errs := check_record("companies", real or str(name), rec, {}, {}):
+                out[name] = "not saved: " + "; ".join(errs)
+                continue
+            c[real or str(name).strip()] = rec
+            out[name] = ("saved" if real else "added") + (f"; kept {', '.join(kept)} as the candidate set {'it' if len(kept) == 1 else 'them'}" if kept else "")
+    return out
+
+
 def veto(name: str):
     c = load()
     rows = watchlist()
@@ -184,6 +255,16 @@ def main():
         print(json.dumps(due(), indent=2))
     elif cmd == "veto":
         veto(" ".join(sys.argv[2:]))
+    elif cmd == "known":
+        print(json.dumps(known(sys.argv[2:]), ensure_ascii=False))
+    elif cmd == "show":
+        print(json.dumps(show(sys.argv[2:]), ensure_ascii=False))
+    elif cmd == "set":
+        try:
+            updates = json.loads(sys.argv[2])
+        except (IndexError, ValueError):
+            sys.exit("set takes one JSON object: '{\"Company\": {\"field\": \"value\"}}'")
+        print(json.dumps(set_many(updates), ensure_ascii=False))
 
 
 if __name__ == "__main__":

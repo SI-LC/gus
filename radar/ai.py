@@ -133,7 +133,7 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         u = d.get("usage") or {}
         usage.record(kind="ai", task=task, provider=provider, model=model, model_id=ran_as(d), cost_usd=d.get("total_cost_usd"),
                      input_tokens=(u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0),
-                     output_tokens=u.get("output_tokens"), searches=(u.get("server_tool_use") or {}).get("web_search_requests"),
+                     output_tokens=u.get("output_tokens"), searches=searches(d), turns=d.get("num_turns"),
                      duration_ms=d.get("duration_ms"), ok=not d.get("is_error"))
     if out.returncode != 0 or d.get("is_error"):
         detail = (d.get("result") or out.stderr or out.stdout).strip()[:300]
@@ -144,6 +144,12 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
     if provider == "claude_subscription":
         login_works()
     return d.get("result") or out.stdout
+
+
+def searches(reply: dict) -> int:
+    """Web searches a run made. Claude Code counts them per model and leaves the run's own `server_tool_use` at 0."""
+    per_model = sum(m.get("webSearchRequests") or 0 for m in (reply.get("modelUsage") or {}).values())
+    return per_model or ((reply.get("usage") or {}).get("server_tool_use") or {}).get("web_search_requests") or 0
 
 
 def ran_as(reply: dict) -> str | None:
