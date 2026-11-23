@@ -104,6 +104,7 @@ def state():
         "setup": firstrun.setup_state(),
         "demo": (DATA / "demo").exists(),  # a made-up search (evals/demo.py): the cockpit says so
         "places": list(dict.fromkeys(p[0] for p in places)),
+        "home_place": settings.home_place(places),  # the place Pipeline marks roles in
         "kinds": list(dict.fromkeys(k[0] for k in kinds)),
         "kind_default": kinds[-1][0] if kinds else "",
         "jobs": jobs,

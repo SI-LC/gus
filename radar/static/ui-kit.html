@@ -166,22 +166,22 @@
   <div class="section">Pipeline card</div>
   <div class="board kit-board">
     <div class="col"><h3>To apply <span>2</span></h3>
-      <button class="pc next"><span class="pc-top"><span>Northwind</span><span>3d</span></span><span class="pc-title">Senior Product Manager, Payments</span><span class="pc-bot"><span class="pill due">Apply this week</span><b>9</b></span></button>
-      <button class="pc"><span class="pc-top"><span>Example Labs</span><span>1d</span></span><span class="pc-title">Product Lead</span><span class="pc-bot"><span>Nothing to do yet</span><b>7</b></span></button>
+      <button class="pc next"><span class="pc-top"><span>Northwind</span><span>3d</span></span><span class="pc-title">Senior Product Manager, Payments</span><span class="pc-bot"><span class="pill due">Apply this week</span><span class="pc-end"><span class="pill home">London</span><b>9</b></span></span></button>
+      <button class="pc"><span class="pc-top"><span>Example Labs</span><span>1d</span></span><span class="pc-title">Product Lead</span><span class="pc-bot"><span>Nothing to do yet</span><span class="pc-end"><b>7</b></span></span></button>
     </div>
     <div class="col drop-on"><h3>Applied <span>0</span></h3></div>
   </div>
-  <p class="kit-use sub kit-gap">The whole card is the button. An amber edge (<code>.next</code>) means it's waiting for you, and the words say what for. A card can be dragged to another column: the one it would land in is outlined (<code>.drop-on</code>), and the card being held fades (<code>.dragging</code>).</p>
+  <p class="kit-use sub kit-gap">The whole card is the button. An amber edge (<code>.next</code>) means it's waiting for you, and the words say what for. A square mark with a place (<code>.pill.home</code>) means the role is in the place you put first in Settings; a role anywhere else has none. A card can be dragged to another column: the one it would land in is outlined (<code>.drop-on</code>), and the card being held fades (<code>.dragging</code>).</p>
 
   <div class="section">Pipeline list</div>
-  <table class="plist"><thead><tr><th>Role</th><th>Fit</th><th>Since</th><th>Next</th></tr></thead>
-    <tbody><tr class="grp"><th colspan="4"><h3>To apply <span>1</span></h3></th></tr>
-      <tr><td><button class="link rowlink">Senior Product Manager, Payments</button><div class="sub">Northwind</div></td><td class="num">9</td><td class="sub">3 days ago</td><td><span class="pill due">Apply this week</span></td></tr></tbody>
-    <tbody class="drop-on"><tr class="grp"><th colspan="4"><h3>Applied <span>0</span></h3></th></tr></tbody>
-    <tbody><tr class="grp"><th colspan="4"><h3>Finished <span>1</span></h3></th></tr>
-      <tr class="dim"><td><button class="link rowlink">Product Lead</button><div class="sub">Example Labs</div></td><td class="num">7</td><td class="sub">2 weeks ago</td><td></td></tr></tbody>
+  <table class="plist"><thead><tr><th>Role</th><th>Where</th><th>Fit</th><th>Since</th><th>Next</th></tr></thead>
+    <tbody><tr class="grp"><th colspan="5"><h3>To apply <span>1</span></h3></th></tr>
+      <tr><td><button class="link rowlink">Senior Product Manager, Payments</button><div class="sub">Northwind</div></td><td><span class="pill home">London</span></td><td class="num">9</td><td class="sub">3 days ago</td><td><span class="pill due">Apply this week</span></td></tr></tbody>
+    <tbody class="drop-on"><tr class="grp"><th colspan="5"><h3>Applied <span>0</span></h3></th></tr></tbody>
+    <tbody><tr class="grp"><th colspan="5"><h3>Finished <span>1</span></h3></th></tr>
+      <tr class="dim"><td><button class="link rowlink">Product Lead</button><div class="sub">Example Labs</div></td><td><span class="sub">Remote</span></td><td class="num">7</td><td class="sub">2 weeks ago</td><td></td></tr></tbody>
   </table>
-  <p class="kit-use sub kit-gap">The same roles as the board, in a group for each stage. A stage with no roles keeps its heading, so there is somewhere to drop one. A row drags like a card, and the group it would land in is marked (<code>.drop-on</code>).</p>
+  <p class="kit-use sub kit-gap">The same roles as the board, in a group for each stage. Where says each role's place, marked (<code>.pill.home</code>) when it's the one you put first in Settings. A stage with no roles keeps its heading, so there is somewhere to drop one. A row drags like a card, and the group it would land in is marked (<code>.drop-on</code>).</p>
 
   <div class="section">A line that opens</div>
   <article class="mv"><button class="mv-row"><span class="mv-who"><b>Alex Example</b> <span>Head of Product, Northwind</span></span>

@@ -683,8 +683,15 @@ class Targeting(unittest.TestCase):
 
     def test_where(self):
         from radar.matching import where
-        for loc, want in (("Berlin / London", "London"), ("Remote, United Kingdom", "Remote"), ("Manchester, UK", "UK"), ("Paris, Europe", "Europe")):
+        for loc, want in (("Berlin / London", "London"), ("Remote, United Kingdom", "Remote"), ("Manchester, UK", "UK"), ("Paris, Europe", "Europe"),
+                          ("Remote across Europe (not London-based)", "Remote"), ("Not in London: Leeds, UK", "UK")):
             self.assertEqual(where(loc), want)
+
+    def test_the_first_place_is_the_one_pipeline_marks(self):
+        from radar.settings import groups, home_place
+        self.assertEqual(home_place(groups("London: london\nRemote: remote\nElsewhere: *")), "London")
+        self.assertEqual(home_place(groups("Elsewhere: *")), "")  # a mark on every role would say nothing
+        self.assertEqual(home_place([]), "")
 
     def test_titles(self):
         from radar.matching import load_config, role_type, wanted_title

@@ -47,7 +47,7 @@ SCHEMA = [
     ("title_exclude", "Titles to leave out", "lines", "Matching", "Drop a role if its title contains any of these, even if it's also in the list above."),
     ("title_exclude_except", "Exceptions to leave out", "lines", "Matching", "Phrases the list above ignores, so \"engineer\" there doesn't drop a product engineer."),
     ("location_include", "Locations to include", "lines", "Matching", "One per line. Add (exactly) to match only that word, so \"remote (exactly)\" won't match \"Remote, US\"."),
-    ("where_groups", "Places in Role Inbox", "lines", "Matching", "How Role Inbox groups roles. One per line, Label: words to look for. The first that fits wins, and * means anything else."),
+    ("where_groups", "Places in Role Inbox", "lines", "Matching", "How Role Inbox groups roles. One per line, Label: words to look for. The first that fits wins, and * means anything else. Pipeline marks the roles in the first place."),
     ("role_kinds", "Role types in Role Inbox", "lines", "Matching", "Optional, in the same form, like Engineering: engineer, developer. Leave empty for no role types."),
     ("notify_min_score", "Notify at score", "int:1-10", "Matching", "Push a notification for roles at or above this."),
     ("salary_floor", "Lowest salary you want", "int:0-1000000", "Matching", "A yearly figure. Roles that state less lose a point per 10% under it, up to 5. Roles with no stated salary aren't changed. 0 turns this off."),
@@ -179,9 +179,15 @@ def group_of(text, rows) -> str:
     text = (text or "").lower()
     for label, words in rows:
         for w in words:
-            if w == "*" or (re.search(rf"\b{re.escape(w)}\b", text) if len(w) < 3 else w in text):
+            said = text if w == "*" else re.sub(rf"\bno[tn][\s-]+(?:based\s+)?(?:in\s+)?{re.escape(w)}", " ", text)  # "not London-based" isn't London
+            if w == "*" or (re.search(rf"\b{re.escape(w)}\b", said) if len(w) < 3 else w in said):
                 return label
     return ""
+
+
+def home_place(rows) -> str:
+    """The place you put first, which Pipeline marks roles in. Not the catch-all: a mark on every role says nothing."""
+    return next((label for label, words in rows[:1] if words != ["*"]), "")
 
 
 SECRET_KEYS = {
