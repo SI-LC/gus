@@ -28,6 +28,9 @@ prompt = sys.stdin.read()
 if os.path.exists(SIGNED_OUT):
     print(json.dumps({"is_error": True, "result": "Failed to authenticate: OAuth session expired and could not be refreshed"}))
     sys.exit(1)
+if os.path.exists(os.path.join(os.environ["HOME"], "limit-reached")):
+    print(json.dumps({"is_error": True, "result": "You've hit your weekly limit · resets Mon 12:00am"}))
+    sys.exit(1)
 with open(os.path.join(os.environ["HOME"], "claude-calls.log"), "a") as log:
     log.write("call\n")
 result = "[]"
