@@ -2,17 +2,19 @@
 
     python3 -m radar.service --host 0.0.0.0
 
-There are four jobs, run strictly one at a time. A full run does everything in a fixed order, so the
+There are five jobs, run strictly one at a time. A full run does everything in a fixed order, so the
 parts can't drift out of sync; it starts at your daily time (if the scheduler is on in Settings) or from
 the Full run button. Check roles is its first step on its own: one scan (run.sh), which reads every board,
 feed and inbox, scores what's new and maps people at accounts with fresh news. Job sources searches Adzuna
-and JSearch when they're due. Catch-up reads the boards a vendor held back ("slow down") once its hold has run out, so a
+and JSearch when they're due. Scoring scores the roles with no score, and any you or Claude asked to have scored again, and
+reads no board: it starts when a role is corrected or when it's asked for. Catch-up reads the boards a vendor held back ("slow down") once its hold has run out, so a
 refusal in the morning costs a few hours and not the day.
 """
 from __future__ import annotations
 
 import json
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -31,6 +33,7 @@ _queue: queue.Queue = queue.Queue()
 running: dict[str, str] = {}   # job -> started at
 last: dict[str, dict] = {}     # job -> {"at", "ok", "summary", "steps"}
 progress: dict = {}            # the job running now, step by step
+_again: set = set()            # roles asked to be scored again, until the scoring job takes them
 
 
 
@@ -62,6 +65,38 @@ def _catch_up():
     if _counts()["roles"] > before:
         _run_modules("triage")
     return out.returncode == 0, (out.stdout.strip().splitlines() or ["Didn't finish"])[0] + _unread_note()
+
+
+def score(ids=()) -> bool:
+    """Score these roles again, and any role with no score, without reading a board. Asked while scoring is under way, they
+    join it."""
+    with _lock:
+        _again.update(ids)
+    return start("score")
+
+
+def _score():
+    """The scoring job: radar.triage on what's waiting. A role corrected or asked for while it runs is scored before it ends."""
+    scored = 0
+    for _ in range(5):
+        with _lock:
+            ids = sorted(_again)
+            _again.clear()
+        if not ids and not _unscored():
+            break
+        out = subprocess.run([sys.executable, "-m", "radar.triage", *ids], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+        if out.returncode:
+            return False, "Didn't finish: " + ((out.stderr or out.stdout).strip()[-250:] or f"exit code {out.returncode}")
+        found = re.search(r"(\d+) scored\s*$", out.stdout)
+        if not found or not int(found[1]):
+            break  # nothing came back: asking again now would get the same
+        scored += int(found[1])
+    left = _unscored()
+    return True, (f"{scored} role{'' if scored == 1 else 's'} scored" if scored else "No role was scored") + (f", {left} still waiting" if left else "")
+
+
+def _unscored() -> int:
+    return sum(j.get("score") is None for j in read(JOBS).values())
 
 
 def _unread_note() -> str:
@@ -201,7 +236,7 @@ def full_run():
 
 
 def _run_job(job):
-    return {"run": full_run, "scan": _check_roles, "sources": _sources, "catchup": _catch_up}[job]()
+    return {"run": full_run, "scan": _check_roles, "sources": _sources, "catchup": _catch_up, "score": _score}[job]()
 
 
 def start(job: str) -> bool:

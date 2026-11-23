@@ -1,0 +1,16 @@
+id: score-a-role-again
+requirement: I can have one role scored again when I ask, and a role Claude corrects is scored again straight away, without Gus reading every board.
+given: scanned with a role only a job site has
+check:
+  - open Role Inbox
+  - click "Score again"
+  - progress says "Scoring finished"
+  - progress says "1 role scored"
+  - click "Dismiss" in the progress
+  - no progress
+  - Claude renames "Product Manager, Platform" to "Platform Product Owner", saying "the company's own ad calls it this"
+  - reload
+  - progress says "Scoring finished"
+  - progress says "1 role scored"
+  - see "Made-up reason for Platform Product Owner."
+judge: Is it clear the role is being scored again, that no boards are being read, and when the new score has arrived?

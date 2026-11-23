@@ -432,6 +432,20 @@ class Tools(World):
             self.assertIn("already running", mcp.call("create_run", {"kind": "scan"})["error"])
         start.assert_called_with("scan")
         self.assertIn("error", mcp.call("create_run", {"kind": "sources"}))
+        self.assertIn("error", mcp.call("create_run", {"kind": "scan", "role_ids": ["gh:acme:1"]}))
+
+    def test_claude_can_have_one_role_or_many_scored_again_without_a_scan(self):
+        with mock.patch.object(mcp.service, "score", return_value=True) as score, mock.patch.object(server, "ai_state", return_value={"paused": None}):
+            self.assertIn("read-only", mcp.call("create_run", {"kind": "score", "role_ids": ["gh:acme:1"]})["error"])
+            self.writes()
+            self.assertEqual(mcp.call("create_run", {"kind": "score", "role_ids": ["gh:acme:1", "gh:acme:2"]}), {"ok": True, "started": True, "roles": 2})
+            score.assert_called_once_with(["gh:acme:1", "gh:acme:2"])
+            for bad in ({}, {"role_ids": []}, {"role_ids": "gh:acme:1"}, {"role_ids": ["nope"]}):
+                self.assertIn("error", mcp.call("create_run", {"kind": "score", **bad}), bad)
+            self.assertEqual(score.call_count, 1)
+            self.assertEqual(self.stored("jobs")["gh:acme:1"]["score"], 6)  # until the new score arrives
+            mcp.call("update_role", {"role_id": "gh:acme:2", "note": "Mine", "reason": "the user asked"})
+            self.assertEqual(score.call_count, 1)  # a note isn't something the model reads
         self.assertIn("running", mcp.call("get_run", {})["run"])
 
     def test_the_profile_can_be_read(self):

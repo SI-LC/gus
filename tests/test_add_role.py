@@ -19,7 +19,9 @@ class AddRole(unittest.TestCase):
         self.watchlist = d / "watchlist.csv"
         self.watchlist.write_text("company,ats,slug,sector,only\nAcme,greenhouse,acme,,\n")
         self.lookup = mock.Mock(return_value=None)  # the board search, which would otherwise go to the internet
-        for p in (mock.patch.object(server, "JOBS", self.jobs), mock.patch.object(server, "COMPANIES", self.companies),
+        self.scoring = mock.Mock(return_value=True)  # the scoring job, which would otherwise wait for a worker
+        for p in (mock.patch.object(server.service, "score", self.scoring),
+                  mock.patch.object(server, "JOBS", self.jobs), mock.patch.object(server, "COMPANIES", self.companies),
                   mock.patch.object(resolve, "resolve", self.lookup), mock.patch("radar.resolve.watchlist_path", lambda: self.watchlist),
                   mock.patch("radar.websites.find", return_value=None)):  # the website search, which would go there too
             p.start()
@@ -90,16 +92,50 @@ class AddRole(unittest.TestCase):
         store = self.stored()
         store[jid].update(score=8, why="Good fit", flags=["x"])
         self.jobs.write_text(json.dumps(store))
-        out = server.update_job({"id": jid, "title": " Product  Lead, Platform ", "location": "London (hybrid)", "url": "https://quiet.example/jobs/1"})
-        self.assertEqual((out["job"]["title"], out["job"]["location"], out["job"]["url"], out["job"]["score"]),
-                         ("Product Lead, Platform", "London (hybrid)", "https://quiet.example/jobs/1", 8))
-        self.assertEqual(server.update_job({"id": jid, "description": "First draft"})["job"]["score"], 8)  # the same words: nothing to rescore
+        out = server.update_job({"id": jid, "url": "https://quiet.example/jobs/1", "note": "Mine"})
+        self.assertEqual((out["job"]["url"], out["job"]["score"]), ("https://quiet.example/jobs/1", 8))  # the model reads neither: same score
+        self.assertEqual(server.update_job({"id": jid, "description": "First draft", "title": "Product Lead", "location": "London"})["job"]["score"], 8)  # the same words
+        self.scoring.assert_not_called()
         server.update_job({"id": jid, "description": "What the recruiter sent next"})
         j = self.stored()[jid]
         self.assertEqual((j["description"], j["score"], j["why"], j["flags"], j["stage"]), ("What the recruiter sent next", None, None, [], "shortlisted"))
+        self.scoring.assert_called_once_with()  # scored now, with no scan
+        for change in ({"title": " Product  Lead, Platform "}, {"location": "London (hybrid)"}):
+            store = self.stored()
+            store[jid].update(score=8, why="Good fit", flags=["x"], score_before_salary=9)
+            self.jobs.write_text(json.dumps(store))
+            self.scoring.reset_mock()
+            out = server.update_job({"id": jid, **change})
+            self.assertEqual((out["job"]["score"], out["job"]["why"], "score_before_salary" in out["job"]), (None, None, False), change)
+            self.scoring.assert_called_once_with()
+        self.assertEqual((self.stored()[jid]["title"], self.stored()[jid]["location"]), ("Product Lead, Platform", "London (hybrid)"))
+        self.scoring.reset_mock()
+        server.update_job({"id": jid, "note": "Still waiting"})  # nothing the model reads changed: one scoring is enough
+        self.scoring.assert_not_called()
         for bad in ({"title": " "}, {"url": "javascript:alert(1)"}):
             self.assertIn("error", server.update_job({"id": jid, **bad}))
         self.assertEqual(self.stored()[jid]["title"], "Product Lead, Platform")
+
+    def test_any_role_can_be_scored_again_and_keeps_its_score_until_the_new_one_arrives(self):
+        board = {"id": "gh:acme:9", "company": "Acme", "title": "PM", "url": "https://boards.example/acme/9", "stage": "new", "source": "board",
+                 "description": "The ad", "score": 6, "why": "Fine"}
+        old = {"id": "gh:acme:1", "company": "Acme", "title": "Old PM", "stage": "closed", "score": 7, "pruned": "2026-01-01"}
+        self.jobs.write_text(json.dumps({board["id"]: board, old["id"]: old}))
+        with mock.patch.object(server, "ai_state", return_value={"paused": None}):
+            self.assertEqual(server.score_again(["gh:acme:9", "gh:acme:9"]), {"ok": True, "roles": 1})  # the company's own ad too: only its words are theirs
+            self.scoring.assert_called_once_with(["gh:acme:9"])
+            self.assertEqual(self.stored()["gh:acme:9"]["score"], 6)
+            self.scoring.reset_mock()
+            for bad in (None, [], "gh:acme:9", ["nobody"], ["gh:acme:9", "nobody"], ["gh:acme:1"], [f"x{n}" for n in range(61)]):
+                self.assertIn("error", server.score_again(bad), bad)
+            self.assertIn("description was cleared", server.score_again(["gh:acme:1"])["error"])
+        with mock.patch.object(server, "ai_state", return_value={"paused": "limit"}):
+            self.assertIn("limit", server.score_again(["gh:acme:9"])["error"])  # said now, not found out later
+        with mock.patch.object(server, "ai_state", return_value={"paused": "plan_limit", "plan_limit": {"says": "resets at 3pm"}}):
+            self.assertIn("Claude says: resets at 3pm", server.score_again(["gh:acme:9"])["error"])
+        with mock.patch.object(server, "ai_state", return_value={"paused": "something new"}):
+            self.assertIn("AI is paused", server.score_again(["gh:acme:9"])["error"])  # a reason added later is still a refusal, not a crash
+        self.scoring.assert_not_called()
 
     def test_a_skip_can_say_why_and_the_reason_goes_when_the_role_comes_back(self):
         jid = self.add()["id"]

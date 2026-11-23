@@ -45,6 +45,35 @@ class Scoring(unittest.TestCase):
     def scored(self, score, stored=None):
         return self.score(json.dumps([{"id": "r1", "score": score, "why": "Fits."}]), stored=stored)["r1"]
 
+    def test_roles_asked_for_are_scored_again_first_with_those_still_waiting(self):
+        d = self.jobs.parent
+        (d / "profile").mkdir()
+        (d / "profile" / "profile.md").write_text("Made-up candidate")
+        roles = [role(1, score=4, why="Old", score_before_salary=6), role(2, score=7, why="Kept"), role(3)]
+        self.jobs.write_text(json.dumps({r["id"]: r for r in roles}))
+        reply = json.dumps([{"id": "r1", "score": 8, "why": "New"}, {"id": "r3", "score": 6, "why": "Fits."}])
+        with mock.patch.object(triage, "ROOT", d), mock.patch.object(triage.doing, "say"), contextlib.redirect_stdout(io.StringIO()) as said, \
+                mock.patch.object(triage.ai, "run", return_value=reply) as run:
+            self.assertEqual(triage.main(["r1"]), 2)
+        sent = run.call_args[0][0]
+        self.assertLess(sent.index('"r1"'), sent.index('"r3"'))  # the one asked for, then the one waiting
+        self.assertNotIn('"r2"', sent)  # a role with a score that nobody asked about is left alone
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(said.getvalue().strip(), "2 scored")
+        store = json.loads(self.jobs.read_text())
+        self.assertEqual([(j["score"], j["why"]) for j in store.values()], [(8, "New"), (7, "Kept"), (6, "Fits.")])
+        self.assertNotIn("score_before_salary", store["r1"])  # the old mark-down went with the old score
+
+    def test_a_role_scored_again_keeps_its_old_score_when_scoring_fails(self):
+        d = self.jobs.parent
+        (d / "profile").mkdir()
+        (d / "profile" / "profile.md").write_text("Made-up candidate")
+        self.jobs.write_text(json.dumps({"r1": role(1, score=7, why="Kept")}))
+        with mock.patch.object(triage, "ROOT", d), mock.patch.object(triage.doing, "say"), mock.patch.object(triage.ai, "run", return_value="Sorry."), \
+                self.assertRaises(SystemExit):
+            triage.main(["r1"])
+        self.assertEqual(json.loads(self.jobs.read_text())["r1"]["score"], 7)
+
     def test_good_reply_is_saved(self):
         reply = 'Here you go:\n[{"id": "r1", "score": 7, "why": "Fits.", "flags": ["Remote"]}]\nDone.'
         j = self.score(reply)["r1"]

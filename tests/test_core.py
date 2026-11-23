@@ -295,6 +295,33 @@ class RunProgress(unittest.TestCase):
              mock.patch.object(service, "_counts", side_effect=counts):
             return service._check_roles()
 
+    def test_scoring_reads_no_board_and_says_how_many_it_scored(self):
+        import subprocess
+        from unittest import mock
+        from radar import service
+        ran = []
+
+        def triage(cmd, **kw):
+            ran.append(cmd[1:])
+            if len(ran) == 1:
+                service._again.add("late")  # asked for while the first lot is being scored
+            return subprocess.CompletedProcess(cmd, 0, stdout="1 scored\n", stderr="")
+        with mock.patch.object(service.subprocess, "run", triage), mock.patch.object(service, "_unscored", return_value=0), \
+                mock.patch.object(service, "start", return_value=True) as start:
+            self.assertTrue(service.score(["b", "a"]))
+            start.assert_called_once_with("score")
+            self.assertEqual(service._score(), (True, "2 roles scored"))
+        self.assertEqual(ran, [["-m", "radar.triage", "a", "b"], ["-m", "radar.triage", "late"]])
+        self.assertEqual(service._again, set())
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="scoring failed: daily limit reached")
+        with mock.patch.object(service.subprocess, "run", return_value=failed), mock.patch.object(service, "_unscored", return_value=2):
+            ok, summary = service._score()
+        self.assertEqual((ok, summary), (False, "Didn't finish: scoring failed: daily limit reached"))
+        nothing = subprocess.CompletedProcess([], 0, stdout="0 scored\n", stderr="")
+        with mock.patch.object(service.subprocess, "run", return_value=nothing) as run, mock.patch.object(service, "_unscored", return_value=1):
+            self.assertEqual(service._score(), (True, "No role was scored, 1 still waiting"))
+        run.assert_called_once()  # the model sent nothing back: it isn't asked again and again
+
     def test_check_roles_says_what_it_found(self):
         ok, summary = self.check(0, [{"roles": 10, "strong": 1}, {"roles": 13, "strong": 2}])
         self.assertTrue(ok)
