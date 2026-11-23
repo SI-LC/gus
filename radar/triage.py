@@ -2,6 +2,9 @@
 then notify for strong matches.
 
 Runs on every scan and scores whatever is waiting, so the model is only called when there's a new role.
+
+    python3 -m radar.triage                 # every role with no score
+    python3 -m radar.triage <id> <id>       # those too, scored again. Their old score stays until the new one arrives
 """
 from __future__ import annotations
 
@@ -53,7 +56,8 @@ def ask(profile_path, todo, task="scoring", chars=6000, also="", timeout=600):
     return [r for r in results if usable(r, ids)]
 
 
-def score_batch(profile_path, todo):
+def score_batch(profile_path, todo) -> int:
+    """Score up to 15 roles and save what came back. Returns how many were scored."""
     try:
         results = ask(profile_path, todo)
     except ScoringFailed as e:
@@ -61,7 +65,7 @@ def score_batch(profile_path, todo):
 
     cfg = load_config()
     threshold = cfg["notify_min_score"]
-    alerts, loved = [], favourites()
+    alerts, loved, scored = [], favourites(), 0
     with locked(JOBS) as store:  # re-read: the cockpit may have changed things meanwhile
         for r in results:
             j = store.get(r["id"])
@@ -71,6 +75,8 @@ def score_batch(profile_path, todo):
             flags = flags if isinstance(flags, list) else []
             score, note = salary.apply(j, r["score"], cfg)
             j.update(score=score, why=r["why"], flags=flags + [note] if note else flags)
+            scored += 1
+            j.pop("score_before_salary", None)  # a role scored again may no longer be marked down
             if note:
                 j["score_before_salary"] = r["score"]
             yours = j.get("source") == "manual" or same_company(j.get("company")) in loved  # one you added, or at a favourite: yours to skip
@@ -84,22 +90,28 @@ def score_batch(profile_path, todo):
     for a in alerts:
         notify(*a)
     events.alert()  # after the role alerts, so a role event whose role was just pushed isn't pushed twice
+    return scored
 
 
-def main():
+def main(again=()):
+    """Score every role with no score, and the roles in `again` whatever they scored before, those first."""
+    again = set(again)
     profile_path = ROOT / "profile" / "profile.md"
     if not profile_path.exists():
         sys.exit("profile/profile.md missing: copy profile/profile.example.md and fill it in")
-    seen = set()
+    seen, scored = set(), 0
     for _ in range(MAX_BATCHES):  # score everything waiting, not just what this scan found
         store = read(JOBS)
-        todo = [j for j in store.values() if j.get("score") is None and j["id"] not in seen]
+        todo = [j for j in store.values() if (j.get("score") is None or j["id"] in again) and j["id"] not in seen]
         if not todo:
-            return
-        doing.say(f"Scoring new roles with AI: {len(todo)} waiting, {min(15, len(todo))} at a time")
+            break
+        todo.sort(key=lambda j: j["id"] not in again)  # the ones asked for come first
+        doing.say(f"Scoring roles with AI: {len(todo)} waiting, {min(15, len(todo))} at a time")
         seen |= {j["id"] for j in todo[:15]}  # a role Claude skips isn't retried forever
-        score_batch(profile_path, todo)
+        scored += score_batch(profile_path, todo)
+    print(f"{scored} scored")  # radar.service reads this for what it tells you
+    return scored
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

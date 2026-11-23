@@ -538,10 +538,38 @@ def update_job(body, actor="you", why=None):
         j = store.get(body.get("id"))
         if not j:
             return {"error": "Gus can't find that role any more. Reload the page."}
-        before = changes.decisions(j)
+        before, scored = changes.decisions(j), j.get("score") is not None
         out = edit_job(j, body)
         changes.append(changes.diff(body["id"], before, changes.decisions(j), actor, why), JOBS)
-        return out
+        cleared = scored and j.get("score") is None
+    if cleared:
+        service.score()  # now, not on the next scan: no board has to be read to score it
+    return out
+
+
+MOST_AGAIN = 60  # roles scored again in one go: four of the model's batches
+
+
+def score_again(ids):
+    """Score these roles again as they stand, for you in the cockpit or Claude over MCP: after a change to your profile, or
+    when a score looks wrong. No board is read. Each keeps the score it has until the new one arrives, so nothing is lost
+    if scoring fails. A role scoring under 5 that's still new is skipped, as on any scan."""
+    ids = list(dict.fromkeys(i for i in (ids if isinstance(ids, list) else []) if isinstance(i, str)))
+    store = read(JOBS, {})
+    if not ids or any(i not in store for i in ids):
+        return {"error": "Gus can't find that role any more. Reload the page." if len(ids) < 2 else
+                         "Gus can't find " + ", ".join(i for i in ids if i not in store)[:300]}
+    if len(ids) > MOST_AGAIN:
+        return {"error": f"That's {len(ids)} roles. Gus scores up to {MOST_AGAIN} again at a time"}
+    if bare := [store[i] for i in ids if store[i].get("pruned")]:
+        return {"error": f"{bare[0].get('title')} at {bare[0].get('company')} closed a while ago and its description was cleared, so there's nothing to score"}
+    paused = ai_state()["paused"]
+    if paused:
+        return {"error": {"off": "AI is off, so nothing can be scored. Turn it on in Settings, AI",
+                          "signed_out": "The Claude sign-in has expired, so nothing can be scored. Sign in again in Settings, AI",
+                          "limit": "Today's AI limit is used up, so scoring resumes tomorrow"}[paused]}
+    service.score(ids)
+    return {"ok": True, "roles": len(ids)}
 
 
 def recent_changes(days=7, most=2000):
@@ -596,9 +624,10 @@ def edit_job(j, body):
         if "description" in body:
             edits["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
             if edits["description"] != (j.get("description") or ""):
-                edits.update(score=None, why=None, flags=[])  # scored on the old words: the next scan scores it again
-                j.pop("score_before_salary", None)
                 j.pop("pruned", None)
+        if any(k in edits and edits[k] != (j.get(k) or "") for k in ("title", "location", "description")):
+            edits.update(score=None, why=None, flags=[])  # scored on the old words: update_job has it scored again straight away
+            j.pop("score_before_salary", None)
         j.update(edits)
     if body.get("stage") in JOB_STAGES and body["stage"] != j.get("stage"):
         j.setdefault("history", []).append({"stage": body["stage"], "at": now()})
@@ -741,6 +770,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True, "token": token, "claude": mcp.status()})
         if path == "/api/job":
             return self.send(200, update_job(body))
+        if path == "/api/job/score":
+            return self.send(200, score_again(body.get("ids")))
         if path == "/api/job/add":
             return self.send(200, add_job(body))
         if path == "/api/watch":

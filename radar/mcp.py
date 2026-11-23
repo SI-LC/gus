@@ -368,7 +368,7 @@ def update_move(a):
 
 # ---- runs and the profile ----
 
-RUNS = {"scan": "Check roles", "run": "Full run"}
+RUNS = {"scan": "Check roles", "run": "Full run", "score": "Scoring"}
 
 
 def get_run(_a):
@@ -377,7 +377,14 @@ def get_run(_a):
 
 def create_run(a):
     if a.get("kind") not in RUNS:
-        return {"error": "The kind must be scan (Check roles) or run (Full run)"}
+        return {"error": "The kind must be scan (Check roles), run (Full run) or score (score roles again)"}
+    if a.get("role_ids") is not None and a["kind"] != "score":
+        return {"error": "role_ids only goes with kind \"score\""}
+    if a["kind"] == "score":
+        if not isinstance(a.get("role_ids"), list) or not a["role_ids"]:
+            return {"error": "Needs role_ids: the roles to score again, from list_roles"}
+        out = server.score_again(a["role_ids"])  # joins the scoring under way, if there is one
+        return out if "error" in out else {"ok": True, "started": True, "roles": out["roles"]}
     started = service.start(a["kind"])
     return {"ok": True, "started": started} if started else {"error": f"{RUNS[a['kind']]} is already running"}
 
@@ -413,13 +420,14 @@ TOOLS = {
                      "careers_url": _s("The company's careers page, which finds its board more surely.")}, ["company", "title"], create_role),
     "update_role": ("Move a role to another stage, set the user's note on it, record why the user skipped it, or correct what Gus has for it: its link, title, location "
                     "or description, on any role not read from the company's own board (source \"board\"), which follows the company's ad. "
+                    "A changed title, location or description is scored again straight away, with no scan: get_run says when it's done. "
                     "\"Applied to <role>\" is stage \"applied\": the date is recorded.",
                     {"role_id": _s("From list_roles."), "stage": _s("The new stage.", enum=JOB_STAGES), "note": _s("Replaces the note."),
                      "url": _s("A new link for the role, such as the company's own ad in place of a job site's listing. The old link is "
                                "kept."),
                      "title": _s("The role's title as the company's own ad has it, when a job site got it wrong."),
                      "location": _s("Where the role is, corrected."),
-                     "description": _s("The job description, pasted in full, in place of what Gus has. The role is scored again on the next scan."),
+                     "description": _s("The job description, pasted in full, in place of what Gus has."),
                      "skip_reason": _s("Why the user skipped it, in their words mapped to the nearest reason. Only on a skipped role. "
                                        "It doesn't stand in for reason: send both.", enum=list(SKIP_REASONS)),
                      "reason": _s("Why you're making this change, in one short sentence, such as \"the ad has closed\". Required on every "
@@ -471,8 +479,13 @@ TOOLS = {
                      "outcome": {"type": ["string", "null"], "enum": OUTCOMES + [None], "description": "What came of it; null clears it."},
                      "draft": _s("Replaces the draft message.")}, ["move_id"], update_move),
     "get_run": ("What Gus is doing now, and when Check roles and the Full run last finished.", {}, [], get_run),
-    "create_run": ("Start a run: scan is Check roles (finds and scores new roles), run is the Full run (everything, and it uses AI).",
-                   {"kind": _s("Which run.", enum=list(RUNS))}, ["kind"], create_run),
+    "create_run": ("Start a run: scan is Check roles (finds and scores new roles), run is the Full run (everything, and it uses AI), "
+                   "score scores the roles in role_ids again as they stand, one or many, without reading any board: after the user "
+                   "changes their profile, or when a score looks wrong. Each keeps its score until the new one arrives; get_run says "
+                   "when it's done. A role you just corrected with update_role needs no score run: that happens by itself.",
+                   {"kind": _s("Which run.", enum=list(RUNS)),
+                    "role_ids": {"type": "array", "items": {"type": "string"}, "description": "With kind score: the roles to score again, from list_roles. Up to 60."}},
+                   ["kind"], create_run),
     "get_profile": ("The user's profile: what they want and their CV. Read-only.", {}, [], get_profile),
 }
 

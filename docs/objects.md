@@ -47,7 +47,7 @@ same request: its public job board is looked for (surer with an optional `career
 scanned from the next scan on. With no board found it's still an account, and the full run keeps looking. It's scored like any other role,
 but it's yours: a score under 5 doesn't skip it and no scan closes it. A role Gus already has is refused, with its id.
 Its `title`, `location`, `url` and `description` can be corrected afterwards (POST `/api/job` with its `id`, or "Details"
-on its Pipeline card); a new description clears the score, so the next scan scores it again. Its id and company stay as
+on its Pipeline card); a changed title, location or description clears the score and Gus scores the role again straight away, reading no board. Any role can also be scored again as it stands ("Score again" on its card, POST `/api/job/score` with `ids`, or Claude's `create_run` with kind `score` and `role_ids`): it keeps its score until the new one arrives. Its id and company stay as
 they were. The same four can be corrected on a role found second-hand (a job site, the web, email, X, Hacker News), where
 the copy can be wrong: by Claude, with `update_role`. A changed `url` there keeps the old link in `source_url`. A role
 read from the employer's own board (`source: board`) keeps what its ad says.
