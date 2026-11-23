@@ -1,5 +1,5 @@
-"""Research runs spend their steps on research: Gus's own code refreshes signals, hands the agent what's waiting,
-scores the roles, and takes each kind of change as one checked list."""
+"""Research runs spend their steps on research: Gus's own code refreshes signals, hands the agent what's waiting
+and takes each kind of change as one checked list. What research reads, finds and scores is unchanged."""
 import json
 import subprocess
 import tempfile
@@ -31,19 +31,14 @@ class Files(unittest.TestCase):
 
 
 class WhatsWaiting(Files):
-    def test_only_new_signals_and_only_what_the_agent_needs(self):
+    def test_only_new_signals_in_full_without_the_housekeeping(self):
         self.write("SIGNALS", {"a": {"source": "Feed", "kind": "signals", "title": "Acme raises", "text": "x" * 5000, "url": "https://a", "status": "new",
                                      "first_seen": "2026-11-01", "mention_checked": True},
                                "b": {"source": "Feed", "url": "https://b", "status": "processed"}})
         out = S.waiting()
         self.assertEqual([s["id"] for s in out], ["a"])
         self.assertNotIn("mention_checked", out[0])
-        self.assertEqual(len(out[0]["text"]), S.TEXT_CHARS)
-        self.assertTrue(out[0]["cut"], "a shortened signal says so, so the agent knows to ask for the rest")
-
-    def test_a_post_listing_many_roles_keeps_more_of_its_text(self):
-        self.write("SIGNALS", {"a": {"source": "HN", "kind": "jobs", "text": "x" * 5000, "url": "https://a", "status": "new"}})
-        self.assertEqual(len(S.waiting()[0]["text"]), 5000)
+        self.assertEqual(len(out[0]["text"]), 5000, "nothing is shortened: research reads what it always read")
 
 
 class MarkSignals(Files):
@@ -157,14 +152,14 @@ class TheRun(unittest.TestCase):
         for command in ("signals", "events", "companies"):
             self.assertIn(f"Bash(python3 -m radar.{command}:*)", agent.TOOLS)
 
-    def test_the_playbooks_use_the_list_commands_and_leave_scoring_to_gus(self):
+    def test_the_playbooks_use_the_list_commands_and_still_score(self):
         discover, watchlist = (PROMPTS / "discover.md").read_text(), (PROMPTS / "watchlist.md").read_text()
         for command in ("python3 -m radar.signals mark", "python3 -m radar.events add-many", "python3 -m radar.companies set", "python3 -m radar.companies known"):
             self.assertIn(command, discover)
         self.assertIn("python3 -m radar.companies set", watchlist)
         self.assertIn("python3 -m radar.companies show", watchlist)
-        self.assertNotIn("score it exactly", discover, "roles are scored by the scoring step, with the scoring model")
-        self.assertIn("Don't score roles", discover)
+        self.assertIn("score it exactly as `prompts/triage.md`", discover, "the agent still scores what it finds, with the company's research in view")
+        self.assertIn("Score\n   with prompts/triage.md", agent.PROMPT)
 
 
 class WhatARunUsed(unittest.TestCase):

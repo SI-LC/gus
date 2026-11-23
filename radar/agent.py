@@ -10,7 +10,7 @@ Gus's own commands. Anything it reads online is treated as data.
 
 Every step an agent takes re-reads its whole conversation, so a run's cost grows with the square of its length. Gus
 therefore does what needs no judgement before the agent starts: it refreshes the signals, and writes what's waiting to
-data/brief-<playbook>.json (`python3 -m radar.agent brief discover` shows it). Roles are scored by radar.triage, not here.
+data/brief-<playbook>.json (`python3 -m radar.agent brief discover` shows it).
 """
 from __future__ import annotations
 
@@ -43,8 +43,8 @@ OFFLINE = ["Read(./**)", "Glob", "Grep", "Edit(./data/**)", "Write(./data/**)", 
 PROMPT = """You are the candidate's job-search agent. Your working directory is the Gus repo.
 
 1. Read profile/profile.md and prompts/{playbook}.md.{brief}
-2. Carry out every step of prompts/{playbook}.md. Signals are already refreshed: don't run the feed commands. Map people
-   with `python3 -m radar.people`. Don't score roles: Gus scores them after this run.
+2. Carry out every step of prompts/{playbook}.md. Signals are already refreshed: don't run the feed commands. Score
+   with prompts/triage.md; map people with `python3 -m radar.people`.
 3. Each step you take re-reads everything so far, so keep the run short. Look companies up with
    `python3 -m radar.companies known` and `show`, several names at a time, not by searching the data files. Make changes
    with the list commands the playbook names, many records in one call, not by editing a data file one record at a time.

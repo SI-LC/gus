@@ -10,8 +10,8 @@ Keep a run log in `data/runs/<ISO timestamp>.md`: what you checked, what you add
 ## 1. Harvest: find companies and roles from every source
 
 a. **Signals**: the new ones are in the brief under `signals`: newsletters, funding news, HN job posts, Reddit, X and
-   Bluesky, from whichever feeds the candidate has turned on. Don't search `data/signals.json` for them. One marked
-   `cut: true` was shortened: `python3 -m radar.signals show <id>` gives the whole of it, if you need it. For each one,
+   Bluesky, from whichever feeds the candidate has turned on. Each is there in full, so don't search
+   `data/signals.json` for them. For each one,
    work out the company or role behind it. When you've been through them, mark them all in one call:
    `python3 -m radar.signals mark '[{"id": "<signal id>", "status": "processed", "company": "<account>", "job_id": "<role id>"}, {"id": "...", "status": "ignored"}]'`,
    with `company` and `job_id` for whatever each turned out to be. Every signal in the brief gets `processed` or `ignored`.
@@ -59,17 +59,19 @@ you record it; a dead or guessed address wastes the step. **Fast path**: if it h
 looks like a 7+, run `python3 -m radar.resolve --add "<Company>" --careers "<careers_url>"` now so the role isn't missed, and
 include `"fast_tracked": true` on its record. The loop assesses it properly later.
 
-## 3. New boards and people
+## 3. Score and seek
 
 - Run `python3 -m radar.scan --new` to pick up roles from newly added boards. It asks only those: the run has already read every other board today, so never run a full scan here.
-- Don't score roles. Gus scores every new role after this run, with the model the candidate chose for scoring.
+- For every role in `data/jobs.json` with `score: null`, score it exactly as `prompts/triage.md`
+  describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
+  `stage` to `skipped`, unless the company's record has `favourite: true`: those stay `new` for the candidate to judge.
 - `people_wanted` in the brief lists A and B accounts with fresh news and fewer than 2 people mapped. Run
   `python3 -m radar.people "<Company>"` for each (it lists at most 3).
 
 ## 4. Report
 
-End with a short summary: roles added (company, title, link), companies added, events recorded and people mapped.
-If there was nothing, a single line of counts.
+If anything scored 8+ or new people were mapped, end with a short summary: role, score, why,
+best contact. Otherwise end with a single line of counts.
 
 ## Adding a role you found
 Never write a role into `data/jobs.json` by hand. Run
