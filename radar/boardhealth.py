@@ -61,8 +61,20 @@ def _history(path, history):
 
 def without_board(companies: dict) -> tuple:
     """How many companies Gus follows have no board for it to read, and how many of those the candidate watches."""
-    none = [r for r in companies.values() if r.get("status") in ("watched", "maybe", "candidate") and not r.get("board")]
+    from radar.companies import read_elsewhere
+    from radar.matching import load_config
+    cfg, rows = load_config(), _watchlist_rows()
+    none = [r for n, r in companies.items() if r.get("status") in ("watched", "maybe", "candidate") and not r.get("board")
+            and not read_elsewhere(n, r, cfg, rows)]  # a company read by a careers-site search or under another name isn't unread
     return len(none), sum(r.get("status") == "watched" for r in none)
+
+
+def _watchlist_rows() -> list:
+    from radar.companies import watchlist
+    try:
+        return watchlist()
+    except OSError:
+        return []
 
 
 def keep(now: datetime = None, path=None, history=None, companies=None) -> None:
