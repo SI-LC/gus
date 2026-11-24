@@ -106,6 +106,7 @@ ROLES = [
     (951, "Pennywhistle", "Product Manager, Onboarding", "Remote, UK", 7, "Remote, with a small and friendly team.", 38,
      [("shortlisted", 36), ("closed", 30)], {"ad_closed": ago(30)}),
     (102, "Harborlight", "Product Manager, Growth", "London", 8, "A company you favour; growth rather than platform.", 1, [], {}),
+    (104, "Harborlight", "Product Operations Manager", "London", 4, "A company you favour, but an operations role.", 2, [], {}),
     (202, "Kestrelworks", "Senior Product Manager, Enterprise", "London", 9, "Senior, enterprise customers, agents: the closest match this week.", 0.4, [], {}),
     (402, "Copperline", "Senior Product Manager, Ledger", "London", 7, "Senior and in payments, but a back-office product.", 2, [], {}),
     (802, "Quillmere", "Product Manager, Trust", "London", 7, "Trust and safety for a search product.", 1, [], {}),
