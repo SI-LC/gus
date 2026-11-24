@@ -1,0 +1,10 @@
+id: low-role-at-a-favourite
+requirement: A role at a company I love is shown to me in Role Inbox even when it scores low. Gus never sets it aside for me.
+given: demo
+check:
+  - open Role Inbox
+  - see "Product Operations Manager"
+  - see "you love Harborlight"
+  - pick "Skipped"
+  - not see "Product Operations Manager"
+judge: Can I tell this role is here because I love the company, not because it's a good match?

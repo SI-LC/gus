@@ -133,7 +133,9 @@ function checkRoleFilters() {  // places and types come from Settings, so a save
 let roleView = "new";
 function saveRoleFilters() { try { localStorage.setItem("gus-role-where", roleWhere); localStorage.setItem("gus-role-kind", roleKind); } catch (e) {} }
 const inView = (j, v) => v === "skipped" ? j.stage === "skipped" : v === "closed" ? !!j.ad_closed && j.stage !== "skipped"
-  : j.stage === "new" && !j.ad_closed && (j.score == null || j.score >= 5 || (j.history || []).some(h => h.stage === "new"));
+  : j.stage === "new" && !j.ad_closed;  // Gus skips a role scoring under 5 itself; one still new is yours to judge: at a company you love, added by you, or put back
+// why a low-scoring role is in New at all
+const keptNote = j => j.score == null || j.score >= 5 ? "" : `<div class="sub mt-1.5">${S.accounts.some(a => a.favourite && a.name === j.company) ? `A low score, but you love ${esc(j.company)}, so Gus leaves it for you to skip.` : "A low score, left here for you to decide."}</div>`;
 const roleMatch = (j, view, w, kind) => inView(j, view) && (w === "all" || j.where === w) && (kind === "all" || j.role_type === kind);
 const toReview = () => S.jobs.filter(j => roleMatch(j, "new", roleWhere, roleKind));
 const byBest = (a, b) => (b.score ?? 11) - (a.score ?? 11) || b.first_seen.localeCompare(a.first_seen);
@@ -767,7 +769,7 @@ const V = {
           return roleCard(j, `
         <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside',false))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
         <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>
-        <button class="link" onclick="openCompany(${jsq(j.company)})">About ${esc(j.company)}</button>${scoreAgainButton(j)}`, alreadyHere(j) + alsoIn(also));
+        <button class="link" onclick="openCompany(${jsq(j.company)})">About ${esc(j.company)}</button>${scoreAgainButton(j)}`, keptNote(j) + alreadyHere(j) + alsoIn(also));
         };
         const many = !Q && g.entries.length >= GROUP_FROM, open = openCo.has(g.key), hidden = g.entries.length - 1;
         const ids = jsa(g.entries.flatMap(e => [e.j.id, ...e.also.map(v => v.id)]));
