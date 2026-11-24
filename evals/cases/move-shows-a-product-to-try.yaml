@@ -1,0 +1,10 @@
+id: move-shows-a-product-to-try
+requirement: When a company I'm about to contact has a product I can get into free, the move says so and gives me the way in, so I can use it as my reason to write.
+given: demo
+check:
+  - open To do
+  - see "Free to try"
+  - click "Dev Patel"
+  - see "Try Saltmarsh Robotics free"
+  - see "Copy draft and open profile"
+judge: Can I tell at a glance which of this week's people I could write to about their own product, without it getting in the way of just sending the draft?

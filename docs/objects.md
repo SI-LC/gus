@@ -75,6 +75,7 @@ A company Gus watches. Key: the company name, as it appears in `watchlist.csv`.
 | `board_guess`, `board_guess_rejected`, `guess_checked` | A board found by name alone, `{board, url, open_roles, found}`, waiting for you to accept or reject in the cockpit; the ones you said weren't theirs; when the name was last tried |
 | `careers_checked` | When an agent last read the careers page of a company with no board, looking for a board or for roles |
 | `website`, `website_locked`, `website_broken`, `website_checked` | The company's own site, which its name in the cockpit opens. Kept only once its homepage (or the sitemap its robots.txt lists) links to the company's board or careers address, or, with neither, its page title carries the company's name: `radar.websites`, up to 50 companies a scan, each looked at again after 30 days. `website_locked` when you set or cleared it on the company's card: Gus never replaces it. `website_broken` when it no longer opens |
+| `signup_url`, `signup_checked` | Where you can get into the product free (a free plan, trial or open demo), and when the planner last looked. Checked with no link means there's no free way in |
 | `favourite`, `neighbour_of`, `neighbours_checked` | Companies you love and the ones found next to them |
 | `added`, `people_checked` | Housekeeping dates |
 
@@ -143,12 +144,14 @@ One outreach for the week: one person, one fresh event, an angle and a draft. Ke
 | `week`, `account`, `person_id` | |
 | `event_id` | The event the message is anchored on, in `events.json` |
 | `why_now`, `angle`, `draft`, `channel`, `give_first` | The message and its reasoning |
+| `teardown` | A hook, on a move at a company whose product you can get into free: `try` (what to sign up to and look at) and `url` (where). What you do with it is yours. At most 2 a week |
 | `status` | `todo`, `done`, `skipped`; `done_at` |
 | `outcome` | `no_reply`, `replied`, `conversation`, `interview`, `referral`, `not_now`; `outcome_at` |
 
 Only `python3 -m radar.accounts plan` writes moves, and it refuses any without a fresh, recorded event at an A/B
 account to a person mapped there with evidence; at most 5 a week, one per account, and a 21-day cooldown per account
-unless something new happened. Agents can't edit this file. Marking a move done moves its person to `contacted`; an
+unless something new happened. A teardown move may also be at a tier C account, when its event is a fresh Series A
+or B round. Agents can't edit this file. Marking a move done moves its person to `contacted`; an
 outcome moves them further along.
 
 ## Signal (`data/signals.json`)

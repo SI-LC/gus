@@ -164,7 +164,7 @@ EVENTS = [
     ("Fennimore", "launch", 25, "Launched a mobile app for care workers."),
 ]
 
-# person, company, the event's type, status, outcome, weeks ago, why now, angle, draft
+# person, company, the event's type, status, outcome, weeks ago, why now, angle, draft and, where the product is free to get into, what to try
 MOVES = [
     ("Priya Raman", "Harborlight", "leader_hire", "todo", None, 0, "She started four days ago and is building her team.",
      "You both worked at Northgate Loop, a few years apart.",
@@ -177,7 +177,8 @@ MOVES = [
     ("Dev Patel", "Saltmarsh Robotics", "launch", "todo", None, 0, "Fleet 2.0 launched last week.",
      "A question about the simulator, from someone who builds test tools.",
      "Hi Dev, the Fleet 2.0 simulator caught my eye: I build tools for testing software before release. How do you decide a "
-     "new layout is safe to ship? I'm preparing an application for the Fleet role and would value ten minutes."),
+     "new layout is safe to ship? I'm preparing an application for the Fleet role and would value ten minutes.",
+     "The Fleet 2.0 simulator has a free trial. Upload a floor plan and run one layout change through it."),
     ("Elena Marsh", "Kestrelworks", "post_hiring", "done", "replied", 0, "She posted about hiring three days ago.",
      "You both worked at Made-up Ltd.",
      "Hi Elena, I saw your post about the agents team. We overlapped at Made-up Ltd, and I've applied for the Staff role. "
@@ -319,13 +320,15 @@ def events() -> dict:
 
 def moves() -> dict:
     out = {}
-    for name, company, kind, status, outcome, weeks, why_now, angle, draft in MOVES:
+    for name, company, kind, status, outcome, weeks, why_now, angle, draft, *teardown in MOVES:
         made = NOW - timedelta(weeks=weeks)
         pid = person_id(name, company)
         mid = f"{week_id(made.date())}:{pid}"
         out[mid] = {"id": mid, "week": week_id(made.date()), "account": company, "person_id": pid, "event_id": event_id(company, kind),
                     "why_now": why_now, "angle": angle, "draft": draft, "channel": "linkedin", "give_first": "", "status": status,
                     "outcome": outcome, "created": (made - timedelta(hours=30)).isoformat()}
+        if teardown:
+            out[mid]["teardown"] = {"try": teardown[0], "url": "https://example.com/" + slug(company) + "/sign-up"}
         if status == "done":
             out[mid]["done_at"] = (made - timedelta(hours=20)).isoformat()
         if outcome:

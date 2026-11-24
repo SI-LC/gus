@@ -203,6 +203,45 @@ class Moves(unittest.TestCase):
         self.assertIn("not A or B", errs)
         self.assertIn("no evidence link", errs)
 
+    TEARDOWN = {"try": "Sign up and build one report.", "url": "https://example.com/sign-up"}
+
+    def test_a_teardown_lets_in_a_tier_c_account_that_just_raised_a_series_a_or_b(self):
+        self.companies["Acme"]["tier"] = "C"
+        self.assertIn("needs a teardown", " ".join(self.errors(self.move(teardown=self.TEARDOWN))))  # the event is only "Raised"
+        self.events["acme:funding:" + self.fresh]["summary"] = "Raised a $30m Series B"
+        self.assertEqual(self.errors(self.move(teardown=self.TEARDOWN)), [])
+        self.assertIn("not A or B", " ".join(self.errors(self.move())))
+
+    def test_a_teardown_needs_something_to_try_and_somewhere_to_sign_up(self):
+        for bad in ({}, {"try": "Use it."}, {"try": " ", "url": "https://example.com"}, {"try": "Use it.", "url": "example.com"}, "yes"):
+            with self.subTest(bad):
+                self.assertIn("a teardown needs", " ".join(self.errors(self.move(teardown=bad))))
+
+    def test_plan_keeps_to_two_teardowns_a_week(self):
+        names = [f"Co{n}" for n in range(4)]
+        companies = {n: self.company() for n in names}
+        companies["Co3"]["tier"] = "C"
+        humans = {f"p{n}": self.person(names[n]) for n in range(4)}
+        events = {f"co{n}:funding:{self.fresh}": self.event(names[n], summary="Raised a Series A") for n in range(4)}
+        proposed = [self.move(account=n, person_id=f"p{i}", event_id=f"co{i}:funding:{self.fresh}", teardown=self.TEARDOWN) for i, n in enumerate(names)]
+        d = Path(tempfile.mkdtemp())
+        files = {"COMPANIES": d / "c.json", "PEOPLE": d / "p.json", "JOBS": d / "j.json", "MOVES": d / "m.json", "EVENTS": d / "e.json"}
+        files["COMPANIES"].write_text(json.dumps(companies))
+        files["PEOPLE"].write_text(json.dumps(humans))
+        files["EVENTS"].write_text(json.dumps(events))
+        (d / "proposed.json").write_text(json.dumps(proposed))
+        from radar import events as E
+        with mock.patch.multiple(A, **files), mock.patch.multiple(E, EVENTS=d / "e.json", COMPANIES=d / "c.json", MOVES=d / "m.json", JOBS=d / "j.json"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            A.plan(d / "proposed.json")
+            brief = A.brief()
+        saved = {m["account"]: m for m in json.loads(files["MOVES"].read_text()).values()}
+        self.assertEqual(sorted(saved), ["Co0", "Co1", "Co2"])  # the tier C account had no teardown left, so it has no move
+        self.assertEqual([bool(saved[n].get("teardown")) for n in ("Co0", "Co1", "Co2")], [True, True, False])
+        self.assertEqual(saved["Co0"]["teardown"], self.TEARDOWN)
+        self.assertEqual(brief["teardowns_left"], 0)
+        self.assertEqual({a["account"]: a.get("teardown_only", False) for a in brief["accounts"]}["Co3"], True)
+
     def test_plan_keeps_to_five_moves_and_one_per_account(self):
         names = [f"Co{n}" for n in range(7)]
         companies = {n: self.company() for n in names}
