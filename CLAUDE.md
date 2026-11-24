@@ -49,7 +49,8 @@ to step 3. Each step names a skill on the candidate's Mac; if it isn't there, do
    `skill-dont-make-me-think` principles fixed beforehand. The candidate picks.
 5. **Build.** For anything on screen, read `radar/static/ui-kit.html` first (below).
 6. **Check.** `/skill-qa` on the screens that changed, in the browser pane, then `python -m evals.browser` and the tests.
-7. **Ship** as under Deploying.
+7. **Ship** as under Deploying. Once the pull request is open, the candidate can type `/ship` to have the change
+   reviewed and the pull request watched; commit and push any fixes it makes. It never merges or deploys.
 
 The candidate decides at steps 1, 2 and 4. Don't skip ahead to code.
 
