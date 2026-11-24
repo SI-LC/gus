@@ -915,6 +915,23 @@ class NothingReadsThem(unittest.TestCase):
              "Favourite": {"status": "watched", "favourite": True, "tier": "B", "careers_checked": old}}
         self.assertEqual(companies.no_board(c), ["Favourite", "Tier A", "Plain"])
 
+    def test_a_company_read_another_way_is_not_handed_over(self):
+        """Google's careers search reads DeepMind's roles daily, and a second record for a company on the watchlist is read under the first."""
+        from unittest import mock
+        from radar import boardhealth, companies
+        cfg = {"google_careers_search": "https://example.com/search", "amazon_jobs_search": ""}
+        rows = [{"company": "Fyxer", "ats": "ashby", "slug": "fyxer"}]
+        c = {"Google DeepMind": {"status": "watched", "favourite": True}, "Apigee (Google Cloud)": {"status": "watched"},
+             "Amazon Web Services (AWS)": {"status": "watched"}, "Googleplex Tours": {"status": "watched"},
+             "Fyxer AI": {"status": "watched", "careers_url": "https://jobs.ashbyhq.com/Fyxer"},
+             "Plain": {"status": "watched", "careers_url": "https://jobs.ashbyhq.com/plain"}, "Maybe": {"status": "maybe"}}
+        self.assertEqual(companies.read_elsewhere("Google DeepMind", c["Google DeepMind"], cfg, rows), "the Google careers search")
+        self.assertEqual(companies.read_elsewhere("Fyxer AI", c["Fyxer AI"], cfg, rows), "Fyxer's board")
+        self.assertIsNone(companies.read_elsewhere("Amazon Web Services (AWS)", {}, cfg, rows), "that search is switched off")
+        with mock.patch("radar.matching.load_config", lambda: cfg), mock.patch.object(companies, "watchlist", lambda: rows):
+            self.assertEqual(sorted(companies.no_board(c)), ["Amazon Web Services (AWS)", "Googleplex Tours", "Plain"])
+            self.assertEqual(boardhealth.without_board(c), (4, 3))
+
     def test_only_a_few_per_run(self):
         from radar import companies
         c = {f"Co {n}": {"status": "watched"} for n in range(30)}
