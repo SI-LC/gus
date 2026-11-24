@@ -101,12 +101,41 @@ def health():
     save(c)
 
 
+# One search of a big employer's own careers site covers every company under it: the setting that turns it on, and the names it reads
+SITE_SEARCHES = {"google_careers_search": ("google", "deepmind"), "amazon_jobs_search": ("amazon", "aws"),
+                 "microsoft_careers_search": ("microsoft",), "apple_jobs_search": ("apple",)}
+
+
+def read_elsewhere(name: str, rec: dict, cfg: dict = None, rows: list = None) -> str | None:
+    """How Gus already reads a company that has no board of its own, or None when nothing does: a careers-site search
+    that covers it ("Google DeepMind" under Google's), or a board on the watchlist under another name for the same company."""
+    from radar.matching import load_config
+    from radar.resolve import named_boards
+    cfg = load_config() if cfg is None else cfg
+    words = set(re.findall(r"[a-z0-9]+", name.lower()))
+    for setting, names in SITE_SEARCHES.items():
+        if cfg.get(setting) and words & set(names):
+            return f"the {names[0].capitalize()} careers search"
+    on_watchlist = {(r["ats"], r["slug"].lower()): r["company"] for r in (watchlist() if rows is None else rows)}
+    for ats, slug in named_boards(rec.get("careers_url") or ""):
+        if owner := on_watchlist.get((ats, slug.lower())):
+            return f"{owner}'s board"
+    return None
+
+
+def unread(c: dict) -> dict:
+    """The companies Gus follows that nothing reads: no board of their own, and not read some other way."""
+    from radar.matching import load_config
+    cfg, rows = load_config(), watchlist()
+    return {n: r for n, r in c.items() if r.get("status") in ("watched", "maybe", "candidate") and not r.get("vetoed")
+            and not r.get("board") and not read_elsewhere(n, r, cfg, rows)}
+
+
 def no_board(c: dict) -> list:
     """Watched companies nothing reads: no board, and their careers page not read by an agent lately. The candidate's
     favourites and tier A first, then whoever has waited longest, a few per run so the agent's budget lasts."""
     cutoff = str(date.today() - timedelta(days=CAREERS_DAYS))
-    names = [n for n, r in c.items() if r.get("status") == "watched" and not r.get("vetoed") and not r.get("board")
-             and (r.get("careers_checked") or "") <= cutoff]
+    names = [n for n, r in unread(c).items() if r.get("status") == "watched" and (r.get("careers_checked") or "") <= cutoff]
     first = lambda n: (not (c[n].get("favourite") or c[n].get("tier_locked")), c[n].get("tier") or "Z", c[n].get("careers_checked") or "")
     return sorted(names, key=first)[:CAREERS_PER_RUN]
 
