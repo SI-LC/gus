@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 from radar import ai, doing
@@ -89,29 +90,49 @@ def map_account(name: str) -> list:
     return added
 
 
+AT_ONCE = 2  # accounts searched at the same time when several are asked for: each is a Claude of its own, and the Pi is small
+MOST = 8  # and the most taken from one call, so it's done in a few minutes
+
+
+def asked_for(args: list[str]) -> list[str]:
+    """The companies named on the command line: one each, or one name typed without quotes ("Arva AI")."""
+    whole = " ".join(args)
+    return [whole] if len(args) > 1 and whole in read(COMPANIES, {}) else list(args)
+
+
 def main():
     if len(sys.argv) > 1:
-        targets = [" ".join(sys.argv[1:])]
+        targets = asked_for(sys.argv[1:])[:MOST]
     else:
         companies = read(COMPANIES, {})
         recent = str(date.today() - timedelta(days=RETRY_DAYS))
         targets = [a["account"] for a in brief()["accounts"] if len(a["people"]) < MIN_PEOPLE
-                   and (companies.get(a["account"], {}).get("people_checked") or "") < recent]
+                   and (companies.get(a["account"], {}).get("people_checked") or "") < recent][:4]  # a few per run keeps each scan quick
     try:
         ai.check_budget(load_config())  # before anything is marked as checked
     except ai.BudgetReached as e:
         print(f"  people mapping skipped: {e}")
         return
-    for n, name in enumerate(targets[:4], 1):  # a few per run keeps each scan quick
-        doing.say(f"Mapping people at {name} ({n} of {len(targets[:4])})")
-        with locked(COMPANIES) as companies:  # hard accounts wait a week, rather than being searched every run
+    with locked(COMPANIES) as companies:  # hard accounts wait a week, rather than being searched every run
+        for name in targets:
             companies.setdefault(name, {})["people_checked"] = str(date.today())
+
+    def one(name):
         try:
-            added = map_account(name)
-        except ai.NeedsTools as e:
-            sys.exit(f"people mapping skipped: {e}")
+            return name, map_account(name)
+        except ai.NeedsTools:
+            raise
         except Exception as e:
-            print(f"  ! {name}: {e}")
+            return name, e
+    doing.say(f"Mapping people at {', '.join(targets)}")
+    try:
+        with ThreadPoolExecutor(max_workers=AT_ONCE if len(sys.argv) > 1 else 1) as pool:  # a scan maps its few one after another, as before
+            results = list(pool.map(one, targets))
+    except ai.NeedsTools as e:
+        sys.exit(f"people mapping skipped: {e}")
+    for name, added in results:
+        if isinstance(added, Exception):
+            print(f"  ! {name}: {added}")
             continue
         print(f"  {name}: {', '.join(added) or 'no one with evidence'}")
         if added:

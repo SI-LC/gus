@@ -66,7 +66,7 @@ include `"fast_tracked": true` on its record. The loop assesses it properly late
   describes, using the company's enrichment, and write `score`, `why` and `flags` back. If the score is under 5, set
   `stage` to `skipped`, unless the company's record has `favourite: true`: those stay `new` for the candidate to judge.
 - `people_wanted` in the brief lists A and B accounts with fresh news and fewer than 2 people mapped. Run
-  `python3 -m radar.people "<Company>"` for each (it lists at most 3).
+  `python3 -m radar.people "<Company>" "<Company>" "<Company>"`, all of them in one call (it lists at most 3; allow it 5 minutes).
 
 ## 4. Report
 

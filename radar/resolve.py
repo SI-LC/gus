@@ -5,6 +5,7 @@ Usage:
     python3 -m radar.resolve "Wayve" "PolyAI" "Granola"      # print matches
     python3 -m radar.resolve --add "Wayve" "PolyAI"          # append hits to watchlist.csv
     python3 -m radar.resolve "Acme" --careers https://careers.acme.com     # start from its careers address, the surest way
+    python3 -m radar.resolve --add "Acme=https://careers.acme.com" "Wayve"  # several at once, each with its own careers address or none
     python3 -m radar.resolve --missing                       # check every active company with no board; --add appends the hits
     python3 -m radar.resolve --auto                          # the full run's step: add boards found from careers addresses,
                                                              # keep name-guesses for you to look at in the cockpit
@@ -266,7 +267,8 @@ def main():
     add = "--add" in args
     careers = args.pop(args.index("--careers") + 1) if "--careers" in args else None
     names = [a for a in args if not a.startswith("--")]
-    todo = missing() if "--missing" in args else {n: careers for n in names}
+    pair = lambda a: a.split("=", 1) if "=http" in a else (a, careers)  # "Name=https://its.careers/page": several companies, each with its own address
+    todo = missing() if "--missing" in args else dict(pair(n) for n in names)
     path = watchlist_path()
     known = {r["company"].lower() for r in csv.DictReader(path.open())}
     with ThreadPoolExecutor(max_workers=6) as pool:

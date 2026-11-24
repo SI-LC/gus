@@ -150,8 +150,9 @@ def _claude_env(provider):
 
 
 def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, timeout: int = 900,
-        deny: list[str] | None = None, budget: bool = True) -> str:
-    """task picks the model (scoring | people | agent | quick; anything else, such as links, uses the default). tools are Claude Code tool rules."""
+        deny: list[str] | None = None, budget: bool = True, settings: dict | None = None) -> str:
+    """task picks the model (scoring | people | agent | quick; anything else, such as links, uses the default). tools are Claude Code tool rules.
+    settings are Claude Code settings for this run alone, such as a hook that checks each tool call."""
     cfg = load_config()
     if budget:
         check_budget(cfg)
@@ -166,6 +167,8 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         args += ["--allowedTools", ",".join(tools)]
     if deny:
         args += ["--disallowedTools", ",".join(deny)]
+    if settings:
+        args += ["--settings", json.dumps(settings)]
     if task == "quick":
         args += QUICK
     out = subprocess.run(args, input=prompt, capture_output=True, text=True, timeout=timeout,
@@ -176,10 +179,11 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
     except ValueError:
         d = {}
     if d:
-        u = d.get("usage") or {}
+        t = tokens(d)
         usage.record(kind="ai", task=task, provider=provider, model=model, model_id=ran_as(d), cost_usd=d.get("total_cost_usd"),
-                     input_tokens=(u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0),
-                     output_tokens=u.get("output_tokens"), searches=searches(d), turns=d.get("num_turns"),
+                     input_tokens=t["fresh"] + t["cache_read"] + t["cache_write"], output_tokens=t["output"],
+                     cache_read_tokens=t["cache_read"], cache_write_tokens=t["cache_write"],
+                     searches=searches(d), turns=d.get("num_turns"), refused=len(d.get("permission_denials") or []),
                      duration_ms=d.get("duration_ms"), ok=not d.get("is_error"))
     if out.returncode != 0 or d.get("is_error"):
         detail = (d.get("result") or out.stderr or out.stdout).strip()[:300]
@@ -193,6 +197,20 @@ def run(prompt: str, task: str = "scoring", tools: list[str] | None = None, time
         login_works()
     limit_lifted()
     return d.get("result") or out.stdout
+
+
+def tokens(reply: dict) -> dict:
+    """What a run read and wrote, every model in it counted. The run's own `usage` leaves out the helpers that read pages
+    for it, so the per-model counts are used when Claude Code gives them. `cache_read` is the conversation so far, read
+    again at each step; `cache_write` is what was new at that step."""
+    used = list((reply.get("modelUsage") or {}).values())
+    if any("inputTokens" in m for m in used):
+        total = lambda k: sum(m.get(k) or 0 for m in used)
+        return {"fresh": total("inputTokens"), "cache_read": total("cacheReadInputTokens"),
+                "cache_write": total("cacheCreationInputTokens"), "output": total("outputTokens")}
+    u = reply.get("usage") or {}
+    return {"fresh": u.get("input_tokens") or 0, "cache_read": u.get("cache_read_input_tokens") or 0,
+            "cache_write": u.get("cache_creation_input_tokens") or 0, "output": u.get("output_tokens") or 0}
 
 
 def searches(reply: dict) -> int:
