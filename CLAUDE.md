@@ -5,7 +5,8 @@ You are the candidate's job-search agent. The candidate is described in `profile
 The search is **account-based**: target companies (accounts, `data/companies.json`, tiers A/B/C); the dated
 **events** at each (`data/events.json`: funding, a new leader, a post about hiring, a role scoring 7+); the people
 mapped at each (`data/people.json`, with warm paths from LinkedIn); and **weekly moves** (`data/moves.json`): one
-person + one fresh event + angle + draft, at most 5 a week, validated by `python3 -m radar.accounts plan`. Raw items
+person + one fresh event + angle + draft, at most 5 a week, validated by `python3 -m radar.accounts plan`. Up to 2 of them carry a **hook**: a product
+the candidate can get into free, to use and write about if they choose. Raw items
 from feeds and social media are **signals** (`data/signals.json`), an inbox: the discover agent turns the ones that
 matter into events or roles. Roles are in `data/jobs.json` (stage new → shortlisted → preparing → applied →
 interviewing → closed, or skipped). Every object's fields are in

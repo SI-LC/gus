@@ -392,6 +392,7 @@ function moveCard(m, open) {
   const sig = m.signal || {}, age = sig.date ? Math.round((Date.now() - new Date(sig.date)) / DAY) : null;
   const k = "mv" + m.id.replace(/[^a-z0-9]/gi, ""), id = jsq(m.id), url = link(p.url || "#");
   const who = `<span class="mv-who"><b>${esc(p.name)}</b> <span>${[p.role, m.account].filter(Boolean).map(esc).join(", ")}</span></span>`;
+  const td = m.teardown;  // a hook: their product is free to get into
   if (m.status !== "todo") return `<div class="mv done"><div class="mv-row">${who}
       <span class="mv-because">${m.status === "skipped" ? "Skipped" : "Sent" + (m.done_at ? " " + ago(m.done_at) : "")}</span></div>
     <div class="mv-side">${m.status === "done" ? `<select onchange="setMove(${id}, {outcome: this.value || null})" aria-label="Outcome with ${esc(p.name)}">
@@ -399,7 +400,7 @@ function moveCard(m, open) {
       <button class="link" onclick="setMove(${id}, {status:'todo', outcome:null})" aria-label="Undo ${esc(p.name)}">Undo</button></div></div>`;
   return `<article class="mv${open ? " open" : ""}">
     <button class="mv-row" onclick="toggleMove(${id})" aria-expanded="${!!open}">${who}
-      <span class="mv-because"><b>${esc(sig.summary || m.why_now || "")}</b>${age != null ? ` · ${age === 0 ? "today" : age + "d ago"}` : ""}</span>
+      <span class="mv-because"><b>${esc(sig.summary || m.why_now || "")}</b>${age != null ? ` · ${age === 0 ? "today" : age + "d ago"}` : ""}${td ? ` <span class="pill">Free to try</span>` : ""}</span>
       <span class="mv-tog">${open ? "Close" : "Open"}</span></button>
     ${open ? `<div class="mv-body move">
       ${p.id ? `<div class="sub">${distBadge(p)} ${sig.url ? `<a href="${link(sig.url)}" target="_blank" rel="noopener">Read the news</a>` : ""}</div>` : ""}
@@ -408,7 +409,8 @@ function moveCard(m, open) {
         <button class="primary" onclick="copyAndOpen('${k}', '${url}')">Copy draft and open profile</button>
         <button onclick="setMove(${id}, {status:'done'})">Sent</button>
         <button class="link" onclick="setMove(${id}, {status:'skipped'})">Skip</button></div>
-      <div class="mv-why">${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
+      <div class="mv-why">${td ? `<p class="why"><b>A hook.</b> ${esc(td.try)} <a href="${link(td.url)}" target="_blank" rel="noopener">Try ${esc(m.account)} free</a></p>` : ""}
+      ${sig.summary && m.why_now ? `<p class="why"><b>Why now.</b> ${esc(m.why_now)}</p>` : ""}
       ${m.angle ? `<p class="why"><b>How to open.</b> ${esc(m.angle)}</p>` : ""}
       ${m.give_first ? `<p class="why"><b>Something to offer.</b> ${esc(m.give_first)}</p>` : ""}</div>
       ${p.id ? `<details class="add-event keep"><summary class="sub">How you're connected</summary>${routes(p)}</details>` : ""}</div>` : ""}</article>`;

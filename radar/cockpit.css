@@ -200,6 +200,7 @@
   .mv.done .mv-row { flex: 1 1 240px; width: auto; } .mv.done .mv-who b { color: var(--color-muted); }
   .mv-side { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; } .mv-side select { min-height: 30px; padding: 3px 8px; font-size: 13px; }
   .mv-progress { margin-left: auto; align-self: center; font: 12px var(--font-mono); }
+  .mv-because .pill { margin: 0 0 0 6px; }
   .mv-why { margin-top: 14px; } .mv-why .why { color: var(--color-muted); } .mv-body > .follow:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
   .day { margin: 18px 0 0; font: 600 14px var(--font-sans); color: var(--color-ink); } .section + .day { margin-top: 0; }  /* a day in a dated list: What changed */
   .mv-who button.link { padding: 0; min-height: 0; font: inherit; color: inherit; text-align: left; }

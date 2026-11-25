@@ -8,7 +8,9 @@ data/moves.json       weekly moves: one person + one fresh event + angle + draft
 
 A move is only accepted if it cites an event from the last FRESH_DAYS days at an A or B
 account, to a person mapped there with evidence. That's enforced here, not left to the
-agent's judgement.
+agent's judgement. Up to MAX_TEARDOWNS of the week's moves can carry a hook: a product the candidate can get
+into free and write about (`teardown`). Such a move may also be at a tier C account that has just raised a
+Series A or B. What the candidate does with the hook is theirs: Gus only finds it.
 
     python3 -m radar.accounts brief                # what the planner sees: fresh events by account
     python3 -m radar.accounts plan FILE.json       # validate proposed moves, keep the best 5
@@ -30,6 +32,7 @@ from radar.schema import PERSON_KINDS
 from radar.store import locked, read
 
 MAX_MOVES = 5
+MAX_TEARDOWNS = 2  # moves a week that point at a product to try: using one properly is a day's work
 COOLDOWN_DAYS = 21  # don't contact the same account again this soon without a new event
 
 def week_id(d=None):
@@ -53,6 +56,17 @@ def tier(c: dict) -> str:
     return "A" if fit >= 8 else "B" if fit >= 7 else "C"
 
 
+def series_ab(ev: dict) -> bool:
+    """A Series A or B round: what lets a tier C account in for a teardown."""
+    return ev.get("type") == "funding" and bool(re.search(r"\bseries[ -]?[ab]\b", ev.get("summary") or "", re.I))
+
+
+def signup(c: dict):
+    """Where to sign up to the company's product for free, "none" when it was checked and there's no way in, or
+    None when nobody has looked."""
+    return c.get("signup_url") or ("none" if c.get("signup_checked") else None)
+
+
 def events(name: str, stored: dict | None = None) -> list[dict]:
     """An account's events from data/events.json, fresh and strong first."""
     return E.for_account(name, read(EVENTS, {}) if stored is None else stored)
@@ -73,9 +87,11 @@ def brief() -> dict:
     out = []
     for name, c in companies.items():
         t = tier(c)
-        if t not in ("A", "B"):
+        if t not in ("A", "B", "C"):
             continue
         fresh = [e for e in events(name, stored=stored) if e["fresh"]]
+        if t == "C":  # only worth a look for a teardown, and only on the round itself
+            fresh = [e for e in fresh if series_ab(e)]
         if not fresh:
             continue
         touched = last_touch(name, moves)
@@ -83,13 +99,15 @@ def brief() -> dict:
         out.append({
             "account": name, "tier": t, "fit": c.get("fit"), "why_it_fits": c.get("fit_why"),
             "fresh_events": fresh[:5],
+            "signup": signup(c), **({"teardown_only": True} if t == "C" else {}),
             "people": [{**{k: p.get(k) for k in ("id", "name", "role", "kind", "warm", "evidence", "url", "stage", "confidence")},
                         "distance": dist[p["id"]]} for p in ppl],
             "last_contacted": str(touched) if touched else None,
             "cooling_down": bool(touched and (today() - touched).days < COOLDOWN_DAYS),
         })
     out.sort(key=lambda a: (a["tier"], -max(e["strength"] for e in a["fresh_events"]), -(a["fit"] or 0)))
-    return {"week": week_id(), "accounts": out}
+    open_teardowns = sum(1 for m in moves.values() if m.get("week") == week_id() and m.get("status") == "todo" and m.get("teardown"))
+    return {"week": week_id(), "teardowns_left": max(0, MAX_TEARDOWNS - open_teardowns), "accounts": out}
 
 
 def resolve_event(m: dict, stored: dict) -> dict | None:
@@ -107,8 +125,9 @@ def validate(m: dict, companies, people, stored, moves) -> list[str]:
     c = companies.get(acct)
     if not c:
         return [f"unknown account {acct!r}"]
-    if tier(c) not in ("A", "B"):
-        errs.append(f"{acct} is tier {tier(c)}, not A or B")
+    td = m.get("teardown")
+    if td is not None and not (isinstance(td, dict) and (td.get("try") or "").strip() and re.match(r"https?://", td.get("url") or "")):
+        errs.append("a teardown needs `try` (what to look at) and `url` (where to sign up free)")
     p = people.get(m.get("person_id") or "")
     if not p or p.get("company") != acct:
         errs.append("person isn't mapped at this account")
@@ -126,6 +145,8 @@ def validate(m: dict, companies, people, stored, moves) -> list[str]:
         errs.append("event has no date")
     elif (today() - d).days > FRESH_DAYS:
         errs.append(f"event is {(today() - d).days} days old (limit {FRESH_DAYS})")
+    if tier(c) not in ("A", "B") and not (tier(c) == "C" and td and ev and series_ab(ev)):
+        errs.append(f"{acct} is tier {tier(c)}, not A or B" + (": a tier C account needs a teardown and a fresh Series A or B round" if tier(c) == "C" else ""))
     touched = last_touch(acct, moves)
     if touched and (today() - touched).days < COOLDOWN_DAYS and not (d and d > touched):
         errs.append(f"contacted {(today() - touched).days} days ago and nothing new since")
@@ -144,6 +165,7 @@ def plan(path) -> None:
         open_this_week = [m for m in moves.values() if m.get("week") == wk and m.get("status") == "todo"]
         room = MAX_MOVES - len(open_this_week)
         used_accounts = {m["account"] for m in open_this_week}
+        teardowns = sum(1 for m in open_this_week if m.get("teardown"))
         kept = 0
         for m in proposed:
             errs = validate(m, companies, people, stored, moves)
@@ -155,6 +177,13 @@ def plan(path) -> None:
             if kept >= room:
                 print(f"  – {m['account']}: valid, but this week already has {MAX_MOVES} moves")
                 continue
+            td = m.get("teardown")
+            if td and teardowns >= MAX_TEARDOWNS:
+                if tier(companies[m["account"]]) == "C":
+                    print(f"  – {m['account']}: valid, but this week already has {MAX_TEARDOWNS} teardowns")
+                    continue
+                td = None
+                print(f"  – {m['account']}: kept as an ordinary move, as this week already has {MAX_TEARDOWNS} teardowns")
             ev = resolve_event(m, stored)
             mid = f"{wk}:{m['person_id']}"
             moves[mid] = {
@@ -164,6 +193,9 @@ def plan(path) -> None:
                 "give_first": (m.get("give_first") or "").strip(),
                 "status": "todo", "outcome": None, "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
+            if td:
+                moves[mid]["teardown"] = {"try": td["try"].strip()[:600], "url": td["url"].strip()}
+                teardowns += 1
             used_accounts.add(m["account"])
             kept += 1
             print(f"  ✓ {m['account']} → {people[m['person_id']]['name']}: {ev.get('summary', '')[:70]}")
