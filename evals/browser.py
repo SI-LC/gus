@@ -21,7 +21,8 @@ CASES = Path(__file__).parent / "cases"
 WAIT_MS = 5000
 RUN_MS = 90000  # a whole scan of the made-up boards, start to finish
 PLACES = {"status bar": "#ticker", "progress": "#progress", "message": "#toast.on"}
-GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned, limit reached", "scanned after a job site", "scanned with a role only a job site has", "scanned with a board that says no", "demo")
+GIVENS = ("empty", "signed out", "scanned", "scanned, signed out", "scanned, limit reached", "scanned after a job site", "scanned with a role only a job site has", "scanned with a job site role that only says UK",
+          "scanned with a board that says no", "demo")
 
 
 def step(page, text):
@@ -110,7 +111,7 @@ def scan_once(givens) -> dict:
     pausing between requests, so four take as long as one."""
     def scan(given):
         world = World(signed_out="signed out" in given, job_site="after a job site" in given, refusing="says no" in given,
-                      job_site_only="only a job site" in given, limit_reached="limit reached" in given)
+                      job_site_only="only a job site" in given, limit_reached="limit reached" in given, job_site_uk="only says UK" in given)
         world.scan()
         return world
 

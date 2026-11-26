@@ -241,7 +241,7 @@ function rolePanel(j) {  // everything you do to one role, a click away from its
       <div class="panel-head"><span class="co">${coName(j)}</span><button class="link" onclick="closeRole()">Close</button></div>
       <div class="panel-top">${scoreBlock(j)}<div><div class="title">${roleTitle(j, j.url)}</div>
         <div class="sub">${rolePills(j)}</div></div></div>
-      <div class="sub mt-2">${[sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`].filter(Boolean).join(" · ")}</div>
+      <div class="sub mt-2">${[placeText(j), `${LABEL[j.stage]}${since ? " since " + ago(since) : ""}`].filter(Boolean).join(" · ")}</div>
       ${j.ad_closed || j.readvertised ? `<div class="mt-2">${j.ad_closed ? `<span class="pill due">Ad closed</span>` : ""}${j.readvertised ? `<span class="pill warm">Advertised again ${ago(j.readvertised)}</span>` : ""}</div>` : ""}
       ${j.why ? `<p class="why">${esc(j.why)}</p>` : ""}
       ${roleFlags(j)}${alsoIn(S.jobs.filter(o => o.id !== j.id && j.co && j.tk && o.co === j.co && o.tk === j.tk && o.stage !== "closed" && !o.ad_closed))}${sameAdvert(j)}
@@ -250,7 +250,7 @@ function rolePanel(j) {  // everything you do to one role, a click away from its
           ${[...PIPE, "skipped"].filter(st => st !== j.stage).map(st => `<option value="${st}">${LABEL[st] || "Skipped"}</option>`).join("")}</select></div>
       <div class="actions"><button onclick="roleDetails(${id})">${j.source === "manual" ? "Details" : "Description"}</button>${adLink(j)}${j.folder
         ? (/^https?:\/\//i.test(j.folder) ? `<a class="link" href="${link(j.folder)}" target="_blank" rel="noopener">Open folder</a>` : l("Copy folder path", `copyPath(${jsq(j.folder)})`)) + l("Change folder", `setFolder(${id}, ${jsq(j.folder)})`)
-        : l("Add folder", `setFolder(${id}, '')`)}${scoreAgainButton(j)}</div>
+        : l("Add folder", `setFolder(${id}, '')`)}${scoreAgainButton(j)}${findAdButton(j)}</div>
       <div class="section">People${who.length ? " · " + who.length : ""}</div>
       ${who.length ? who.map(person).join("") : `<p class="sub">Gus hasn't found anyone at ${esc(j.company)} yet. ${l("Open company", `openCompany(${jsq(j.company)})`)}</p>`}
     </aside>`;
@@ -275,6 +275,13 @@ async function roleDetails(id) {  // the description isn't in the page's data, s
 async function saveRole(id) {
   const v = k => $("role-edit-" + k).value;
   if (await post("/api/job", { id, title: v("title"), location: v("location"), url: v("url"), description: v("description") })) { $("role-dlg").close(); toast("Saved"); await load(); render(true); }
+}
+// a job site's location that says nothing ("UK" for a role that may be anywhere): say whose word it is, never show it as the place
+const saidPlace = j => { const said = [...new Set((j.location || "").split(",").map(x => x.trim()).filter(Boolean))].join(", "); return `${esc(j.via || "The job site")} ${said ? "says " + esc(said.slice(0, 80)) : "gives no location"}`; };
+const placeText = j => j.location_unconfirmed ? saidPlace(j) : sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80));
+const findAdButton = j => j.location_unconfirmed && !j.ad_closed ? `<button class="link" title="Looks for this role on the employer's own site now: its board, then a web search with Claude. The ad gives the real location, and the role is scored again" onclick="findAd(${jsq(j.id)})">Find employer's ad</button>` : "";
+async function findAd(id) {
+  if (await post("/api/job/find-ad", { id })) { toast("Looking for the employer's ad now. The location and score update here when it's done"); await load(); }
 }
 const scoreAgainButton = j => `<button class="link" title="Scores this role against your profile now, without reading any job board" onclick="scoreAgain(${jsq(j.id)})">${j.score == null ? "Score now" : "Score again"}</button>`;
 async function scoreAgain(id) {
@@ -507,7 +514,7 @@ function roleCard(j, actions, extra = "") {
     <div>
       <div class="co">${coName(j)}</div>
       <div class="title">${roleTitle(j, titleLink(j))}</div>
-      <div class="sub">${rolePills(j)} ${sameText(j.location, j.where) ? "" : esc((j.location || "").slice(0, 80)) + " · "}found ${ago(j.first_seen)}</div>
+      <div class="sub">${rolePills(j)} ${placeText(j) ? placeText(j) + " · " : ""}found ${ago(j.first_seen)}</div>
       <p class="why">${j.why ? esc(j.why) : `<span class="sub">${signedOut() ? "Not scored: the Claude sign-in has expired." : planLimit() ? "Not scored: Claude's limit is reached." : S.ai && S.ai.paused ? "Not scored: AI is paused." : (S.running || []).includes("score") ? "Gus is scoring it now." : "Gus scores it on the next check."}</span>`}</p>
       ${roleFlags(j)}${sameAdvert(j)}${extra}
     </div>
@@ -771,7 +778,7 @@ const V = {
           return roleCard(j, `
         <button class="primary" onclick="${rest.length ? `setMany([${jsq(j.id)}],'shortlisted','Moved to To apply').then(() => setMany(${jsa(rest)},'skipped','Shortlisted, and its other locations set aside',false))` : `setStage(${jsq(j.id)},'shortlisted')`}">Shortlist</button>
         <button onclick="${rest.length ? `setMany(${all},'skipped','Skipped in every location')` : `setStage(${jsq(j.id)},'skipped','Skipped')`}">Skip</button>
-        <button class="link" onclick="openCompany(${jsq(j.company)})">About ${esc(j.company)}</button>${scoreAgainButton(j)}`, keptNote(j) + alreadyHere(j) + alsoIn(also));
+        <button class="link" onclick="openCompany(${jsq(j.company)})">About ${esc(j.company)}</button>${scoreAgainButton(j)}${findAdButton(j)}`, keptNote(j) + alreadyHere(j) + alsoIn(also));
         };
         const many = !Q && g.entries.length >= GROUP_FROM, open = openCo.has(g.key), hidden = g.entries.length - 1;
         const ids = jsa(g.entries.flatMap(e => [e.j.id, ...e.also.map(v => v.id)]));
@@ -1216,6 +1223,7 @@ const JOB = {  // what each job is called while it runs, once it's done, and wha
   sources: { now: "Checking job sources", done: "Job sources check", what: "Asking the job sources that are due for new roles, then scoring them. This can take a while.", link: ["#roles", "Open Role Inbox"] },
   catchup: { now: "Reading boards that were told to wait", done: "Catch-up on boards", what: "A supplier asked Gus to slow down this morning, so some job boards weren't read. Its wait is over: Gus is reading those boards now and scoring anything new.", link: ["#roles", "Open Role Inbox"] },
   score: { now: "Scoring roles", done: "Scoring", what: "Scoring the roles that were corrected or that you asked for, against your profile. No job board is read, so it's usually done within a minute or two.", link: ["#roles", "Open Role Inbox"] },
+  links: { now: "Finding the employer's ad", done: "Employer's ad search", what: "Looking for the role on the employer's own site: its job board first, then a web search with Claude. A found ad gives the role its real link, location and text, and it's scored again.", link: ["#roles", "Open Role Inbox"] },
   run: { now: "Full run", done: "Full run", what: "Everything Check roles does, plus finding new companies, catching up on news at yours, and picking who to contact this week. Takes longer and uses more of your daily AI limit.", link: ["#week", "See who to contact"] },
 };
 const jobName = (j, k) => (JOB[j] || {})[k] || j;

@@ -34,6 +34,7 @@ running: dict[str, str] = {}   # job -> started at
 last: dict[str, dict] = {}     # job -> {"at", "ok", "summary", "steps"}
 progress: dict = {}            # the job running now, step by step
 _again: set = set()            # roles asked to be scored again, until the scoring job takes them
+_find: set = set()             # roles whose employer ad was asked for, until the links job takes them
 
 
 
@@ -73,6 +74,34 @@ def score(ids=()) -> bool:
     with _lock:
         _again.update(ids)
     return start("score")
+
+
+def find_ad(ids=()) -> bool:
+    """Look for these roles' employer ads now. Asked while a search is under way, they wait for it and then run."""
+    with _lock:
+        _find.update(ids)
+    return start("links")
+
+
+def _links():
+    """The "Find employer's ad" job: radar.links on the roles asked for, which scores again any whose ad changed them."""
+    said = "Nothing to look for"
+    for _ in range(5):
+        with _lock:
+            ids = sorted(_find)
+            _find.clear()
+        if not ids:
+            break
+        out = subprocess.run([sys.executable, "-m", "radar.links", *ids], capture_output=True, text=True, timeout=1800, cwd=ROOT)
+        if out.returncode:
+            return False, "Didn't finish: " + ((out.stderr or out.stdout).strip()[-250:] or f"exit code {out.returncode}")
+        board = re.search(r"found (\d+) on company sites", out.stdout)
+        web = re.search(r"found (\d+) employer pages", out.stdout)
+        n = int(board[1]) if board else 0
+        n += int(web[1]) if web else 0
+        said = f"Found the employer's ad for {n} of {len(ids)} role{'' if len(ids) == 1 else 's'}" if len(ids) > 1 else \
+            ("Found the employer's ad" if n else "No employer's ad found. The role keeps its link")
+    return True, said
 
 
 def _score():
@@ -236,7 +265,7 @@ def full_run():
 
 
 def _run_job(job):
-    return {"run": full_run, "scan": _check_roles, "sources": _sources, "catchup": _catch_up, "score": _score}[job]()
+    return {"run": full_run, "scan": _check_roles, "sources": _sources, "catchup": _catch_up, "score": _score, "links": _links}[job]()
 
 
 def start(job: str) -> bool:

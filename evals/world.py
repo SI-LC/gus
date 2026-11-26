@@ -41,6 +41,12 @@ JOB_SITE_ONLY_ROLE = {"jsearch:2001": {"id": "jsearch:2001", "company": "Tidewat
                                        "text_kind": "summary", "description": "A made-up job site summary.", "stage": "new", "score": 6,
                                        "why": "Made-up reason for Product Manager, Platform.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
                                        "last_seen": "2026-01-01T09:00:00+00:00", "link_checked": "2026-01-01"}}
+# A role a job site filed under the whole country: the employer's ad (fake/claude finds it) says it's in San Francisco
+JOB_SITE_UK_ROLE = {"adzuna:3001": {"id": "adzuna:3001", "company": "Tidewater Labs", "title": "Product Manager, Platform", "location": "UK, UK",
+                                    "url": "https://www.adzuna.co.uk/jobs/details/3001", "via": "Adzuna", "posted": "2026-01-01", "source": "adzuna",
+                                    "description": "A made-up job site summary.", "stage": "new", "score": 6,
+                                    "why": "Made-up reason for Product Manager, Platform.", "flags": [], "first_seen": "2026-01-01T09:00:00+00:00",
+                                    "last_seen": "2026-01-01T09:00:00+00:00", "link_checked": "2026-01-01"}}
 # A second company whose board has answered "slow down" since three days ago
 REFUSING = "Quillmere,greenhouse,quillmere,software\n"
 
@@ -60,7 +66,7 @@ def free_port() -> int:
 
 
 class World:
-    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False, job_site_only=False, limit_reached=False):
+    def __init__(self, new=False, signed_out=False, job_site=False, refusing=False, job_site_only=False, limit_reached=False, job_site_uk=False):
         self.base = Path(tempfile.mkdtemp(prefix="gus-smoke-"))
         self.app, self.home = self.base / "app", self.base / "home"
         files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
@@ -86,6 +92,8 @@ class World:
                 (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ROLE))
             if job_site_only:
                 (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_ONLY_ROLE))
+            if job_site_uk:
+                (self.app / "data" / "jobs.json").write_text(json.dumps(JOB_SITE_UK_ROLE))
         tools = self.home / ".local" / "bin"
         tools.mkdir(parents=True)
         for tool in ("claude", "osascript"):

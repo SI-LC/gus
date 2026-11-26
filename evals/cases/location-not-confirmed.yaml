@@ -1,0 +1,18 @@
+id: location-not-confirmed
+requirement: When a job site only says a role is in the UK, Role Inbox says its location isn't confirmed, and I can have Gus find the employer's ad, which gives the real location.
+given: scanned with a job site role that only says UK
+check:
+  - open Role Inbox
+  - pick "Location not confirmed"
+  - see "Product Manager, Platform"
+  - see "Adzuna says UK"
+  - click "Find employer's ad"
+  - progress says "Employer's ad search finished"
+  - progress says "Found the employer's ad"
+  - click "Dismiss" in the progress
+  - reload
+  - not see "Location not confirmed"
+  - pick "Elsewhere"
+  - see "San Francisco, CA"
+  - not see "Adzuna says UK"
+judge: Can I tell the location came from a job site and may be wrong, what to press to find out, and where the role really is afterwards?
