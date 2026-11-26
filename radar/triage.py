@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 
 from radar import ai, changes, doing, salary
 from radar.jobs import same_company
@@ -21,7 +22,9 @@ from radar.store import locked, read
 PROMPT = (ROOT / "prompts" / "triage.md").read_text()
 
 
-MAX_BATCHES = 8  # 15 roles each
+BUDGET = 15 * 60  # seconds a run spends scoring, 15 roles at a time. A batch takes about half a minute, so a night that
+#                   brings hundreds of roles is scored in one run; the limit is there so a slow night still ends inside
+#                   the half hour radar.service gives this step. What's left waits for the next run.
 
 
 def usable(r, ids):
@@ -99,8 +102,8 @@ def main(again=()):
     profile_path = ROOT / "profile" / "profile.md"
     if not profile_path.exists():
         sys.exit("profile/profile.md missing: copy profile/profile.example.md and fill it in")
-    seen, scored = set(), 0
-    for _ in range(MAX_BATCHES):  # score everything waiting, not just what this scan found
+    seen, scored, started = set(), 0, time.monotonic()
+    while time.monotonic() - started < BUDGET:  # score everything waiting, not just what this scan found
         store = read(JOBS)
         todo = [j for j in store.values() if (j.get("score") is None or j["id"] in again) and j["id"] not in seen]
         if not todo:
