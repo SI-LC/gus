@@ -38,6 +38,8 @@ if "## CV\n" in prompt:
     result = json.dumps({"titles": ["product manager", "product owner"], "places": ["London", "United Kingdom", "Remote"], "city": "London",
                          "country_code": "gb", "currency": "£", "level": "senior", "keywords": ["roadmap"], "employers": ["Made-up Ltd"],
                          "edge": ["A made-up strength"]})
+if "Find the employer's own web page" in prompt:
+    result = json.dumps({"url": "https://tidewater.example/jobs/platform-pm", "location": "San Francisco, CA"})
 if "## Roles (JSON)" in prompt:
     roles = json.loads(prompt[prompt.index("## Roles (JSON)\n") + 16:prompt.index("\n\nFor each role")])
     result = json.dumps([{"id": r["id"], "score": SAID.get(r["title"], [SCORES.get(r["title"], 5)])[0],

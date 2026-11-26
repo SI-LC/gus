@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 from radar import boardhealth
 from radar.companies import veto
-from radar.jobs import role_key, same_company
+from radar.jobs import NOT_CONFIRMED, location_unconfirmed, role_key, same_company
 from radar.matching import role_type, where
 from radar.paths import COMPANIES, DATA, JOBS, PROFILE, ROOT, SIGNALS, WATCHLIST
 from radar.schema import JOB_STAGES, OUTCOMES, PERSON_STAGES, SKIP_REASON_WAS, SKIP_REASONS
@@ -69,7 +69,9 @@ def state():
     raw_jobs = read(JOBS, {})  # read once: with every description in it, it's the biggest file there is
     cfg = settings.load()
     places, kinds = settings.groups(cfg.get("where_groups")), settings.groups(cfg.get("role_kinds"))
-    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": where(j.get("location"), places), "role_type": role_type(j.get("title"), kinds),
+    unsure = {jid for jid, j in raw_jobs.items() if location_unconfirmed(j)}  # a job site's "UK": filed apart, not under UK
+    jobs = [{**{k: v for k, v in j.items() if k != "description"}, "where": NOT_CONFIRMED if j.get("id") in unsure else where(j.get("location"), places),
+             "location_unconfirmed": j.get("id") in unsure, "role_type": role_type(j.get("title"), kinds),
              "co": role_key(j)[0], "tk": role_key(j)[1],  # the same employer, and the same title, however each ad spells them
              "can_watch": bool(j.get("board")) and same_company(j.get("company")) not in watched} for j in raw_jobs.values()]
     signals = read(SIGNALS, {})
@@ -103,7 +105,7 @@ def state():
     return {
         "setup": firstrun.setup_state(),
         "demo": (DATA / "demo").exists(),  # a made-up search (evals/demo.py): the cockpit says so
-        "places": list(dict.fromkeys(p[0] for p in places)),
+        "places": list(dict.fromkeys([p[0] for p in places] + ([NOT_CONFIRMED] if any(j["where"] == NOT_CONFIRMED and j.get("stage") == "new" for j in jobs) else []))),
         "home_place": settings.home_place(places),  # the place Pipeline marks roles in
         "kinds": list(dict.fromkeys(k[0] for k in kinds)),
         "kind_default": kinds[-1][0] if kinds else "",
@@ -553,6 +555,22 @@ def update_job(body, actor="you", why=None):
 MOST_AGAIN = 60  # roles scored again in one go: four of the model's batches
 
 
+def find_ad(jid):
+    """Look for this role's employer ad now, for "Find employer's ad" on a role: its board, then a web search. A found ad
+    gives the role its link, location and text, and it's scored again."""
+    j = read(JOBS, {}).get(jid) if isinstance(jid, str) else None
+    if not j:
+        return {"error": "Gus can't find that role any more. Reload the page."}
+    if j.get("ad_closed"):
+        return {"error": "This ad has closed, so there's nothing to find"}
+    ai = ai_state()
+    if ai["paused"]:
+        return {"error": {"off": "AI is off, so Gus can't search the web. Turn it on in Settings, AI",
+                          "signed_out": "The Claude sign-in has expired, so Gus can't search the web. Sign in again in Settings, AI",
+                          "limit": "Today's AI limit is used up, so the search waits until tomorrow"}.get(ai["paused"], "AI is paused, so Gus can't search the web")}
+    return {"ok": True, "started": service.find_ad([jid])}
+
+
 def score_again(ids):
     """Score these roles again as they stand, for you in the cockpit or Claude over MCP: after a change to your profile, or
     when a score looks wrong. No board is read. Each keeps the score it has until the new one arrives, so nothing is lost
@@ -629,6 +647,8 @@ def edit_job(j, body):
             edits["description"] = str(body["description"] or "").strip()[:MAX_DESCRIPTION]
             if edits["description"] != (j.get("description") or ""):
                 j.pop("pruned", None)
+        if edits.get("location") and edits["location"] != (j.get("location") or ""):
+            j["location_from"] = "you"  # you said where it is: no longer a job site's guess
         if any(k in edits and edits[k] != (j.get(k) or "") for k in ("title", "location", "description")):
             edits.update(score=None, why=None, flags=[])  # scored on the old words: update_job has it scored again straight away
             j.pop("score_before_salary", None)
@@ -776,6 +796,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, update_job(body))
         if path == "/api/job/score":
             return self.send(200, score_again(body.get("ids")))
+        if path == "/api/job/find-ad":
+            return self.send(200, find_ad(body.get("id")))
         if path == "/api/job/add":
             return self.send(200, add_job(body))
         if path == "/api/watch":

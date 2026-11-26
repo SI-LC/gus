@@ -37,6 +37,8 @@ def reply_for(url):
         return PAGES[url]
     if url == HOME:
         return HOME_PAGE
+    if url == "https://tidewater.example/jobs/platform-pm":  # the employer's ad the made-up web search finds
+        return "<h1>Product Manager, Platform</h1><p>San Francisco, CA</p>"
     if url == BOARD:
         return {"jobs": [listing(*r) for r in ROLES]}
     for r in ROLES:

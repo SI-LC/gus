@@ -203,6 +203,36 @@ def to_board(job: dict, url: str | None = None) -> bool:
     return True
 
 
+COUNTRY_ONLY = {"uk", "united kingdom", "gb", "great britain"}
+NOT_CONFIRMED = "Location not confirmed"  # the place such a role is filed under in Role Inbox
+
+
+def location_unconfirmed(job: dict) -> bool:
+    """A job site's location that says nothing about where the role is: only the country, which is where a job site files an
+    ad it can't place (most are abroad), or Adzuna's "New York, Lincoln", New York City filed under a Lincolnshire village.
+    It stays so until the employer's own ad gives the location (`location_from`), or you correct it."""
+    if (job.get("found_via") or job.get("source")) not in JOB_SITES or job.get("location_from"):
+        return False
+    parts = [p.strip().lower() for p in (job.get("location") or "").split(",") if p.strip()]
+    return set(parts) <= COUNTRY_ONLY or parts[:2] == ["new york", "lincoln"]
+
+
+def from_employer(job: dict, location: str | None = None, description: str | None = None) -> bool:
+    """Take the location and the advert's text from the employer's own ad, which a job site gets wrong or cuts short. The job
+    site's location is kept in `location_was`. Returns whether anything a score rests on changed."""
+    changed = False
+    location = re.sub(r"\s+", " ", location or "").strip()
+    if location:
+        if location != job.get("location"):
+            if job.get("location"):
+                job.setdefault("location_was", job["location"])
+            job["location"], changed = location, True
+        job["location_from"] = "employer"
+    if description and len(description) > len(job.get("description") or ""):
+        job["description"], job["text_kind"], changed = description, "posting", True
+    return changed
+
+
 def board_sighting(job: dict) -> str | None:
     """The link of this role on the employer's own board, if Gus has found it there."""
     if job.get("board") and job.get("link_kind") == "company":  # radar.links found it on the board and pointed the role there

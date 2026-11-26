@@ -247,11 +247,82 @@ class Saving(unittest.TestCase):
 
     def test_ai_search_saves_the_page_and_stops_at_the_daily_limit(self):
         self.jobs.write_text(json.dumps({"jsearch:1": role(link_checked="x"), "jsearch:2": role(id="jsearch:2", link_checked="x")}))
-        with mock.patch.object(links, "ai_find", side_effect=["https://acme.example/j/1", links.ai.BudgetReached("limit")]):
+        with mock.patch.object(links, "ai_find", side_effect=[{"url": "https://acme.example/j/1", "location": None}, links.ai.BudgetReached("limit")]), \
+             mock.patch.object(links, "on_its_board", return_value=None):
             links.run_ai({"links_ai_min_score": 7, "links_ai_per_run": 5})
         saved = json.loads(self.jobs.read_text())
         self.assertEqual((saved["jsearch:1"]["url"], saved["jsearch:1"]["link_kind"]), ("https://acme.example/j/1", "company"))
         self.assertNotIn("ai_link_checked", saved["jsearch:2"])
+
+    SITE = {"location": "UK, UK", "description": "Short.", "via": "Adzuna"}
+
+    def test_the_employers_ad_gives_the_location_and_text_and_the_role_is_scored_again(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(**self.SITE)}))
+        hit = {**self.HIT, "location": "San Francisco, CA", "description": "The whole advert, in the employer's words."}
+        with mock.patch.object(links, "find", return_value=hit), mock.patch.object(links, "rescore") as again:
+            links.main()
+        j = self.saved()
+        self.assertEqual((j["location"], j["location_was"], j["location_from"]), ("San Francisco, CA", "UK, UK", "employer"))
+        self.assertEqual((j["description"], j["text_kind"]), ("The whole advert, in the employer's words.", "posting"))
+        again.assert_called_once_with(["jsearch:1"])
+
+    def test_an_ad_that_says_the_same_changes_no_score(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(location="London", description="The whole advert.")}))
+        with mock.patch.object(links, "find", return_value={**self.HIT, "location": "London", "description": "The whole advert."}), \
+             mock.patch.object(links, "rescore") as again:
+            links.main()
+        again.assert_called_once_with([])
+        self.assertEqual(self.saved()["location_from"], "employer")
+
+    def test_a_web_search_gives_the_location_too(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(link_checked="x", **self.SITE)}))
+        with mock.patch.object(links, "ai_find", return_value={"url": "https://acme.example/j/1", "location": "Remote - USA"}), \
+             mock.patch.object(links, "on_its_board", return_value=None):
+            again = links.run_ai({"links_ai_min_score": 7, "links_ai_per_run": 5})
+        j = self.saved()
+        self.assertEqual((j["url"], j["location"], j["source"], again), ("https://acme.example/j/1", "Remote - USA", "jsearch", ["jsearch:1"]))
+
+    def test_a_page_the_search_found_on_a_board_gus_reads_gives_the_whole_advert(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(link_checked="x", **self.SITE)}))
+        on_board = {**self.HIT, "id": "ashby:acme:1", "location": "London", "description": "The whole advert, in the employer's words."}
+        with mock.patch.object(links, "ai_find", return_value={"url": "https://jobs.ashbyhq.com/acme/1", "location": "London"}), \
+             mock.patch.object(links, "on_its_board", return_value=on_board):
+            links.run_ai({"links_ai_min_score": 7, "links_ai_per_run": 5})
+        j = self.saved()
+        self.assertEqual((j["source"], j["board"], j["text_kind"]), ("board", {"ats": "ashby", "slug": "acme"}, "posting"))
+
+    def test_a_search_that_missed_is_tried_once_more_a_week_later(self):
+        from datetime import date, timedelta
+        ago = lambda n: str(date.today() - timedelta(days=n))
+        cfg = {"links_ai_min_score": 7, "links_ai_per_run": 9}
+        store = {"new": role(link_checked="x"), "yesterday": role(link_checked="x", ai_link_checked=ago(1)),
+                 "last week": role(link_checked="x", ai_link_checked=ago(7)), "twice": role(link_checked="x", ai_link_checked=ago(30), ai_link_tries=2)}
+        self.assertEqual(links.ai_waiting(store, cfg), [store["new"], store["last week"]])
+        self.jobs.write_text(json.dumps({"jsearch:1": role(link_checked="x", ai_link_checked=ago(7))}))
+        with mock.patch.object(links, "ai_find", return_value=None):
+            links.run_ai(cfg)
+        self.assertEqual(links.ai_waiting(json.loads(self.jobs.read_text()), cfg), [])
+        self.assertEqual(self.saved()["ai_link_tries"], 2)
+
+    def test_a_role_already_on_its_board_gets_its_location_filled_in_once(self):
+        old = role(source="board", found_via="adzuna", link_kind="company", link_checked="x", board={"ats": "ashby", "slug": "acme"}, **self.SITE)
+        self.jobs.write_text(json.dumps({"jsearch:1": old, "jsearch:2": {**old, "id": "jsearch:2", "stage": "skipped"}}))
+        with mock.patch.object(links, "find", return_value={**self.HIT, "location": "Chicago, Illinois"}) as look, mock.patch.object(links, "rescore") as again:
+            links.main()
+            links.main()
+        self.assertEqual(look.call_count, 1)  # the skipped one is left alone, and nothing is read twice
+        self.assertEqual((self.saved()["location"], self.saved_as("jsearch:2")["location"]), ("Chicago, Illinois", "UK, UK"))
+        self.assertEqual(again.call_args_list[0].args, (["jsearch:1"],))
+
+    def test_find_employers_ad_looks_now_whatever_the_role_scored(self):
+        self.jobs.write_text(json.dumps({"jsearch:1": role(score=5, link_checked="x", ai_link_checked="2026-01-01", ai_link_tries=2, **self.SITE)}))
+        with mock.patch.object(links, "find", return_value=None), mock.patch.object(links, "load_config", return_value={}), \
+             mock.patch.object(links, "ai_find", return_value={"url": "https://acme.example/j/1", "location": "Toronto"}) as search, \
+             mock.patch.object(links, "on_its_board", return_value=None), mock.patch.object(links, "rescore") as again:
+            links.main(["jsearch:1"])
+        search.assert_called_once()
+        again.assert_called_once_with(["jsearch:1"])
+        self.assertEqual(self.saved()["location"], "Toronto")
 
     def test_adds_a_company_to_the_watchlist_once(self):
         j = role(board={"ats": "ashby", "slug": "acme"})

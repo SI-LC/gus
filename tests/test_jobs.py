@@ -365,3 +365,16 @@ class RolesThatShareAnAdvert(unittest.TestCase):
         store = {"mtp:jobs:1": role("mtp:jobs:1", stage="new", description=advert(), same_advert=["mtp:jobs:9"])}
         J.mark_same_adverts(store)
         self.assertNotIn("same_advert", store["mtp:jobs:1"])
+
+
+class Location(unittest.TestCase):
+    def test_a_job_sites_bare_country_isnt_a_location(self):
+        from radar.jobs import location_unconfirmed as unsure
+        site = lambda loc, **kw: {"source": "adzuna", "location": loc, **kw}
+        for loc in ("UK, UK", "UK", "United Kingdom, UK", "New York, Lincoln, UK", ""):
+            self.assertTrue(unsure(site(loc)), loc)
+        for loc in ("London, UK", "Remote, UK", "Manchester, Greater Manchester, UK", "New York, NY"):
+            self.assertFalse(unsure(site(loc)), loc)
+        self.assertFalse(unsure({"source": "board", "location": "UK"}))  # the employer's own board said so
+        self.assertTrue(unsure({"source": "board", "found_via": "adzuna", "location": "UK, UK"}))  # the link moved, the location didn't
+        self.assertFalse(unsure(site("UK, UK", location_from="employer")))
