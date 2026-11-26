@@ -64,6 +64,32 @@ class Scoring(unittest.TestCase):
         self.assertEqual([(j["score"], j["why"]) for j in store.values()], [(8, "New"), (7, "Kept"), (6, "Fits.")])
         self.assertNotIn("score_before_salary", store["r1"])  # the old mark-down went with the old score
 
+    def big_night(self, waiting):
+        d = self.jobs.parent
+        (d / "profile").mkdir()
+        (d / "profile" / "profile.md").write_text("Made-up candidate")
+        self.jobs.write_text(json.dumps({f"r{n}": role(n) for n in range(waiting)}))
+
+        def reply(prompt, **_):  # scores whichever roles it was sent
+            sent, _ = json.JSONDecoder().raw_decode(prompt[prompt.index('[{"id"'):])
+            return json.dumps([{"id": j["id"], "score": 6, "why": "Fits."} for j in sent])
+        return mock.patch.object(triage, "ROOT", d), mock.patch.object(triage.doing, "say"), mock.patch.object(triage.ai, "run", side_effect=reply)
+
+    def test_a_big_night_is_all_scored_in_one_run(self):
+        root, say, run = self.big_night(300)  # more than the 120 a run used to stop at
+        with root, say, run as asked, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(triage.main(), 300)
+        self.assertEqual(asked.call_count, 20)
+        self.assertTrue(all(j["score"] == 6 for j in json.loads(self.jobs.read_text()).values()))
+
+    def test_scoring_stops_when_its_time_is_up_and_the_rest_wait(self):
+        root, say, run = self.big_night(300)
+        clock = iter(range(0, 10 ** 6, triage.BUDGET // 3))  # each look at the clock is a third of the time later
+        with root, say, run, mock.patch.object(triage.time, "monotonic", side_effect=lambda: next(clock)), contextlib.redirect_stdout(io.StringIO()):
+            scored = triage.main()
+        self.assertTrue(0 < scored < 300)
+        self.assertEqual(sum(j.get("score") is None for j in json.loads(self.jobs.read_text()).values()), 300 - scored)
+
     def test_a_role_scored_again_keeps_its_old_score_when_scoring_fails(self):
         d = self.jobs.parent
         (d / "profile").mkdir()
